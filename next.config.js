@@ -2,24 +2,11 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  experimental: {
-    turbo: {
-      // keep default; adjust if you use turbopack locally later
-    },
-  },
   async redirects() {
     return [
-      // Canonicalize people → members (keeps old links and SEO juice)
-      {
-        source: '/people',
-        destination: '/members',
-        permanent: true, // 308
-      },
-      {
-        source: '/people/:slug*',
-        destination: '/members/:slug*',
-        permanent: true,
-      },
+      // Preserve old /people links after folder deletion
+      { source: '/people', destination: '/members', permanent: true },
+      { source: '/people/:slug*', destination: '/members/:slug*', permanent: true },
     ];
   },
 };
