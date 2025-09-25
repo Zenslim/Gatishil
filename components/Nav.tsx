@@ -4,7 +4,7 @@ import Link from 'next/link';
 export default function Nav() {
   const items = [
     { href: '/', label: 'Home' },
-    { href: '/people', label: 'People' },
+    { href: '/members', label: 'Members' },
     { href: '/orgs', label: 'Orgs' },
     { href: '/projects', label: 'Projects' },
     { href: '/money', label: 'Money' },
