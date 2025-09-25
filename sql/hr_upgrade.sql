@@ -69,7 +69,13 @@ create table if not exists public.person_orgs (
 create index if not exists idx_person_orgs_person on public.person_orgs(person_id);
 
 -- Family relationships
-create type if not exists relation_kind as enum ('parent','child','spouse','sibling','relative','guardian','other');
+DO $$
+BEGIN
+    -- This IF statement is now valid because it's inside a DO block
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'relation_kind') THEN
+        CREATE TYPE relation_kind AS ENUM ('parent', 'child', 'spouse', 'sibling', 'relative', 'guardian', 'other');
+    END IF;
+END$$;
 create table if not exists public.person_family (
   id uuid primary key default gen_random_uuid(),
   person_id uuid not null references public.people(id) on delete cascade,
