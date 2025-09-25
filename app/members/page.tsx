@@ -12,7 +12,7 @@ type PublicCard = {
   region: string;
 };
 
-export default function GuthyarsPage() {
+export default function MembersPage() {
   const [sessionUser, setSessionUser] = useState<User | null>(null);
   const [loadingList, setLoadingList] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -28,7 +28,7 @@ export default function GuthyarsPage() {
   const [skillsCsv, setSkillsCsv] = useState(''); // "farmer, designer"
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+  the const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 
   const supabase = useMemo(() => {
     if (!supabaseUrl || !supabaseAnonKey) return null;
@@ -47,19 +47,19 @@ export default function GuthyarsPage() {
       if (!mounted) return;
       setSessionUser(data.session?.user ?? null);
 
-      // Prefill from existing profile (if any)
+      // Prefill from existing public card (if any)
       if (data.session?.user) {
         const { data: myPublic } = await supabase
-          .from('guthyars_public')
+          .from('guthyars_public') // public Members directory view
           .select('*')
           .eq('id', data.session.user.id)
           .maybeSingle();
 
         if (myPublic) {
-          setFullName(myPublic.name || '');
-          setThar(myPublic.thar || '');
-          setPhoto(myPublic.photo || '');
-          setRegion(myPublic.region || '');
+          setFullName((myPublic as any).name || '');
+          setThar((myPublic as any).thar || '');
+          setPhoto((myPublic as any).photo || '');
+          setRegion((myPublic as any).region || '');
         }
       }
     };
@@ -79,7 +79,7 @@ export default function GuthyarsPage() {
     if (!supabase) return;
     setLoadingList(true);
     const { data, error } = await supabase
-      .from('guthyars_public')
+      .from('guthyars_public') // public Members directory view
       .select('*')
       .order('name', { ascending: true });
     if (!error && data) setCards(data as PublicCard[]);
@@ -122,8 +122,7 @@ export default function GuthyarsPage() {
     if (error) {
       setMsg(`Save failed: ${error.message}`);
     } else {
-      setMsg('Saved ✅ — your public card is updated.');
-      // refresh list so you can see yourself
+      setMsg('Saved ✅ — your member card is updated.');
       await loadPublicList();
     }
     setSubmitting(false);
@@ -134,20 +133,20 @@ export default function GuthyarsPage() {
       <div className="mx-auto max-w-5xl">
         <header className="mb-6">
           <h1 className="text-3xl md:text-4xl font-bold tracking-tight">
-            🌿 Guthyars — Public Yellow Pages
+            🌿 Members — Public Directory
           </h1>
           <p className="text-slate-300 text-sm mt-1">
             ELI15: When you’re signed in, the form below calls a small Supabase function
             <code className="mx-1 bg-slate-800 px-1 rounded">upsert_my_profile</code>
-            that writes only your row. The list reads from a public view
+            that writes only <em>your</em> row. The list reads the public view
             <code className="mx-1 bg-slate-800 px-1 rounded">guthyars_public</code>
-            that everyone can see.
+            (our “Members” directory) that everyone can see.
           </p>
         </header>
 
         {/* Self card editor */}
         <section className="rounded-2xl border border-slate-800 bg-slate-900/40 p-4 mb-8">
-          <h2 className="font-semibold mb-3">Your Card</h2>
+          <h2 className="font-semibold mb-3">Your Member Card</h2>
           {!sessionUser ? (
             <div className="text-sm text-amber-300">
               You’re not signed in. Sign in first, then return to update your card.
@@ -172,7 +171,7 @@ export default function GuthyarsPage() {
                   disabled={submitting}
                   className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50"
                 >
-                  {submitting ? 'Saving…' : 'Save my card'}
+                  {submitting ? 'Saving…' : 'Save my member card'}
                 </button>
                 {msg && <span className="ml-3 text-sm text-slate-300">{msg}</span>}
               </div>
@@ -182,12 +181,12 @@ export default function GuthyarsPage() {
 
         {/* Public list */}
         <section className="rounded-2xl border border-slate-800 bg-slate-900/40 p-4">
-          <h2 className="font-semibold mb-3">Public Directory</h2>
+          <h2 className="font-semibold mb-3">Public Members</h2>
           {loadingList ? (
             <div className="text-sm text-slate-300">Loading…</div>
           ) : cards.length === 0 ? (
             <div className="text-sm text-slate-300">
-              No cards yet. Once members save their card above, they appear here.
+              No members yet. Once people save their card above, they appear here.
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
