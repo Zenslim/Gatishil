@@ -50,7 +50,7 @@ export default function MembersPage() {
       // Prefill from existing public card (if any)
       if (data.session?.user) {
         const { data: myPublic } = await supabase
-          .from('guthyars_public') // public Members directory view
+          .from('members_public') // ✅ new public Members directory view
           .select('*')
           .eq('id', data.session.user.id)
           .maybeSingle();
@@ -79,7 +79,7 @@ export default function MembersPage() {
     if (!supabase) return;
     setLoadingList(true);
     const { data, error } = await supabase
-      .from('guthyars_public') // public Members directory view
+      .from('members_public') // ✅ read from members_public
       .select('*')
       .order('name', { ascending: true });
     if (!error && data) setCards(data as PublicCard[]);
@@ -109,7 +109,7 @@ export default function MembersPage() {
         .map((s) => s.trim())
         .filter(Boolean) || [];
 
-    const { data, error } = await supabase.rpc('upsert_my_profile', {
+    const { error } = await supabase.rpc('upsert_my_profile', {
       p_full_name: emptyToNull(fullName),
       p_thar: emptyToNull(thar),
       p_phone: emptyToNull(phone),
@@ -139,7 +139,7 @@ export default function MembersPage() {
             ELI15: When you’re signed in, the form below calls a small Supabase function
             <code className="mx-1 bg-slate-800 px-1 rounded">upsert_my_profile</code>
             that writes only <em>your</em> row. The list reads the public view
-            <code className="mx-1 bg-slate-800 px-1 rounded">guthyars_public</code>
+            <code className="mx-1 bg-slate-800 px-1 rounded">members_public</code>
             (our “Members” directory) that everyone can see.
           </p>
         </header>
