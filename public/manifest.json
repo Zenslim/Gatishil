@@ -1,0 +1,9 @@
+{
+  "name": "Gatishil",
+  "short_name": "Gatishil",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#000000",
+  "theme_color": "#0ea5e9",
+  "icons": []
+}
