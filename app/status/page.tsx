@@ -1,4 +1,4 @@
-// src/app/status/page.tsx
+// app/status/page.tsx
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
@@ -18,7 +18,6 @@ export default function StatusPage() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 
-  // build a lightweight client here so you don’t need any other files
   const supabase = useMemo(() => {
     if (!supabaseUrl || !supabaseAnonKey) return null;
     return createClient(supabaseUrl, supabaseAnonKey, {
@@ -30,7 +29,7 @@ export default function StatusPage() {
     const run = async () => {
       const results: Probe[] = [];
 
-      // 1) ENV presence (remote sanity check)
+      // 1) ENV presence
       results.push({
         label: 'NEXT_PUBLIC_SUPABASE_URL present',
         ok: Boolean(supabaseUrl),
@@ -42,11 +41,11 @@ export default function StatusPage() {
         detail: supabaseAnonKey ? maskKey(supabaseAnonKey) : 'missing',
       });
 
-      // 2) Supabase Auth ping (does not require any tables/RLS)
+      // 2) Supabase Auth ping
       if (supabase) {
         const t0 = performance.now();
         try {
-          const { data, error } = await supabase.auth.getSession();
+          const { error } = await supabase.auth.getSession();
           const t1 = performance.now();
           results.push({
             label: 'Supabase Auth reachable',
@@ -71,28 +70,44 @@ export default function StatusPage() {
         });
       }
 
-      // 3) Safe DB probe (tries profiles then users; both optional)
+      // 3) Safe DB probe (treat "no table yet" as OK during bootstrap)
       if (supabase) {
         const t0 = performance.now();
         let ok = false;
         let detail = '';
         try {
-          let { data, error, status } = await supabase
+          // try profiles first
+          const { data, error, status } = await supabase
             .from('profiles')
             .select('id')
             .limit(1);
 
           if (error) {
-            // if profiles not found, try users
             const notFound =
-              (error as any)?.code === '42P01' ||
-              /relation .* does not exist/i.test(error.message);
+              (error as any)?.code === '42P01' || // relation does not exist
+              status === 404 ||
+              /relation .* does not exist/i.test(error.message) ||
+              /schema cache/i.test(error.message);
 
             if (notFound) {
+              // try users as an alternate common table name
               const retry = await supabase.from('users').select('id').limit(1);
               if (retry.error) {
-                ok = false;
-                detail = `profiles & users not found / blocked: ${retry.error.message}`;
+                const alsoNotFound =
+                  (retry.error as any)?.code === '42P01' ||
+                  retry.status === 404 ||
+                  /relation .* does not exist/i.test(retry.error.message) ||
+                  /schema cache/i.test(retry.error.message);
+
+                if (alsoNotFound) {
+                  // ✅ Bootstrap mode: No tables yet is acceptable for health
+                  ok = true;
+                  detail =
+                    'No public tables yet — bootstrap mode (OK: skipped). Create tables later.';
+                } else {
+                  ok = false;
+                  detail = `users error: ${retry.error.message} (status ${retry.status})`;
+                }
               } else {
                 ok = true;
                 detail = `users ok (${retry.data?.length || 0} rows visible)`;
@@ -106,12 +121,20 @@ export default function StatusPage() {
             detail = `profiles ok (${data?.length || 0} rows visible)`;
           }
         } catch (e: any) {
-          ok = false;
-          detail = e?.message || 'unknown db error';
+          // If server says table/view missing in any other phrasing, still skip as OK.
+          const msg = `${e?.message || ''}`;
+          if (/relation .* does not exist/i.test(msg) || /schema cache/i.test(msg)) {
+            ok = true;
+            detail =
+              'No public tables yet — bootstrap mode (OK: skipped). Create tables later.';
+          } else {
+            ok = false;
+            detail = msg || 'unknown db error';
+          }
         }
         const t1 = performance.now();
         results.push({
-          label: 'Database probe (profiles → users)',
+          label: 'Database probe (bootstrap-safe)',
           ok,
           detail,
           ms: Math.round(t1 - t0),
@@ -124,7 +147,11 @@ export default function StatusPage() {
     run();
   }, [supabase, supabaseUrl, supabaseAnonKey]);
 
-  const allGood = probes.length > 0 && probes.every((p) => p.ok);
+  const allGood =
+    probes.length > 0 &&
+    probes.every((p) => p.ok) &&
+    // require at least env + auth to be OK
+    probes.slice(0, 3).every((p) => p.ok);
 
   return (
     <main className="min-h-screen bg-gradient-to-b from-slate-900 to-black text-slate-100 p-6">
@@ -133,7 +160,7 @@ export default function StatusPage() {
           🌿 Gatishil — System Status
         </h1>
         <p className="text-sm text-slate-400 mb-6">
-          Deployed on Vercel. This page checks envs, Supabase Auth, and a light DB probe.
+          Deployed on Vercel. This page checks envs, Supabase Auth, and a light DB probe (bootstrap-safe).
         </p>
 
         <section className="rounded-2xl border border-slate-800 bg-slate-900/40 p-4 mb-6">
@@ -148,6 +175,10 @@ export default function StatusPage() {
             </li>
             <li>
               <span className="text-slate-400">Repo: </span>GitHub → Vercel (auto-deploy)
+            </li>
+            <li>
+              <span className="text-slate-400">Mode: </span>
+              Bootstrap-friendly (DB optional)
             </li>
           </ul>
         </section>
@@ -175,9 +206,7 @@ export default function StatusPage() {
                   </div>
                 </div>
                 {p.detail && (
-                  <div className="mt-1 text-xs text-slate-300 break-words">
-                    {p.detail}
-                  </div>
+                  <div className="mt-1 text-xs text-slate-300 break-words">{p.detail}</div>
                 )}
                 {typeof p.ms === 'number' && (
                   <div className="mt-1 text-[10px] text-slate-400">{p.ms} ms</div>
@@ -203,8 +232,7 @@ export default function StatusPage() {
               <code>NEXT_PUBLIC_SUPABASE_ANON_KEY</code> in Vercel → Project → Settings → Environment Variables.
             </li>
             <li>
-              If DB probe fails with “relation does not exist,” it just means your table isn’t created or is named differently.
-              The app itself is fine—create tables or adjust queries later.
+              During bootstrap, “no tables yet” is treated as OK. Later, create your tables and this probe will show real visibility.
             </li>
             <li>
               If Auth fails, confirm the anon key is correct and the project’s URL matches Supabase settings.
