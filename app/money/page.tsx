@@ -1,29 +1,29 @@
 // AUTO-GENERATED CLIENT PAGE
 'use client';
-import {{ useEffect, useState }} from 'react';
+import { useEffect, useState } from 'react';
 import Card from '@/components/Card';
 
 type Row = Record<string, any>;
 
-export default function Page() {{
+export default function Page() {
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {{
-    (async () => {{
-      try {{
-        const res = await fetch('/api/money', {{ cache: 'no-store' }});
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch('/api/money', { cache: 'no-store' });
         const body = await res.json();
         const data = Array.isArray(body?.data) ? body.data : [];
         setRows(data);
-      }} catch (e: any) {{
+      } catch (e: any) {
         setError(e?.message ?? 'Failed to load');
-      }} finally {{
+      } finally {
         setLoading(false);
-      }}
-    }})();
-  }}, []);
+      }
+    })();
+  }, []);
 
   return (
     <div style={{ display: 'grid', gap: 16, gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))' }}>
@@ -36,7 +36,7 @@ export default function Page() {{
       </Card>
 
       {rows.map((row) => (
-        <Card key={String(row.id ?? Math.random())} title={String(row.memo ?? (row.title ?? row.question ?? '—'))}>
+        <Card key={String(row.id ?? Math.random())} title={String(row.name ?? row.title ?? row.question ?? '—')}>
         <div><b>Type:</b> {String((row as any).type ?? '—')}</div>
         <div><b>Amount:</b> {String((row as any).amount ?? '—')}</div>
         <div><b>Currency:</b> {String((row as any).currency ?? '—')}</div>
@@ -54,4 +54,4 @@ export default function Page() {{
       )}
     </div>
   );
-}}
+}
