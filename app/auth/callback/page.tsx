@@ -1,11 +1,14 @@
 // Auth callback: exchange code for a session then redirect to /welcome
 'use client';
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { supabaseBrowser } from '@/lib/supabaseBrowser';
 import Card from '@/components/Card';
 
-export default function AuthCallback() {
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
+function CallbackInner() {
   const params = useSearchParams();
   const router = useRouter();
   const [msg, setMsg] = useState('Finishing sign-in…');
@@ -20,11 +23,19 @@ export default function AuthCallback() {
       if (error) { setMsg('Sign-in failed: ' + error.message); return; }
       router.replace(`/welcome?name=${encodeURIComponent(name)}&role=${encodeURIComponent(role)}`);
     })();
-  }, []); // eslint-disable-line
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <Card title="🔑 Sign-in">
       <div style={{opacity:.8}}>{msg}</div>
     </Card>
+  );
+}
+
+export default function AuthCallback() {
+  return (
+    <Suspense fallback={<Card title="🔑 Sign-in"><div style={{opacity:.8}}>Loading…</div></Card>}>
+      <CallbackInner />
+    </Suspense>
   );
 }
