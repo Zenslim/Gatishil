@@ -28,7 +28,7 @@ export default function MembersPage() {
   const [skillsCsv, setSkillsCsv] = useState(''); // "farmer, designer"
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-  the const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 
   const supabase = useMemo(() => {
     if (!supabaseUrl || !supabaseAnonKey) return null;
