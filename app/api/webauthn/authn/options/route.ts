@@ -1,14 +1,22 @@
+// Notes: runtime/dynamic exports prevent Next from statically evaluating these files at build.
+// Supabase admin client is created *inside* the handler to avoid env reads at import time.
 import { NextResponse } from 'next/server';
 import { generateAuthenticationOptions } from '@simplewebauthn/server';
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 export async function POST() {
-  const rpID = new URL(process.env.NEXT_PUBLIC_SITE_URL!).hostname;
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) {
+    return NextResponse.json({ error: 'Server env missing: SUPABASE keys' }, { status: 500 });
+  }
+  const supabaseAdmin = createClient(url, key);
+
+  const rpID = new URL(process.env.NEXT_PUBLIC_SITE_URL || 'https://gatishil.vercel.app').hostname;
 
   const options = await generateAuthenticationOptions({
     rpID,
