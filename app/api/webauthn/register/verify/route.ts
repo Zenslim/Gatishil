@@ -1,0 +1,56 @@
+import { NextResponse } from 'next/server';
+import { verifyRegistrationResponse } from '@simplewebauthn/server';
+import { createClient } from '@supabase/supabase-js';
+
+const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
+
+export async function POST(req: Request) {
+  const attResp = await req.json();
+
+  const { data: ch } = await supabaseAdmin
+    .from('webauthn_challenges')
+    .select('*')
+    .eq('type', 'registration')
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .single();
+
+  if (!ch) return NextResponse.json({ error: 'Challenge not found' }, { status: 400 });
+
+  const rpID = new URL(process.env.NEXT_PUBLIC_SITE_URL!).hostname;
+  const origin = process.env.NEXT_PUBLIC_SITE_URL!;
+
+  const verification = await verifyRegistrationResponse({
+    response: attResp,
+    expectedChallenge: ch.challenge,
+    expectedRPID: rpID,
+    expectedOrigin: origin,
+    requireUserVerification: true,
+  });
+
+  if (!verification.verified || !verification.registrationInfo) {
+    return NextResponse.json({ verified: false }, { status: 400 });
+  }
+
+  const {
+    credentialPublicKey,
+    credentialID,
+    counter,
+    credentialDeviceType,
+    credentialBackedUp,
+  } = verification.registrationInfo;
+
+  await supabaseAdmin.from('webauthn_credentials').upsert({
+    id: Buffer.from(credentialID).toString('base64url'),
+    user_id: ch.user_id,
+    public_key: Buffer.from(credentialPublicKey).toString('base64'),
+    counter,
+    device_type: credentialDeviceType,
+    backed_up: credentialBackedUp,
+  });
+
+  return NextResponse.json({ verified: true });
+}
