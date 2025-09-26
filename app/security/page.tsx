@@ -1,24 +1,21 @@
 // app/security/page.tsx
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '../../lib/supabaseClient';
 
 export default function SecurityPage() {
   const router = useRouter();
 
-  // UI state
   const [email, setEmail] = useState<string>('');
   const [hasSession, setHasSession] = useState<boolean>(false);
   const [password, setPassword] = useState<string>('');
-  const [loading, setLoading] = useState<{ pass:boolean; reg:boolean; test:boolean }>({ pass:false, reg:false, test:false });
-  const [message, setMessage] = useState<string>('');
-  const [error, setError] = useState<string>('');
+  const [saving, setSaving] = useState<boolean>(false);
+  const [msg, setMsg] = useState<string>('');
+  const [err, setErr] = useState<string>('');
 
-  // Detect if this supabase-js build exposes WebAuthn helpers
-  const webauthnApi = useMemo(() => (supabase.auth as any)?.webauthn ?? null, []);
-
+  // Load current session/email (OTP already did the first proof)
   useEffect(() => {
     (async () => {
       const { data } = await supabase.auth.getSession();
@@ -28,115 +25,45 @@ export default function SecurityPage() {
     })();
   }, []);
 
+  // ELI15: First time you used OTP to prove the email.
+  // Now set a password. Your browser will offer to save it.
+  // Later, your device can autofill it unlocked by Face/Touch/PIN.
   const eli15 =
-    'First time you used OTP. Now add a password and/or a passkey (Face/Touch). Next time, log in with either one—OTP stays as a backup only.';
+    'Set a password once. Your browser will save it. Next time, Face/Touch/PIN unlocks autofill and you sign in instantly. OTP stays as the backup key.';
 
-  // 1) Set/Update password (works immediately after OTP session)
   async function handleSetPassword(e: React.FormEvent) {
     e.preventDefault();
-    setError('');
-    setMessage('');
+    setErr('');
+    setMsg('');
+
     if (!password || password.length < 8) {
-      setError('Password must be at least 8 characters.');
+      setErr('Password must be at least 8 characters.');
       return;
     }
+
     try {
-      setLoading(s => ({ ...s, pass: true }));
-      const { data, error: err } = await supabase.auth.updateUser({ password });
-      if (err) throw err;
-      if (data?.user) {
-        setMessage('✅ Password saved. You can now sign in with email + password (no OTP needed).');
-        setTimeout(() => router.push('/members'), 800);
-      } else {
-        setError('Unexpected response while saving password.');
-      }
-    } catch (e:any) {
-      setError(readableError(e));
+      setSaving(true);
+
+      // 1) Update password on the current (OTP) session
+      const up = await supabase.auth.updateUser({ password });
+      if (up.error) throw up.error;
+
+      // 2) Sign out to force a clean credential save/sign-in
+      await supabase.auth.signOut();
+
+      // 3) Immediately sign in with email + password
+      //    This specific flow triggers the native "Save password?" prompt
+      const si = await supabase.auth.signInWithPassword({ email, password });
+      if (si.error) throw si.error;
+
+      setMsg('✅ Password saved. Your browser should offer to save it now.');
+      // 4) Smooth redirect to members
+      setTimeout(() => router.push('/members'), 900);
+    } catch (e: any) {
+      setErr(e?.message || 'Failed to save password.');
     } finally {
-      setLoading(s => ({ ...s, pass: false }));
+      setSaving(false);
     }
-  }
-
-  // 2a) Register Passkey (feature-detected)
-  async function handleRegisterPasskey() {
-    setError('');
-    setMessage('');
-    try {
-      if (!webauthnApi?.register) {
-        // Old SDK or not exposed — show precise fix
-        throw new Error(needsUpgradeHint());
-      }
-      setLoading(s => ({ ...s, reg: true }));
-      // Give this credential a short nickname for your device list
-      const nickname = deviceNickname();
-      // Newer supabase-js exposes webauthn.register({ name?: string })
-      const { error: err } = await webauthnApi.register({ name: nickname });
-      if (err) throw err;
-      setMessage('✅ Passkey registered on this device. Next time choose “Sign in with Passkey”.');
-      setTimeout(() => router.push('/members'), 800);
-    } catch (e:any) {
-      setError(readableError(e));
-    } finally {
-      setLoading(s => ({ ...s, reg: false }));
-    }
-  }
-
-  // 2b) Test Passkey sign-in (mostly a sanity check)
-  async function handleTestPasskey() {
-    setError('');
-    setMessage('');
-    try {
-      if (!webauthnApi?.authenticate) {
-        throw new Error(needsUpgradeHint());
-      }
-      setLoading(s => ({ ...s, test: true }));
-      const { data, error: err } = await webauthnApi.authenticate();
-      if (err) throw err;
-      if (data?.session) {
-        setMessage('🔐 Passkey test succeeded. Session active.');
-        setTimeout(() => router.push('/members'), 800);
-      } else {
-        setMessage('Passkey prompt was cancelled or no credential was found for this origin.');
-      }
-    } catch (e:any) {
-      setError(readableError(e));
-    } finally {
-      setLoading(s => ({ ...s, test: false }));
-    }
-  }
-
-  // Helpers
-  function deviceNickname() {
-    const ua = typeof navigator !== 'undefined' ? navigator.userAgent : 'device';
-    const short = ua.slice(0, 24);
-    return `Passkey · ${short}`;
-  }
-
-  function needsUpgradeHint() {
-    return [
-      'Passkey helpers not available in this build.',
-      'Fix:',
-      '1) In GitHub, set @supabase/supabase-js to a recent 2.x (e.g., "^2.45.x") and commit.',
-      '2) In Supabase → Authentication → URL Configuration, set your live Site URL (e.g., https://gatishil.vercel.app).',
-      '3) In Authentication → Settings → (Passkeys/WebAuthn), ensure your production origin is allowed.',
-    ].join(' ');
-  }
-
-  function readableError(e:any): string {
-    const raw = e?.message || String(e);
-    const low = raw.toLowerCase();
-
-    // Specific messages we’ve seen:
-    if (low.includes('createpasskey is not a function')) {
-      return needsUpgradeHint();
-    }
-    if (low.includes('registration options') || low.includes('webauthn')) {
-      return 'Failed to fetch registration options. Ensure your live URL is in Supabase Auth → URL Configuration and WebAuthn allowed origins (use your deployed domain, not localhost).';
-    }
-    if (low.includes('not allowed')) {
-      return 'Action was cancelled or this origin is not allowed for WebAuthn. Check Supabase Auth origins.';
-    }
-    return raw;
   }
 
   return (
@@ -147,31 +74,51 @@ export default function SecurityPage() {
 
         <div className="mt-3 text-sm text-zinc-400">
           {hasSession ? (
-            <span>Logged in as <span className="text-white font-medium">{email || 'your account'}</span></span>
+            <span>
+              Logged in as{' '}
+              <span className="text-white font-medium">{email || 'your account'}</span>
+            </span>
           ) : (
-            <span className="text-amber-300">You are not signed in. Visit /join and complete OTP first.</span>
+            <span className="text-amber-300">
+              You are not signed in. Visit <code>/join</code> and complete OTP first.
+            </span>
           )}
         </div>
 
-        {message && (
+        {msg && (
           <div className="mt-4 rounded-lg border border-emerald-500/30 bg-emerald-900/20 p-3 text-emerald-200">
-            {message}
+            {msg}
           </div>
         )}
-        {error && (
+        {err && (
           <div className="mt-4 rounded-lg border border-red-500/30 bg-red-900/20 p-3 text-red-200">
-            {error}
+            {err}
           </div>
         )}
 
-        {/* 1) Password */}
+        {/* Password form with attributes that maximize password-manager support */}
         <section className="mt-6">
-          <h2 className="text-lg font-medium">1) Set a Password <span className="text-zinc-400">(recommended)</span></h2>
+          <h2 className="text-lg font-medium">
+            Set a Password <span className="text-zinc-400">(recommended)</span>
+          </h2>
+
           <form onSubmit={handleSetPassword} className="mt-3 space-y-3">
+            {/* Hidden username field helps some managers link the pair */}
+            <input
+              type="email"
+              name="username"
+              autoComplete="username"
+              defaultValue={email}
+              className="hidden"
+              readOnly
+            />
+
             <label className="block text-sm text-zinc-300">
               New password (8+ chars)
               <input
                 type="password"
+                name="new-password"
+                autoComplete="new-password"
                 className="mt-1 w-full rounded-lg border border-white/10 bg-black/40 p-3 outline-none focus:ring-2 focus:ring-emerald-500"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
@@ -180,44 +127,20 @@ export default function SecurityPage() {
                 required
               />
             </label>
+
             <button
               type="submit"
-              disabled={loading.pass}
+              disabled={saving || !hasSession}
               className="w-full rounded-xl bg-emerald-600 py-3 font-medium hover:bg-emerald-500 disabled:opacity-50"
             >
-              {loading.pass ? 'Saving…' : 'Set Password & Continue'}
+              {saving ? 'Saving…' : 'Set Password & Continue'}
             </button>
           </form>
-        </section>
 
-        <div className="my-6 h-px bg-white/10" />
-
-        {/* 2) Passkey */}
-        <section>
-          <h2 className="text-lg font-medium">2) Or Add a Passkey <span className="text-zinc-400">(Face/Touch)</span></h2>
-
-          <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <button
-              onClick={handleRegisterPasskey}
-              disabled={loading.reg}
-              className="rounded-xl bg-indigo-600 py-3 font-medium hover:bg-indigo-500 disabled:opacity-50"
-            >
-              {loading.reg ? 'Registering…' : 'Register Passkey & Continue'}
-            </button>
-            <button
-              onClick={handleTestPasskey}
-              disabled={loading.test}
-              className="rounded-xl bg-zinc-800 py-3 font-medium hover:bg-zinc-700 disabled:opacity-50 border border-white/10"
-            >
-              {loading.test ? 'Testing…' : 'Test Passkey Sign-in'}
-            </button>
-          </div>
-
-          <ul className="mt-3 text-xs text-zinc-400 list-disc pl-5 space-y-1">
-            <li>If buttons show “Passkey helpers not available…”, bump <code>@supabase/supabase-js</code> to a recent 2.x in <code>package.json</code> and redeploy.</li>
-            <li>Supabase → Authentication → URL Configuration: set your live Site URL (e.g., <code>https://gatishil.vercel.app</code>).</li>
-            <li>Authentication → Settings → Passkeys/WebAuthn: allow your production origin.</li>
-          </ul>
+          <p className="text-xs text-zinc-400 mt-3">
+            Tip: If your browser didn’t offer to save, open the sign-in page next and sign in once
+            with email + password — it will prompt to save and then allow Face/Touch/PIN unlock.
+          </p>
         </section>
 
         <div className="mt-8">
