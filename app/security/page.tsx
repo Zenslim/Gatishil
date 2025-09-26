@@ -1,4 +1,4 @@
-
+// app/security/page.tsx
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -21,7 +21,9 @@ export default function SecuritySetup() {
     (async () => {
       const { data } = await supabase.auth.getUser();
       if (!data.user) {
-        window.location.href = '/join';
+        // Not logged in → send to /join and remember destination
+        const next = encodeURIComponent('/security');
+        window.location.href = `/join?next=${next}`;
         return;
       }
       setEmail(data.user.email ?? '(no email)');
@@ -36,7 +38,8 @@ export default function SecuritySetup() {
       if (password.length < 8) throw new Error('Use 8+ characters');
       const { error } = await supabase.auth.updateUser({ password });
       if (error) throw error;
-      setMessage('Password set ✔ Now add a Passkey for one-tap login.');
+      setMessage('Password set ✔ Taking you to Members...');
+      setTimeout(() => (window.location.href = '/members'), 800);
     } catch (e: any) {
       setMessage(e.message || 'Could not set password');
     } finally {
@@ -56,7 +59,7 @@ export default function SecuritySetup() {
       setBusy(true);
       setMessage(null);
 
-      // 1) get options from server (user-bound via Authorization header)
+      // Ask server for registration options (binds to current user via Authorization header)
       const optRes = await fetch('/api/webauthn/register/options', {
         method: 'POST',
         headers: await authHeader(),
@@ -64,10 +67,10 @@ export default function SecuritySetup() {
       if (!optRes.ok) throw new Error('Failed to fetch registration options');
       const options = await optRes.json();
 
-      // 2) browser ceremony
+      // Browser ceremony
       const attResp = await startRegistration(options);
 
-      // 3) verify on server
+      // Verify on server
       const verifyRes = await fetch('/api/webauthn/register/verify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(await authHeader()) },
@@ -76,7 +79,8 @@ export default function SecuritySetup() {
       const vr = await verifyRes.json();
       if (!verifyRes.ok || !vr?.verified) throw new Error(vr?.error || 'Passkey verify failed');
 
-      setMessage('Passkey added ✔ You can now sign in with biometrics.');
+      setMessage('Passkey added ✔ Taking you to Members...');
+      setTimeout(() => (window.location.href = '/members'), 800);
     } catch (e: any) {
       setMessage(e.message || 'Could not register passkey');
     } finally {
@@ -122,7 +126,7 @@ export default function SecuritySetup() {
         </p>
 
         <section className="space-y-3">
-          <h2 className="text-lg font-semibold">1) Set a Password</h2>
+          <h2 className="text-lg font-semibold">1) Set a Password (recommended)</h2>
           <input
             type="password"
             className="w-full rounded-lg bg-white/5 px-3 py-2 outline-none"
@@ -135,18 +139,18 @@ export default function SecuritySetup() {
             disabled={busy}
             className="w-full rounded-lg bg-white/10 hover:bg-white/15 py-2"
           >
-            Set Password
+            Set Password & Continue
           </button>
         </section>
 
         <section className="space-y-3 pt-2">
-          <h2 className="text-lg font-semibold">2) Add a Passkey (Face/Touch)</h2>
+          <h2 className="text-lg font-semibold">2) Or Add a Passkey (Face/Touch)</h2>
           <button
             onClick={registerPasskey}
             disabled={busy}
             className="w-full rounded-lg bg-white/10 hover:bg-white/15 py-2"
           >
-            Register Passkey
+            Register Passkey & Continue
           </button>
 
           <button
@@ -165,7 +169,7 @@ export default function SecuritySetup() {
         )}
 
         <p className="text-xs text-white/50">
-          You can always use OTP as backup. Password + Passkey = no OTP next time.
+          OTP stays as backup. Once you add a password or passkey, you won't need OTP every time.
         </p>
       </div>
     </main>
