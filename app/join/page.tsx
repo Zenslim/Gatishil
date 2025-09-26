@@ -150,10 +150,10 @@ export default function JoinPage() {
         </div>
 
         <label style={label}>Your Name</label>
-        <input style={input} value={name} onChange={e=>setName(e.target.value)} placeholder="e.g., Mritunjaya Shrestha" />
+        <input style={input} value={name} onChange={e=>setName(e.target.value)} placeholder="e.g., Sushila Tamang" />
 
         <label style={label}>How will you help? (Role)</label>
-        <input style={input} value={role} onChange={e=>setRole(e.target.value)} placeholder="e.g., Organizer, Farmer, Teacher" />
+        <input style={input} value={role} onChange={e=>setRole(e.target.value)} placeholder="e.g., Organizer, Farmer, Volunteer, Teacher" />
 
         {channel === 'phone' && (
           <div>
