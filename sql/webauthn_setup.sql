@@ -1,4 +1,5 @@
--- WebAuthn storage (App Router; no src/ folder needed)
+
+-- WebAuthn storage
 create table if not exists public.webauthn_credentials (
   id text primary key,
   user_id uuid not null references auth.users(id) on delete cascade,

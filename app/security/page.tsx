@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -20,7 +21,7 @@ export default function SecuritySetup() {
     (async () => {
       const { data } = await supabase.auth.getUser();
       if (!data.user) {
-        window.location.href = '/signin';
+        window.location.href = '/join';
         return;
       }
       setEmail(data.user.email ?? '(no email)');
@@ -43,20 +44,38 @@ export default function SecuritySetup() {
     }
   }
 
+  async function authHeader() {
+    const { data } = await supabase.auth.getSession();
+    const token = data.session?.access_token;
+    if (!token) throw new Error('No session token; please re-login via OTP');
+    return { Authorization: `Bearer ${token}` };
+  }
+
   async function registerPasskey() {
     try {
       setBusy(true);
       setMessage(null);
-      const optsRes = await fetch('/api/webauthn/register/options', { method: 'POST' });
-      const options = await optsRes.json();
+
+      // 1) get options from server (user-bound via Authorization header)
+      const optRes = await fetch('/api/webauthn/register/options', {
+        method: 'POST',
+        headers: await authHeader(),
+      });
+      if (!optRes.ok) throw new Error('Failed to fetch registration options');
+      const options = await optRes.json();
+
+      // 2) browser ceremony
       const attResp = await startRegistration(options);
+
+      // 3) verify on server
       const verifyRes = await fetch('/api/webauthn/register/verify', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...(await authHeader()) },
         body: JSON.stringify(attResp),
       });
       const vr = await verifyRes.json();
       if (!verifyRes.ok || !vr?.verified) throw new Error(vr?.error || 'Passkey verify failed');
+
       setMessage('Passkey added ✔ You can now sign in with biometrics.');
     } catch (e: any) {
       setMessage(e.message || 'Could not register passkey');
@@ -69,9 +88,13 @@ export default function SecuritySetup() {
     try {
       setBusy(true);
       setMessage(null);
+
       const optsRes = await fetch('/api/webauthn/authn/options', { method: 'POST' });
+      if (!optsRes.ok) throw new Error('Failed to fetch authn options');
       const options = await optsRes.json();
+
       const asResp = await startAuthentication(options);
+
       const verifyRes = await fetch('/api/webauthn/authn/verify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -79,6 +102,7 @@ export default function SecuritySetup() {
       });
       const vr = await verifyRes.json();
       if (!verifyRes.ok || !vr?.verified) throw new Error(vr?.error || 'Auth verify failed');
+
       setMessage('Passkey sign-in works ✔');
     } catch (e: any) {
       setMessage(e.message || 'Passkey test failed');

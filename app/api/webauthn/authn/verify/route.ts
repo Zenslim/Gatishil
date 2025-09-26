@@ -1,5 +1,3 @@
-// Notes: runtime/dynamic exports prevent Next from statically evaluating these files at build.
-// Supabase admin client is created *inside* the handler to avoid env reads at import time.
 import { NextResponse } from 'next/server';
 import { verifyAuthenticationResponse } from '@simplewebauthn/server';
 import { createClient } from '@supabase/supabase-js';

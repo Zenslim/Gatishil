@@ -1,15 +1,13 @@
-// Notes: runtime/dynamic exports prevent Next from statically evaluating these files at build.
-// Supabase admin client is created *inside* the handler to avoid env reads at import time.
+// Dynamic: avoid env reads at build time
 import { NextResponse } from 'next/server';
 import { generateRegistrationOptions } from '@simplewebauthn/server';
-import { cookies } from 'next/headers';
 import { createClient } from '@supabase/supabase-js';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
-export async function POST() {
+export async function POST(req: Request) {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) {
@@ -17,11 +15,12 @@ export async function POST() {
   }
   const supabaseAdmin = createClient(url, key);
 
-  const authCookie = cookies().get('sb-access-token')?.value;
-  if (!authCookie) return NextResponse.json({ error: 'Not signed in' }, { status: 401 });
+  // Expect Authorization: Bearer <access_token>
+  const authz = req.headers.get('authorization') || '';
+  const token = authz.toLowerCase().startsWith('bearer ') ? authz.slice(7) : null;
+  if (!token) return NextResponse.json({ error: 'Missing bearer token' }, { status: 401 });
 
-  // Note: Supabase admin getUser(token) requires service role, which we have.
-  const { data: { user }, error } = await supabaseAdmin.auth.getUser(authCookie);
+  const { data: { user }, error } = await supabaseAdmin.auth.getUser(token);
   if (error || !user) return NextResponse.json({ error: 'Invalid session' }, { status: 401 });
 
   const rpName = 'Gatishil';
