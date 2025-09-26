@@ -1,9 +1,10 @@
 // app/join/page.tsx — Type-safe: AakashSMS OTP + Email Magic Link + Google/Facebook
-// Remote-only (GitHub + Vercel + Supabase). ELI15: Phone uses /api/otp/*; Email/OAuth use Supabase.
+// Direct after-OTP target: /security (not /members)
 
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 
 type Step = 'collect' | 'verify' | 'done';
@@ -40,6 +41,8 @@ function showHttpError(res: Response, data: any): string {
 }
 
 export default function JoinPage() {
+  const router = useRouter();
+
   // Flow
   const [step, setStep] = useState<Step>('collect');
   const [channel, setChannel] = useState<Channel>('phone');
@@ -110,8 +113,10 @@ export default function JoinPage() {
       const data = await safeJson(res);
       if (!res.ok) { setErr(showHttpError(res, data)); return; }
       if (!data?.ok) { setErr(data?.error || 'Invalid code'); return; }
-      setStep('done');
-      setMsg('🎉 Verified! You can now enter.');
+
+      // ✅ DIRECT: After OTP success, go to /security (not /members)
+      window.location.href = '/security';
+      return;
     } catch (e: any) {
       setErr(e?.message || 'Network error while verifying OTP');
     } finally {
@@ -127,7 +132,9 @@ export default function JoinPage() {
     }
     setLoading(true);
     try {
-      const redirectTo = `${window.location.origin}/auth/callback?name=${encodeURIComponent(name)}&role=${encodeURIComponent(role)}`;
+      // ✅ DIRECT: magic link lands on /security (carry optional profile info)
+      const redirectTo =
+        `${window.location.origin}/security?name=${encodeURIComponent(name)}&role=${encodeURIComponent(role)}`;
       const { error } = await supabase.auth.signInWithOtp({
         email: email.trim(),
         options: { shouldCreateUser: true, emailRedirectTo: redirectTo },
@@ -145,7 +152,9 @@ export default function JoinPage() {
     resetAlerts();
     setLoading(true);
     try {
-      const redirectTo = `${window.location.origin}/auth/callback?name=${encodeURIComponent(name)}&role=${encodeURIComponent(role)}`;
+      // ✅ DIRECT: OAuth callback goes to /security too
+      const redirectTo =
+        `${window.location.origin}/security?name=${encodeURIComponent(name)}&role=${encodeURIComponent(role)}`;
       const { error } = await supabase.auth.signInWithOAuth({ provider, options: { redirectTo } });
       if (error) { setErr(error.message); }
       // success → browser redirects
@@ -216,7 +225,7 @@ export default function JoinPage() {
                 <label style={label}>Enter 6-digit code</label>
                 <input style={input} value={otp} onChange={e=>setOtp(e.target.value)} placeholder="••••••" inputMode="numeric" />
                 <button type="submit" disabled={loading} style={primaryBtn}>
-                  {loading ? 'Verifying…' : 'Verify & Enter'}
+                  {loading ? 'Verifying…' : 'Verify & Secure Account'}
                 </button>
               </form>
             )}
@@ -229,27 +238,27 @@ export default function JoinPage() {
             <label style={label}>Email</label>
             <input style={input} value={email} onChange={e=>setEmail(e.target.value)} placeholder="you@example.com" />
             <button onClick={sendEmailMagicLink} disabled={loading} style={primaryBtn}>
-              {loading ? 'Sending…' : 'Send Magic Link'}
+              {loading ? 'Sending…' : 'Send Magic Link (→ /security)'}
             </button>
 
             <div style={{textAlign:'center', margin:'10px 0', opacity:.7}}>or</div>
 
             <div style={{display:'grid', gap:8}}>
               <button onClick={()=>signInWithProvider('google')} disabled={loading} style={oauthBtn}>
-                Continue with Google
+                Continue with Google (→ /security)
               </button>
               <button onClick={()=>signInWithProvider('facebook')} disabled={loading} style={oauthBtn}>
-                Continue with Facebook
+                Continue with Facebook (→ /security)
               </button>
             </div>
           </div>
         )}
 
-        {/* DONE */}
+        {/* DONE (email/OAuth only) */}
         {step === 'done' && (
           <div>
             {msg && <div style={{margin:'12px 0'}}>{msg}</div>}
-            <a href="/members" style={linkBtn}>🚀 Go to Members</a>
+            <a href="/security" style={linkBtn}>🔐 Open Security Setup</a>
           </div>
         )}
 
