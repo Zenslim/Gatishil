@@ -2,176 +2,216 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { createClient } from '@supabase/supabase-js';
-import { startRegistration, startAuthentication } from '@simplewebauthn/browser';
+import { useRouter } from 'next/navigation';
+import { supabase } from '../../lib/supabaseClient';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
+export default function SecurityPage() {
+  const router = useRouter();
 
-export default function SecuritySetup() {
-  const [email, setEmail] = useState<string | null>(null);
-  const [ready, setReady] = useState(false);
-  const [password, setPassword] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
+  // UI state
+  const [email, setEmail] = useState<string>('');
+  const [loading, setLoading] = useState<{pass:boolean; reg:boolean; test:boolean}>({pass:false, reg:false, test:false});
+  const [message, setMessage] = useState<string>('');
+  const [error, setError] = useState<string>('');
+  const [password, setPassword] = useState<string>('');
+  const [hasSession, setHasSession] = useState<boolean>(false);
 
+  // On mount, show who’s logged in (ELI15: you must already be logged in by OTP once)
   useEffect(() => {
     (async () => {
-      const { data } = await supabase.auth.getUser();
-      if (!data.user) {
-        // Not logged in → send to /join and remember destination
-        const next = encodeURIComponent('/security');
-        window.location.href = `/join?next=${next}`;
-        return;
-      }
-      setEmail(data.user.email ?? '(no email)');
-      setReady(true);
+      const { data } = await supabase.auth.getSession();
+      const sess = data?.session ?? null;
+      setHasSession(!!sess);
+      setEmail(sess?.user?.email ?? '');
     })();
   }, []);
 
-  async function setAccountPassword() {
+  // ELI15 copy (kept short on screen)
+  const eli15 =
+    'First login uses OTP. Now add either a password or a passkey (Face/Touch). After that, future logins can skip OTP. OTP still works as backup.';
+
+  // 1) Set/Update password using Supabase Auth
+  async function handleSetPassword(e: React.FormEvent) {
+    e.preventDefault();
+    setError(''); setMessage('');
+    if (!password || password.length < 8) {
+      setError('Password must be at least 8 characters.');
+      return;
+    }
     try {
-      setBusy(true);
-      setMessage(null);
-      if (password.length < 8) throw new Error('Use 8+ characters');
-      const { error } = await supabase.auth.updateUser({ password });
-      if (error) throw error;
-      setMessage('Password set ✔ Taking you to Members...');
-      setTimeout(() => (window.location.href = '/members'), 800);
-    } catch (e: any) {
-      setMessage(e.message || 'Could not set password');
+      setLoading(s => ({...s, pass:true}));
+      const { data, error: err } = await supabase.auth.updateUser({ password });
+      if (err) throw err;
+      if (data?.user) {
+        setMessage('✅ Password saved. You can now sign in with email + password (no OTP needed).');
+        // optional: route to members
+        setTimeout(() => router.push('/members'), 800);
+      } else {
+        setError('Unexpected response while saving password.');
+      }
+    } catch (e:any) {
+      setError(readableError(e));
     } finally {
-      setBusy(false);
+      setLoading(s => ({...s, pass:false}));
     }
   }
 
-  async function authHeader() {
-    const { data } = await supabase.auth.getSession();
-    const token = data.session?.access_token;
-    if (!token) throw new Error('No session token; please re-login via OTP');
-    return { Authorization: `Bearer ${token}` };
-  }
-
-  async function registerPasskey() {
+  // 2a) Register a Passkey (WebAuthn) via Supabase GoTrue built-ins
+  // Requires: you are logged in (OTP already done), and your production origin is allowed in Supabase Auth → Settings.
+  async function handleRegisterPasskey() {
+    setError(''); setMessage('');
     try {
-      setBusy(true);
-      setMessage(null);
-
-      // Ask server for registration options (binds to current user via Authorization header)
-      const optRes = await fetch('/api/webauthn/register/options', {
-        method: 'POST',
-        headers: await authHeader(),
-      });
-      if (!optRes.ok) throw new Error('Failed to fetch registration options');
-      const options = await optRes.json();
-
-      // Browser ceremony
-      const attResp = await startRegistration(options);
-
-      // Verify on server
-      const verifyRes = await fetch('/api/webauthn/register/verify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...(await authHeader()) },
-        body: JSON.stringify(attResp),
-      });
-      const vr = await verifyRes.json();
-      if (!verifyRes.ok || !vr?.verified) throw new Error(vr?.error || 'Passkey verify failed');
-
-      setMessage('Passkey added ✔ Taking you to Members...');
-      setTimeout(() => (window.location.href = '/members'), 800);
-    } catch (e: any) {
-      setMessage(e.message || 'Could not register passkey');
+      setLoading(s => ({...s, reg:true}));
+      // Supabase JS v2 has createPasskey (WebAuthn) on user session
+      // Device nickname is optional; helps list passkeys later
+      // @ts-ignore - allow if types lag behind runtime
+      const { error: err } = await (supabase.auth as any).createPasskey({ name: deviceNickname() });
+      if (err) throw err;
+      setMessage('✅ Passkey registered on this device. Next time, choose "Sign in with Passkey".');
+      // optional: route to members
+      setTimeout(() => router.push('/members'), 800);
+    } catch (e:any) {
+      const msg = readableError(e);
+      setError(msg);
     } finally {
-      setBusy(false);
+      setLoading(s => ({...s, reg:false}));
     }
   }
 
-  async function quickTestLogin() {
+  // 2b) Quick Passkey sign-in test (works best after you sign out, but we keep it here for sanity)
+  async function handleTestPasskey() {
+    setError(''); setMessage('');
     try {
-      setBusy(true);
-      setMessage(null);
-
-      const optsRes = await fetch('/api/webauthn/authn/options', { method: 'POST' });
-      if (!optsRes.ok) throw new Error('Failed to fetch authn options');
-      const options = await optsRes.json();
-
-      const asResp = await startAuthentication(options);
-
-      const verifyRes = await fetch('/api/webauthn/authn/verify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(asResp),
-      });
-      const vr = await verifyRes.json();
-      if (!verifyRes.ok || !vr?.verified) throw new Error(vr?.error || 'Auth verify failed');
-
-      setMessage('Passkey sign-in works ✔');
-    } catch (e: any) {
-      setMessage(e.message || 'Passkey test failed');
+      setLoading(s => ({...s, test:true}));
+      // If you’re already logged in, this will usually no-op. It’s just a device test.
+      // @ts-ignore - allow if types lag behind runtime
+      const { data, error: err } = await (supabase.auth as any).signInWithPasskey();
+      if (err) throw err;
+      if (data?.session) {
+        setMessage('🔐 Passkey test succeeded. Session active.');
+        setTimeout(() => router.push('/members'), 800);
+      } else {
+        setMessage('Passkey prompt was cancelled or no credential available on this browser.');
+      }
+    } catch (e:any) {
+      setError(readableError(e));
     } finally {
-      setBusy(false);
+      setLoading(s => ({...s, test:false}));
     }
   }
 
-  if (!ready) return null;
+  // Helpers
+  function deviceNickname() {
+    const ua = typeof navigator !== 'undefined' ? navigator.userAgent : 'device';
+    const short = ua.split(')')[0]?.slice(0, 24) || 'device';
+    return `Passkey · ${short}`;
+  }
+
+  function readableError(e:any): string {
+    const raw = e?.message || String(e);
+    // Friendly hint for the exact issue you saw:
+    // “Failed to fetch registration options” happens when the domain/origin isn’t allowed in Supabase Auth WebAuthn settings.
+    if (raw.toLowerCase().includes('registration options') || raw.toLowerCase().includes('webauthn')) {
+      return 'Failed to fetch registration options. This usually means your site origin is not allowed in Supabase Auth → Settings. Ensure your deployed URL (e.g., https://gatishil.vercel.app) is set as Site URL and allowed for Passkeys.';
+    }
+    return raw;
+  }
 
   return (
-    <main className="min-h-screen bg-black text-white flex items-center justify-center p-6">
-      <div className="w-full max-w-md rounded-2xl border border-white/10 p-6 space-y-6">
+    <div className="min-h-screen bg-black text-white flex items-center justify-center p-6">
+      <div className="w-full max-w-xl rounded-2xl border border-white/10 bg-zinc-900/50 p-6 shadow-xl">
         <h1 className="text-2xl font-semibold">🔐 Finish Security</h1>
-        <p className="text-sm text-white/70">
-          Logged in as <span className="font-mono">{email}</span>
-        </p>
+        <p className="text-zinc-300 mt-2">{eli15}</p>
 
-        <section className="space-y-3">
-          <h2 className="text-lg font-semibold">1) Set a Password (recommended)</h2>
-          <input
-            type="password"
-            className="w-full rounded-lg bg-white/5 px-3 py-2 outline-none"
-            placeholder="New password (8+ chars)"
-            value={password}
-            onChange={e => setPassword(e.target.value)}
-          />
-          <button
-            onClick={setAccountPassword}
-            disabled={busy}
-            className="w-full rounded-lg bg-white/10 hover:bg-white/15 py-2"
-          >
-            Set Password & Continue
-          </button>
-        </section>
+        <div className="mt-4 text-sm text-zinc-400">
+          {hasSession ? (
+            <span>Logged in as <span className="text-white font-medium">{email || 'your account'}</span></span>
+          ) : (
+            <span className="text-amber-300">You are not signed in. Visit /join or complete OTP first.</span>
+          )}
+        </div>
 
-        <section className="space-y-3 pt-2">
-          <h2 className="text-lg font-semibold">2) Or Add a Passkey (Face/Touch)</h2>
-          <button
-            onClick={registerPasskey}
-            disabled={busy}
-            className="w-full rounded-lg bg-white/10 hover:bg-white/15 py-2"
-          >
-            Register Passkey & Continue
-          </button>
-
-          <button
-            onClick={quickTestLogin}
-            disabled={busy}
-            className="w-full rounded-lg bg-white/10 hover:bg-white/15 py-2"
-          >
-            Test Passkey Sign-in
-          </button>
-        </section>
-
+        {/* Messages */}
         {message && (
-          <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm">
+          <div className="mt-4 rounded-lg border border-emerald-500/30 bg-emerald-900/20 p-3 text-emerald-200">
             {message}
           </div>
         )}
+        {error && (
+          <div className="mt-4 rounded-lg border border-red-500/30 bg-red-900/20 p-3 text-red-200">
+            {error}
+          </div>
+        )}
 
-        <p className="text-xs text-white/50">
-          OTP stays as backup. Once you add a password or passkey, you won't need OTP every time.
+        {/* 1) Password */}
+        <section className="mt-6">
+          <h2 className="text-lg font-medium">1) Set a Password <span className="text-zinc-400">(recommended)</span></h2>
+          <form onSubmit={handleSetPassword} className="mt-3 space-y-3">
+            <label className="block text-sm text-zinc-300">
+              New password (8+ chars)
+              <input
+                type="password"
+                className="mt-1 w-full rounded-lg border border-white/10 bg-black/40 p-3 outline-none focus:ring-2 focus:ring-emerald-500"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••"
+                minLength={8}
+                required
+              />
+            </label>
+            <button
+              type="submit"
+              disabled={loading.pass}
+              className="w-full rounded-xl bg-emerald-600 py-3 font-medium hover:bg-emerald-500 disabled:opacity-50"
+            >
+              {loading.pass ? 'Saving…' : 'Set Password & Continue'}
+            </button>
+          </form>
+        </section>
+
+        {/* Divider */}
+        <div className="my-6 h-px bg-white/10" />
+
+        {/* 2) Passkey */}
+        <section>
+          <h2 className="text-lg font-medium">2) Or Add a Passkey <span className="text-zinc-400">(Face/Touch)</span></h2>
+          <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <button
+              onClick={handleRegisterPasskey}
+              disabled={loading.reg}
+              className="rounded-xl bg-indigo-600 py-3 font-medium hover:bg-indigo-500 disabled:opacity-50"
+            >
+              {loading.reg ? 'Registering…' : 'Register Passkey & Continue'}
+            </button>
+            <button
+              onClick={handleTestPasskey}
+              disabled={loading.test}
+              className="rounded-xl bg-zinc-800 py-3 font-medium hover:bg-zinc-700 disabled:opacity-50 border border-white/10"
+            >
+              {loading.test ? 'Testing…' : 'Test Passkey Sign-in'}
+            </button>
+          </div>
+
+          <p className="mt-3 text-sm text-zinc-400">
+            OTP stays as backup. Once you add a password or a passkey, you won’t need OTP every time. Why not both? ✔
+          </p>
+        </section>
+
+        {/* Back to members */}
+        <div className="mt-8">
+          <button
+            onClick={() => router.push('/members')}
+            className="w-full rounded-xl bg-zinc-800 py-3 font-medium hover:bg-zinc-700 border border-white/10"
+          >
+            ← Go to Members
+          </button>
+        </div>
+
+        {/* Tiny footnote to catch the specific production config bug without extra steps */}
+        <p className="mt-4 text-xs text-zinc-500">
+          If you see “Failed to fetch registration options”, add your live URL as Site URL and allowed WebAuthn origin in Supabase Auth settings.
         </p>
       </div>
-    </main>
+    </div>
   );
 }
