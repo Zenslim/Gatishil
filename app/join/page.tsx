@@ -141,8 +141,8 @@ export default function JoinPage() {
   return (
     <div style={screen}>
       <div style={card}>
-        <h1 style={title}>Join Gatishil</h1>
-        <p style={subtitle}>Phone OTP with country picker — or Email magic link — or Google/Facebook.</p>
+        <h1 style={title}>Join Gatishil Nepal</h1>
+        <p style={subtitle}>Phone OTP with country picker or Email magic link or Google/Facebook.</p>
 
         <div style={tabs}>
           <button onClick={()=>setChannel('phone')} disabled={channel==='phone'} style={tab(channel==='phone')}>📱 Phone</button>
