@@ -168,8 +168,8 @@ export default function JoinPage() {
   return (
     <div style={screen}>
       <div style={card}>
-        <h1 style={title}>Join Gatishil</h1>
-        <p style={subtitle}>Phone (SMS OTP via AakashSMS) — or Email magic link — or Google/Facebook.</p>
+        <h1 style={title}>Join Gatishil Nepal</h1>
+        <p style={subtitle}>Phone or E-mail</p>
 
         {/* Tabs */}
         <div style={tabs}>
@@ -238,17 +238,17 @@ export default function JoinPage() {
             <label style={label}>Email</label>
             <input style={input} value={email} onChange={e=>setEmail(e.target.value)} placeholder="you@example.com" />
             <button onClick={sendEmailMagicLink} disabled={loading} style={primaryBtn}>
-              {loading ? 'Sending…' : 'Send Magic Link (→ /security)'}
+              {loading ? 'Sending…' : 'Send Magic Link'}
             </button>
 
             <div style={{textAlign:'center', margin:'10px 0', opacity:.7}}>or</div>
 
             <div style={{display:'grid', gap:8}}>
               <button onClick={()=>signInWithProvider('google')} disabled={loading} style={oauthBtn}>
-                Continue with Google (→ /security)
+                Continue with Google
               </button>
               <button onClick={()=>signInWithProvider('facebook')} disabled={loading} style={oauthBtn}>
-                Continue with Facebook (→ /security)
+                Continue with Facebook
               </button>
             </div>
           </div>
