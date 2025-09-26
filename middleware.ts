@@ -1,25 +1,25 @@
 // Gatishil Systemic Access Policy (Edge)
-// Single source of truth for:
-// 1) Canonical domain (no "www", no ".vercel.app")
-// 2) Member lifecycle routing (window → interior)
-// 3) Deep link return after login without loops
-// 4) Robots hygiene (interior rooms are never indexed)
-// 5) PWA-friendly: members live in the app shell, not the window
+//
+// • Canonical host (production only), but allow localhost & *.vercel.app previews
+// • Window (visitor) vs Interior (member) routing
+// • Deep-link return via ?next= (no loops)
+// • Robots hygiene for interior rooms
+// • Matcher fixed: no capturing groups (build-safe for Next.js 14)
 
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 
-// --- CONFIG YOU OWN ----------------------------------------------------------
-const CANONICAL_HOST = 'gatishilnepal.org';
+// ---- CONFIG YOU OWN ---------------------------------------------------------
+const CANONICAL_HOST = 'gatishilnepal.org'; // production host
 
 // “Window-side doors” (visitor space). Signed-in folks shouldn’t linger here.
 const POST_AUTH_PATHS = new Set<string>([
   '/',              // window display (homepage)
   '/login',
-  '/members',       // legacy path; kept for backward links
-  '/welcome',       // first-time checklist container
+  '/members',       // legacy link, kept for backward compatibility
+  '/welcome',       // first-time checklist
   '/auth/callback', // OAuth return
-  '/onboard',       // any onboarding alias
+  '/onboard',       // onboarding alias
 ]);
 
 // “Interior rooms” (member space).
@@ -35,7 +35,7 @@ const PROTECTED_PREFIXES = [
   '/proposals',
 ];
 
-// Optional: public utility routes that should not trigger auth logic.
+// Public utility routes that should bypass auth logic.
 const PUBLIC_ALLOWLIST_PREFIXES = [
   '/api/health',
   '/status',
@@ -45,53 +45,54 @@ const PUBLIC_ALLOWLIST_PREFIXES = [
   '/favicon.ico',
   '/robots.txt',
 ];
-
-// -----------------------------------------------------------------------------
+// ----------------------------------------------------------------------------
 
 export function middleware(req: NextRequest) {
   const url = req.nextUrl;
   const path = url.pathname;
   const host = req.headers.get('host') || '';
 
-  // 0) Canonical domain hardening (prevents split identity + weird cookies).
-  if (host !== CANONICAL_HOST) {
+  // 0) Canonical host — but permit localhost and Vercel preview hosts.
+  const isLocal = host.startsWith('localhost:') || host.startsWith('127.0.0.1:');
+  const isVercelPreview = host.endsWith('.vercel.app');
+  if (!isLocal && !isVercelPreview && host !== CANONICAL_HOST) {
     const to = new URL(url.toString());
+    to.protocol = 'https:';
     to.host = CANONICAL_HOST;
-    to.protocol = 'https:'; // always upgrade
+    // 308 keeps method, good for OAuth callbacks too.
     return NextResponse.redirect(to, 308);
   }
 
-  // 1) Skip static + known public utility routes quickly.
+  // 1) Skip static & public utility quickly.
   if (
     path.startsWith('/_next/') ||
     path.startsWith('/public/') ||
-    path.match(/\.(png|jpg|jpeg|gif|svg|webp|ico|css|js|txt|json|map)$/i) ||
+    // skip any file with an extension (no capturing groups)
+    /\.[^/]+$/.test(path) ||
     PUBLIC_ALLOWLIST_PREFIXES.some((p) => path === p || path.startsWith(p))
   ) {
     return NextResponse.next();
   }
 
-  // 2) Heuristic session detection via Supabase cookies (GoTrue v2).
-  //    We do NOT decode tokens here; just detect presence.
+  // 2) Heuristic session detection via Supabase cookies (GoTrue v2 patterns).
   const hasSession =
     Boolean(req.cookies.get('sb-access-token')?.value) ||
     Boolean(req.cookies.get('sb-refresh-token')?.value) ||
     Boolean(req.cookies.get('supabase-auth-token')?.value);
 
-  // 3) If you're already inside (signed in) and touch any window-door,
-  //    we walk you straight to the interior home: /dashboard.
+  // 3) Already inside + touching window-door → go to interior home.
   if (hasSession && POST_AUTH_PATHS.has(path)) {
     const to = url.clone();
     to.pathname = '/dashboard';
-    to.search = ''; // drop noisy params on window routes
+    to.search = ''; // drop noisy params from window routes
     const res = NextResponse.redirect(to, 307);
-    // Interior should not be indexed.
     res.headers.set('X-Robots-Tag', 'noindex, nofollow, noarchive');
+    res.headers.set('Cache-Control', 'no-store');
+    res.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
     return res;
   }
 
-  // 4) If you're outside (no session) and try to enter interior rooms,
-  //    we send you to /login and preserve your intended destination (“next”).
+  // 4) Outside + trying to enter interior rooms → go to login with return path.
   const isProtected = PROTECTED_PREFIXES.some(
     (p) => path === p || path.startsWith(p + '/')
   );
@@ -99,41 +100,32 @@ export function middleware(req: NextRequest) {
   if (!hasSession && isProtected) {
     const to = url.clone();
     to.pathname = '/login';
-
-    // If we already came from /login → avoid redirect ping-pong.
-    const alreadyAtLogin = path === '/login';
-    if (!alreadyAtLogin) {
+    // avoid ping-pong: only add next if not already on /login
+    if (path !== '/login') {
       to.searchParams.set('next', path);
-      // Preserve query for true deep links (e.g., /projects/123?tab=votes)
-      if (url.search) to.searchParams.set('q', url.search);
+      if (url.search) to.searchParams.set('q', url.search); // preserve query
     }
-
     const res = NextResponse.redirect(to, 307);
-    // Login may be indexed, but not user-specific deep links.
     res.headers.set('X-Robots-Tag', 'noindex, nofollow');
+    res.headers.set('Cache-Control', 'no-store');
+    res.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
     return res;
   }
 
-  // 5) Robots hygiene: interior rooms should never be indexed,
-  //    even on direct hits or share links.
+  // 5) Robots hygiene for any direct interior hit (signed-in or not).
   const res = NextResponse.next();
   if (isProtected) {
     res.headers.set('X-Robots-Tag', 'noindex, nofollow, noarchive');
   }
-
-  // 6) Thought-provoking, enforced policies as headers (not just words):
-  //    - Dignity-First: members don’t get shoved back to the window.
-  //    - No-Wall-of-Text: keep payloads lean for slow networks.
-  //    - Consentful Deep Link: we return the exact room you wanted, no traps.
-  res.headers.set('Cache-Control', 'no-store'); // avoid stale auth UIs
+  res.headers.set('Cache-Control', 'no-store');
   res.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
-
   return res;
 }
 
-// Apply to “everything except assets”
+// Build-safe matcher: no capturing groups.
+// Skips Next static, any file with extension, icons, PWA assets, robots.
 export const config = {
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|manifest.json|sw.js|icons/|robots.txt|.*\\.(png|jpg|jpeg|gif|svg|webp|ico|css|js|txt|json|map)).*)',
+    '/((?!_next/|public/|icons/|manifest.json|sw.js|robots.txt|favicon.ico|api/health|status|.*\\..*).*)',
   ],
 };
