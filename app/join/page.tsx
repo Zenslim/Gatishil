@@ -1,19 +1,13 @@
-// app/join/page.tsx — Phone-first OTP with country picker + Email magic link + Google/Facebook OAuth
-// Remote-only (GitHub + Vercel + Supabase). No local steps.
-// ELI15: Pick country, type number → SMS code. Or switch to Email (magic link). Or Continue with Google/Facebook.
-// On success, we upsert a minimal record into public.people.
-
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import { supabase } from '@/lib/supabaseClient';
 
 type Step = 'collect' | 'verify' | 'done';
 type Channel = 'phone' | 'email';
 
 type Country = { code: string; dial: string; name: string; flag: string };
 
-// Small, sensible list (extend anytime)
 const COUNTRIES: Country[] = [
   { code: 'NP', dial: '977', name: 'Nepal', flag: '🇳🇵' },
   { code: 'IN', dial: '91',  name: 'India', flag: '🇮🇳' },
@@ -28,30 +22,24 @@ const COUNTRIES: Country[] = [
 ];
 
 export default function JoinPage() {
-  const supabase = useMemo(() => createClientComponentClient(), []);
   const [step, setStep] = useState<Step>('collect');
   const [channel, setChannel] = useState<Channel>('phone');
 
-  // Profile fields
   const [name, setName] = useState('');
   const [role, setRole] = useState('');
 
-  // Phone state
-  const [country, setCountry] = useState<Country>(COUNTRIES[0]); // default Nepal
-  const [localNumber, setLocalNumber] = useState('');            // user types number without country code
+  const [country, setCountry] = useState<Country>(COUNTRIES[0]);
+  const [localNumber, setLocalNumber] = useState('');
   const [otp, setOtp] = useState('');
 
-  // Email state
   const [email, setEmail] = useState('');
 
-  // UI
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
   const resetAlerts = () => { setMsg(null); setErr(null); };
 
-  // Compose E.164 from country + local number (digits only)
   const e164 = useMemo(() => {
     const digits = localNumber.replace(/\D/g, '');
     return digits ? `+${country.dial}${digits}` : '';
@@ -62,24 +50,23 @@ export default function JoinPage() {
     setLoading(true);
     try {
       if (!e164 || !/^\+\d{8,15}$/.test(e164)) {
-        setErr('Please enter a valid phone. Example: choose country, then type your local number.'); return;
+        setErr('Please enter a valid phone. Choose country, then type your number.'); return;
       }
       const { error } = await supabase.auth.signInWithOtp({
         phone: e164,
         options: { channel: 'sms', shouldCreateUser: true },
       });
       if (error) {
-        // If SMS not configured, guide to email
         if (String(error.message || '').toLowerCase().includes('sms')) {
           setChannel('email');
-          setMsg('SMS isn’t available. Switched to Email sign-in automatically.');
+          setMsg('SMS isn\'t available. Switched to Email automatically.');
           return;
         }
         setErr(error.message);
         return;
       }
       setStep('verify');
-      setMsg('We sent a 6-digit code by SMS. Enter it below.');
+      setMsg('We sent a 6-digit code by SMS.');
     } finally {
       setLoading(false);
     }
@@ -95,7 +82,6 @@ export default function JoinPage() {
         type: 'sms',
       });
       if (error) { setErr(error.message); return; }
-
       await writeMinimalMember(data.user);
       setStep('done');
       setMsg('🎉 Welcome! You can now enter.');
@@ -129,19 +115,14 @@ export default function JoinPage() {
     setLoading(true);
     try {
       const redirectTo = `${window.location.origin}/auth/callback?name=${encodeURIComponent(name)}&role=${encodeURIComponent(role)}`;
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider,
-        options: { redirectTo },
-      });
+      const { error } = await supabase.auth.signInWithOAuth({ provider, options: { redirectTo } });
       if (error) { setErr(error.message); }
-      // On success, the browser will redirect to provider → back to /auth/callback.
     } finally {
       setLoading(false);
     }
   }
 
   async function writeMinimalMember(user: any) {
-    // Insert a lightweight row into public.people
     const payload: any = {
       name: name || user?.user_metadata?.full_name || e164 || email || 'Member',
       role: role || null,
@@ -150,7 +131,6 @@ export default function JoinPage() {
       created_by: user?.id || null,
     };
     const { error } = await supabase.from('people').insert([payload]);
-    // Ignore duplicate constraint errors quietly (idempotent behavior)
     if (error && !String(error.message).toLowerCase().includes('duplicate')) {
       console.warn('people.insert', error.message);
     }
@@ -162,84 +142,74 @@ export default function JoinPage() {
     <div style={screen}>
       <div style={card}>
         <h1 style={title}>Join Gatishil</h1>
-        <p style={subtitle}>Fast entry for everyone. Phone (OTP) or Email magic link — or continue with Google/Facebook.</p>
+        <p style={subtitle}>Phone OTP with country picker — or Email magic link — or Google/Facebook.</p>
 
-        {/* Channel switcher */}
         <div style={tabs}>
           <button onClick={()=>setChannel('phone')} disabled={channel==='phone'} style={tab(channel==='phone')}>📱 Phone</button>
           <button onClick={()=>setChannel('email')} disabled={channel==='email'} style={tab(channel==='email')}>✉️ Email</button>
         </div>
 
-        {/* Basic info (optional but helpful) */}
         <label style={label}>Your Name</label>
-        <input style={input} value={name} onChange={e=>setName(e.target.value)} placeholder="e.g., Sushila Tamang" />
+        <input style={input} value={name} onChange={e=>setName(e.target.value)} placeholder="e.g., Mritunjaya Shrestha" />
 
         <label style={label}>How will you help? (Role)</label>
-        <input style={input} value={role} onChange={e=>setRole(e.target.value)} placeholder="e.g., Organizer, Farmer, Volunteer, Teacher" />
+        <input style={input} value={role} onChange={e=>setRole(e.target.value)} placeholder="e.g., Organizer, Farmer, Teacher" />
 
-        {/* PHONE FLOW */}
-        {channel === 'phone' && step === 'collect' && (
-          <form onSubmit={(e)=>{e.preventDefault(); sendPhoneOtp();}}>
-            <label style={label}>Phone</label>
-            <div style={{display:'flex', gap:8}}>
-              <select
-                value={country.code}
-                onChange={(e)=>{
-                  const next = COUNTRIES.find(c=>c.code===e.target.value)!;
-                  setCountry(next);
-                }}
-                style={{...input, maxWidth:180}}
-              >
-                {COUNTRIES.map(c=>(
-                  <option key={c.code} value={c.code}>
-                    {c.flag} {c.name} (+{c.dial})
-                  </option>
-                ))}
-              </select>
-              <input
-                style={{...input, flex:1}}
-                value={localNumber}
-                onChange={e => setLocalNumber(e.target.value)}
-                placeholder="98XXXXXXXX"
-                inputMode="numeric"
-              />
-            </div>
-            <div style={{fontSize:12, opacity:.7, marginTop:6}}>We will send an OTP to <code>{e164 || `+${country.dial}…`}</code></div>
-            <button type="submit" disabled={loading} style={primaryBtn}>{loading?'Sending…':'Send OTP'}</button>
-          </form>
+        {channel === 'phone' && (
+          <div>
+            {step === 'collect' && (
+              <form onSubmit={(e)=>{e.preventDefault(); sendPhoneOtp();}}>
+                <label style={label}>Phone</label>
+                <div style={{display:'flex', gap:8}}>
+                  <select
+                    value={country.code}
+                    onChange={(e)=>{
+                      const next = COUNTRIES.find(c=>c.code===e.target.value)!;
+                      setCountry(next);
+                    }}
+                    style={{...input, maxWidth:200}}
+                  >
+                    {COUNTRIES.map(c => (
+                      <option key={c.code} value={c.code}>{c.flag} {c.name} (+{c.dial})</option>
+                    ))}
+                  </select>
+                  <input
+                    style={{...input, flex:1}}
+                    value={localNumber}
+                    onChange={e=>setLocalNumber(e.target.value)}
+                    placeholder="98XXXXXXXX"
+                    inputMode="numeric"
+                  />
+                </div>
+                <div style={{fontSize:12, opacity:.7, marginTop:6}}>OTP will go to <code>{e164 || `+${country.dial}…`}</code></div>
+                <button type="submit" disabled={loading} style={primaryBtn}>{loading?'Sending…':'Send OTP'}</button>
+              </form>
+            )}
+
+            {step === 'verify' && (
+              <form onSubmit={(e)=>{e.preventDefault(); verifyPhoneOtp();}}>
+                <label style={label}>Enter 6-digit code</label>
+                <input style={input} value={otp} onChange={e=>setOtp(e.target.value)} placeholder="••••••" inputMode="numeric" />
+                <button type="submit" disabled={loading} style={primaryBtn}>{loading?'Verifying…':'Verify & Enter'}</button>
+              </form>
+            )}
+          </div>
         )}
 
-        {channel === 'phone' && step === 'verify' && (
-          <form onSubmit={(e)=>{e.preventDefault(); verifyPhoneOtp();}}>
-            <label style={label}>Enter 6-digit code</label>
-            <input style={input} value={otp} onChange={e=>setOtp(e.target.value)} placeholder="••••••" inputMode="numeric" />
-            <button type="submit" disabled={loading} style={primaryBtn}>{loading?'Verifying…':'Verify & Enter'}</button>
-          </form>
-        )}
-
-        {/* EMAIL FLOW */}
         {channel === 'email' && step !== 'done' && (
           <div>
             <label style={label}>Email</label>
             <input style={input} value={email} onChange={e=>setEmail(e.target.value)} placeholder="you@example.com" />
-            <button onClick={sendEmailMagicLink} disabled={loading} style={primaryBtn}>
-              {loading ? 'Sending…' : 'Send Magic Link'}
-            </button>
+            <button onClick={sendEmailMagicLink} disabled={loading} style={primaryBtn}>{loading?'Sending…':'Send Magic Link'}</button>
 
             <div style={{textAlign:'center', margin:'10px 0', opacity:.7}}>or</div>
-
             <div style={{display:'grid', gap:8}}>
-              <button onClick={()=>signInWithProvider('google')} disabled={loading} style={oauthBtn}>
-                Continue with Google
-              </button>
-              <button onClick={()=>signInWithProvider('facebook')} disabled={loading} style={oauthBtn}>
-                Continue with Facebook
-              </button>
+              <button onClick={()=>signInWithProvider('google')} disabled={loading} style={oauthBtn}>Continue with Google</button>
+              <button onClick={()=>signInWithProvider('facebook')} disabled={loading} style={oauthBtn}>Continue with Facebook</button>
             </div>
           </div>
         )}
 
-        {/* DONE */}
         {step === 'done' && (
           <div>
             {msg && <div style={{margin:'12px 0'}}>{msg}</div>}
@@ -247,7 +217,6 @@ export default function JoinPage() {
           </div>
         )}
 
-        {/* Alerts */}
         {msg && step!=='done' && <div style={{marginTop:10, fontSize:14, opacity:.9}}>{msg}</div>}
         {err && <div style={{marginTop:10, fontSize:14, color:'#ffb4b4'}}>Error: {err}</div>}
       </div>
@@ -255,7 +224,6 @@ export default function JoinPage() {
   );
 }
 
-/** Styles */
 const screen: React.CSSProperties = { minHeight:'100dvh', display:'grid', placeItems:'center', background:'#0b1020', color:'#e6f0ff', padding:'24px' };
 const card: React.CSSProperties = { width:'100%', maxWidth:520, background:'rgba(255,255,255,0.03)', border:'1px solid rgba(255,255,255,0.08)', borderRadius:16, padding:20, boxShadow:'0 10px 30px rgba(0,0,0,0.4)' };
 const title: React.CSSProperties = { fontSize:28, fontWeight:800, marginBottom:6 };

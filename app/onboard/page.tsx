@@ -1,11 +1,7 @@
-// app/onboard/page.tsx — Progressive Profile (post-auth)
-// Remote-only (GitHub + Vercel + Supabase). No local steps.
-// Collects: First Name, Family Name, Phone (read-only if present), Location, Occupation, Skills.
-// Writes into `public.people` by matching the signed-in user (created_by = auth.uid).
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import { useEffect, useState } from 'react';
+import { supabase } from '@/lib/supabaseClient';
 
 type Option = { value: string; label: string };
 
@@ -31,11 +27,9 @@ const SKILLS: Option[] = [
 ];
 
 export default function OnboardPage() {
-  const supabase = useMemo(() => createClientComponentClient(), []);
   const [loading, setLoading] = useState(true);
   const [userId, setUserId] = useState<string | null>(null);
 
-  // form
   const [firstName, setFirstName] = useState('');
   const [familyName, setFamilyName] = useState('');
   const [phone, setPhone] = useState<string | null>(null);
@@ -51,7 +45,6 @@ export default function OnboardPage() {
       if (!user) { setErr('Please sign in first.'); setLoading(false); return; }
       setUserId(user.id || null);
 
-      // Try to read an existing people row for this user
       const { data, error } = await supabase
         .from('people')
         .select('*')
@@ -64,7 +57,6 @@ export default function OnboardPage() {
       }
 
       if (data) {
-        // prefill
         const fullName = (data.name || '').trim();
         if (fullName && !firstName && !familyName) {
           const parts = fullName.split(/\s+/);
@@ -84,13 +76,13 @@ export default function OnboardPage() {
           setSkills(mapped);
         }
       } else {
-        // no row yet — we can attempt to read phone/email from auth metadata
-        const phoneMeta = (user.phone ?? user.user_metadata?.phone) || null;
+        const { data: udata } = await supabase.auth.getUser();
+        const phoneMeta = (udata?.user?.phone ?? udata?.user?.user_metadata?.phone) || null;
         setPhone(phoneMeta);
       }
       setLoading(false);
     })();
-  }, [supabase]); // run once
+  }, []);
 
   const handleSave = async () => {
     setMsg(null); setErr(null);
@@ -110,7 +102,6 @@ export default function OnboardPage() {
 
     setLoading(true);
     try {
-      // Upsert semantics: try update by created_by; if none, insert
       const { data: existing } = await supabase
         .from('people')
         .select('id')
@@ -125,7 +116,7 @@ export default function OnboardPage() {
         const { error: ierr } = await supabase.from('people').insert([payload]);
         if (ierr) { setErr(ierr.message); return; }
       }
-      setMsg('Saved. Thank you for completing your profile!');
+      setMsg('Saved. Thank you!');
     } finally {
       setLoading(false);
     }
@@ -142,7 +133,7 @@ export default function OnboardPage() {
   return screenWrap(
     <div style={card}>
       <h1 style={h1}>Complete Your Profile</h1>
-      <p style={p}>This helps match you with local work, training, and community tasks.</p>
+      <p style={p}>Add your details to unlock matching with work, training, and tasks.</p>
 
       <label style={label}>Your Personal Name (First Name)</label>
       <input style={input} value={firstName} onChange={e=>setFirstName(e.target.value)} placeholder="e.g., Nabin" />
@@ -150,7 +141,7 @@ export default function OnboardPage() {
       <label style={label}>Your Family Name (Surname)</label>
       <input style={input} value={familyName} onChange={e=>setFamilyName(e.target.value)} placeholder="e.g., Pradhan" />
 
-      <label style={label}>Phone (from sign-in)</label>
+      <label style={label}>Phone</label>
       <input style={{...input, opacity:.75}} value={phone ?? ''} readOnly placeholder="+97798XXXXXXXX" />
 
       <label style={label}>Location</label>
@@ -172,7 +163,6 @@ export default function OnboardPage() {
   );
 }
 
-/** UI helpers */
 function screenWrap(children: React.ReactNode) {
   return (
     <div style={{minHeight:'100dvh', display:'grid', placeItems:'center', background:'#0b1020', color:'#e6f0ff', padding:'24px'}}>
@@ -180,15 +170,15 @@ function screenWrap(children: React.ReactNode) {
     </div>
   );
 }
+
 const card: React.CSSProperties = { width:'100%', maxWidth:560, background:'rgba(255,255,255,0.03)', border:'1px solid rgba(255,255,255,0.08)', borderRadius:16, padding:20, boxShadow:'0 10px 30px rgba(0,0,0,0.4)' };
 const h1: React.CSSProperties = { fontSize:28, fontWeight:800, marginBottom:6 };
 const p: React.CSSProperties = { opacity:.85, marginBottom:16 };
 const label: React.CSSProperties = { display:'block', margin:'12px 4px 6px', opacity:.8, fontSize:13 };
 const input: React.CSSProperties = { width:'100%', padding:'10px 12px', borderRadius:10, border:'1px solid rgba(255,255,255,0.12)', background:'rgba(255,255,255,0.04)', color:'#e6f0ff' };
 const primaryBtn: React.CSSProperties = { marginTop:12, width:'100%', padding:'12px', borderRadius:12, background:'#16a34a', color:'white', border:'none', fontWeight:800 };
-const linkBtn: React.CSSProperties = { display:'inline-block', padding:'10px 14px', borderRadius:10, border:'1px solid rgba(255,255,255,0.1)', textDecoration:'none', color:'#e6f0ff' };
+const linkBtn: React.CSSProperties = { display:'inline-block', padding:'10px 14px', border:'1px solid rgba(255,255,255,0.1)', textDecoration:'none', color:'#e6f0ff' };
 
-/** Tiny select components (no external UI libs) */
 function SelectOne({ value, onChange, options, placeholder }:{
   value: Option | null;
   onChange: (o: Option | null)=>void;
