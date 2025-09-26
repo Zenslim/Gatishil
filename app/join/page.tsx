@@ -1,95 +1,102 @@
-// app/join/page.tsx — Phone‑first OTP with email fallback (Supabase Auth)
+// app/join/page.tsx — Phone-first OTP with country picker + Email magic link + Google/Facebook OAuth
+// Remote-only (GitHub + Vercel + Supabase). No local steps.
+// ELI15: Pick country, type number → SMS code. Or switch to Email (magic link). Or Continue with Google/Facebook.
+// On success, we upsert a minimal record into public.people.
+
 'use client';
 
-import { useEffect, useState } from 'react';
-import { supabaseBrowser } from '@/lib/supabaseBrowser';
+import { useEffect, useMemo, useState } from 'react';
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 
 type Step = 'collect' | 'verify' | 'done';
+type Channel = 'phone' | 'email';
+
+type Country = { code: string; dial: string; name: string; flag: string };
+
+// Small, sensible list (extend anytime)
+const COUNTRIES: Country[] = [
+  { code: 'NP', dial: '977', name: 'Nepal', flag: '🇳🇵' },
+  { code: 'IN', dial: '91',  name: 'India', flag: '🇮🇳' },
+  { code: 'BD', dial: '880', name: 'Bangladesh', flag: '🇧🇩' },
+  { code: 'BT', dial: '975', name: 'Bhutan', flag: '🇧🇹' },
+  { code: 'PK', dial: '92',  name: 'Pakistan', flag: '🇵🇰' },
+  { code: 'LK', dial: '94',  name: 'Sri Lanka', flag: '🇱🇰' },
+  { code: 'CN', dial: '86',  name: 'China', flag: '🇨🇳' },
+  { code: 'US', dial: '1',   name: 'United States', flag: '🇺🇸' },
+  { code: 'GB', dial: '44',  name: 'United Kingdom', flag: '🇬🇧' },
+  { code: 'AU', dial: '61',  name: 'Australia', flag: '🇦🇺' },
+];
 
 export default function JoinPage() {
+  const supabase = useMemo(() => createClientComponentClient(), []);
   const [step, setStep] = useState<Step>('collect');
+  const [channel, setChannel] = useState<Channel>('phone');
+
+  // Profile fields
   const [name, setName] = useState('');
-  const [role, setRole] = useState(''); // occupation / how you help
-  const [phone, setPhone] = useState(''); // e.g., +97798XXXXXXXX
-  const [email, setEmail] = useState(''); // fallback
-  const [channel, setChannel] = useState<'phone'|'email'>('phone');
-  const [code, setCode] = useState('');
+  const [role, setRole] = useState('');
+
+  // Phone state
+  const [country, setCountry] = useState<Country>(COUNTRIES[0]); // default Nepal
+  const [localNumber, setLocalNumber] = useState('');            // user types number without country code
+  const [otp, setOtp] = useState('');
+
+  // Email state
+  const [email, setEmail] = useState('');
+
+  // UI
+  const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
 
   const resetAlerts = () => { setMsg(null); setErr(null); };
 
-  async function handleSend() {
+  // Compose E.164 from country + local number (digits only)
+  const e164 = useMemo(() => {
+    const digits = localNumber.replace(/\D/g, '');
+    return digits ? `+${country.dial}${digits}` : '';
+  }, [country, localNumber]);
+
+  async function sendPhoneOtp() {
     resetAlerts();
     setLoading(true);
     try {
-      if (channel === 'phone') {
-        if (!/^\+\d{10,15}$/.test(phone.trim())) {
-          setErr('Please enter a valid phone like +97798XXXXXXXX'); return;
-        }
-        const { error } = await supabaseBrowser.auth.signInWithOtp({
-          phone: phone.trim(),
-          options: { channel: 'sms', shouldCreateUser: true },
-        });
-        if (error) {
-          // If SMS not configured, guide user to email fallback
-          if (String(error.message || '').toLowerCase().includes('sms')) {
-            setChannel('email');
-            setMsg('SMS not available. Switched to Email sign-in automatically.');
-          } else {
-            setErr(error.message);
-            return;
-          }
-        } else {
-          setStep('verify');
-          setMsg('We sent a 6‑digit code by SMS. Enter it below.');
-        }
+      if (!e164 || !/^\+\d{8,15}$/.test(e164)) {
+        setErr('Please enter a valid phone. Example: choose country, then type your local number.'); return;
       }
-
-      if (channel === 'email') {
-        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
-          setErr('Enter a valid email address'); return;
+      const { error } = await supabase.auth.signInWithOtp({
+        phone: e164,
+        options: { channel: 'sms', shouldCreateUser: true },
+      });
+      if (error) {
+        // If SMS not configured, guide to email
+        if (String(error.message || '').toLowerCase().includes('sms')) {
+          setChannel('email');
+          setMsg('SMS isn’t available. Switched to Email sign-in automatically.');
+          return;
         }
-        const redirectTo = `${window.location.origin}/auth/callback?name=${encodeURIComponent(name)}&role=${encodeURIComponent(role)}`;
-        const { error } = await supabaseBrowser.auth.signInWithOtp({
-          email: email.trim(),
-          options: { shouldCreateUser: true, emailRedirectTo: redirectTo },
-        });
-        if (error) { setErr(error.message); return; }
-        setStep('done');
-        setMsg('Check your email for the sign‑in link.');
+        setErr(error.message);
+        return;
       }
+      setStep('verify');
+      setMsg('We sent a 6-digit code by SMS. Enter it below.');
     } finally {
       setLoading(false);
     }
   }
 
-  async function handleVerifyOtp() {
+  async function verifyPhoneOtp() {
     resetAlerts();
     setLoading(true);
     try {
-      const { data, error } = await supabaseBrowser.auth.verifyOtp({
-        phone: phone.trim(),
-        token: code.trim(),
+      const { data, error } = await supabase.auth.verifyOtp({
+        phone: e164,
+        token: otp.trim(),
         type: 'sms',
       });
       if (error) { setErr(error.message); return; }
-      // Signed in — write to people table (idempotent on phone or email)
-      const user = data.user;
-      const payload: any = {
-        name: name || user?.user_metadata?.full_name || phone || email,
-        role: role || null,
-        phone: phone || null,
-        email: user?.email || null,
-        created_by: user?.id || null,
-      };
-      // Upsert by unique email/phone using on_conflict via RPC is not available on client;
-      // we rely on unique constraints + ignore duplicate errors.
-      const { error: insertErr } = await supabaseBrowser.from('people').insert([payload]);
-      if (insertErr && !String(insertErr.message).toLowerCase().includes('duplicate')) {
-        console.warn('people.insert', insertErr.message);
-      }
+
+      await writeMinimalMember(data.user);
       setStep('done');
       setMsg('🎉 Welcome! You can now enter.');
     } finally {
@@ -97,74 +104,168 @@ export default function JoinPage() {
     }
   }
 
+  async function sendEmailMagicLink() {
+    resetAlerts();
+    setLoading(true);
+    try {
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+        setErr('Enter a valid email address'); return;
+      }
+      const redirectTo = `${window.location.origin}/auth/callback?name=${encodeURIComponent(name)}&role=${encodeURIComponent(role)}`;
+      const { error } = await supabase.auth.signInWithOtp({
+        email: email.trim(),
+        options: { shouldCreateUser: true, emailRedirectTo: redirectTo },
+      });
+      if (error) { setErr(error.message); return; }
+      setStep('done');
+      setMsg('Check your email for the magic link.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function signInWithProvider(provider: 'google' | 'facebook') {
+    resetAlerts();
+    setLoading(true);
+    try {
+      const redirectTo = `${window.location.origin}/auth/callback?name=${encodeURIComponent(name)}&role=${encodeURIComponent(role)}`;
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider,
+        options: { redirectTo },
+      });
+      if (error) { setErr(error.message); }
+      // On success, the browser will redirect to provider → back to /auth/callback.
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function writeMinimalMember(user: any) {
+    // Insert a lightweight row into public.people
+    const payload: any = {
+      name: name || user?.user_metadata?.full_name || e164 || email || 'Member',
+      role: role || null,
+      phone: e164 || null,
+      email: user?.email || (email || null),
+      created_by: user?.id || null,
+    };
+    const { error } = await supabase.from('people').insert([payload]);
+    // Ignore duplicate constraint errors quietly (idempotent behavior)
+    if (error && !String(error.message).toLowerCase().includes('duplicate')) {
+      console.warn('people.insert', error.message);
+    }
+  }
+
   useEffect(() => { resetAlerts(); }, [channel]);
 
   return (
-    <div style={{minHeight:'100dvh', display:'grid', placeItems:'center', background:'#0b1020', color:'#e6f0ff', padding:'24px'}}>
-      <div style={{width:'100%', maxWidth:520, background:'rgba(255,255,255,0.03)', border:'1px solid rgba(255,255,255,0.08)', borderRadius:16, padding:20, boxShadow:'0 10px 30px rgba(0,0,0,0.4)'}}>
-        <h1 style={{fontSize:28, fontWeight:800, marginBottom:6}}>Join Gatishil</h1>
-        <p style={{opacity:.8, marginBottom:16}}>Phone‑first (SMS OTP). Email is available as fallback.</p>
+    <div style={screen}>
+      <div style={card}>
+        <h1 style={title}>Join Gatishil</h1>
+        <p style={subtitle}>Fast entry for everyone. Phone (OTP) or Email magic link — or continue with Google/Facebook.</p>
 
         {/* Channel switcher */}
-        <div style={{display:'flex', gap:8, marginBottom:16}}>
-          <button onClick={()=>setChannel('phone')} disabled={channel==='phone'} style={tabStyle(channel==='phone')}>📱 Phone</button>
-          <button onClick={()=>setChannel('email')} disabled={channel==='email'} style={tabStyle(channel==='email')}>✉️ Email</button>
+        <div style={tabs}>
+          <button onClick={()=>setChannel('phone')} disabled={channel==='phone'} style={tab(channel==='phone')}>📱 Phone</button>
+          <button onClick={()=>setChannel('email')} disabled={channel==='email'} style={tab(channel==='email')}>✉️ Email</button>
         </div>
 
-        {/* Step: collect */}
-        {step==='collect' && (
-          <form onSubmit={(e)=>{e.preventDefault(); handleSend();}}>
-            <label style={labelStyle}>Your Name</label>
-            <input style={inputStyle} value={name} onChange={(e)=>setName(e.target.value)} placeholder="e.g., Mritunjaya Shrestha" required />
+        {/* Basic info (optional but helpful) */}
+        <label style={label}>Your Name</label>
+        <input style={input} value={name} onChange={e=>setName(e.target.value)} placeholder="e.g., Sushila Tamang" />
 
-            <label style={labelStyle}>How will you help? (Role)</label>
-            <input style={inputStyle} value={role} onChange={(e)=>setRole(e.target.value)} placeholder="e.g., Organizer, Farmer, Teacher" />
+        <label style={label}>How will you help? (Role)</label>
+        <input style={input} value={role} onChange={e=>setRole(e.target.value)} placeholder="e.g., Organizer, Farmer, Volunteer, Teacher" />
 
-            {channel==='phone' ? (
-              <>
-                <label style={labelStyle}>Phone (with country code)</label>
-                <input style={inputStyle} value={phone} onChange={(e)=>setPhone(e.target.value)} placeholder="+97798XXXXXXXX" />
-              </>
-            ) : (
-              <>
-                <label style={labelStyle}>Email</label>
-                <input style={inputStyle} value={email} onChange={(e)=>setEmail(e.target.value)} placeholder="you@example.com" />
-              </>
-            )}
-
-            <button type="submit" disabled={loading} style={primaryBtnStyle}>{loading?'Sending…':'Send code/link'}</button>
+        {/* PHONE FLOW */}
+        {channel === 'phone' && step === 'collect' && (
+          <form onSubmit={(e)=>{e.preventDefault(); sendPhoneOtp();}}>
+            <label style={label}>Phone</label>
+            <div style={{display:'flex', gap:8}}>
+              <select
+                value={country.code}
+                onChange={(e)=>{
+                  const next = COUNTRIES.find(c=>c.code===e.target.value)!;
+                  setCountry(next);
+                }}
+                style={{...input, maxWidth:180}}
+              >
+                {COUNTRIES.map(c=>(
+                  <option key={c.code} value={c.code}>
+                    {c.flag} {c.name} (+{c.dial})
+                  </option>
+                ))}
+              </select>
+              <input
+                style={{...input, flex:1}}
+                value={localNumber}
+                onChange={e => setLocalNumber(e.target.value)}
+                placeholder="98XXXXXXXX"
+                inputMode="numeric"
+              />
+            </div>
+            <div style={{fontSize:12, opacity:.7, marginTop:6}}>We will send an OTP to <code>{e164 || `+${country.dial}…`}</code></div>
+            <button type="submit" disabled={loading} style={primaryBtn}>{loading?'Sending…':'Send OTP'}</button>
           </form>
         )}
 
-        {/* Step: verify (phone) */}
-        {step==='verify' && channel==='phone' && (
-          <form onSubmit={(e)=>{e.preventDefault(); handleVerifyOtp();}}>
-            <label style={labelStyle}>Enter 6‑digit code</label>
-            <input style={inputStyle} value={code} onChange={(e)=>setCode(e.target.value)} placeholder="••••••" />
-            <button type="submit" disabled={loading} style={primaryBtnStyle}>{loading?'Verifying…':'Verify & Enter'}</button>
+        {channel === 'phone' && step === 'verify' && (
+          <form onSubmit={(e)=>{e.preventDefault(); verifyPhoneOtp();}}>
+            <label style={label}>Enter 6-digit code</label>
+            <input style={input} value={otp} onChange={e=>setOtp(e.target.value)} placeholder="••••••" inputMode="numeric" />
+            <button type="submit" disabled={loading} style={primaryBtn}>{loading?'Verifying…':'Verify & Enter'}</button>
           </form>
         )}
 
-        {/* Done */}
-        {step==='done' && (
+        {/* EMAIL FLOW */}
+        {channel === 'email' && step !== 'done' && (
           <div>
-            <div style={{margin:'12px 0'}}>{msg}</div>
-            <a href="/members" style={{display:'inline-block', textDecoration:'none', padding:'10px 14px', borderRadius:10, border:'1px solid rgba(255,255,255,0.1)'}}>🚀 Go to Members</a>
+            <label style={label}>Email</label>
+            <input style={input} value={email} onChange={e=>setEmail(e.target.value)} placeholder="you@example.com" />
+            <button onClick={sendEmailMagicLink} disabled={loading} style={primaryBtn}>
+              {loading ? 'Sending…' : 'Send Magic Link'}
+            </button>
+
+            <div style={{textAlign:'center', margin:'10px 0', opacity:.7}}>or</div>
+
+            <div style={{display:'grid', gap:8}}>
+              <button onClick={()=>signInWithProvider('google')} disabled={loading} style={oauthBtn}>
+                Continue with Google
+              </button>
+              <button onClick={()=>signInWithProvider('facebook')} disabled={loading} style={oauthBtn}>
+                Continue with Facebook
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* DONE */}
+        {step === 'done' && (
+          <div>
+            {msg && <div style={{margin:'12px 0'}}>{msg}</div>}
+            <a href="/members" style={linkBtn}>🚀 Go to Members</a>
           </div>
         )}
 
         {/* Alerts */}
-        {msg && <div style={{marginTop:10, fontSize:14, opacity:.9}}>{msg}</div>}
+        {msg && step!=='done' && <div style={{marginTop:10, fontSize:14, opacity:.9}}>{msg}</div>}
         {err && <div style={{marginTop:10, fontSize:14, color:'#ffb4b4'}}>Error: {err}</div>}
       </div>
     </div>
   );
 }
 
-const labelStyle: React.CSSProperties = { display:'block', margin:'12px 4px 6px', opacity:.8, fontSize:13 };
-const inputStyle: React.CSSProperties = { width:'100%', padding:'10px 12px', borderRadius:10, border:'1px solid rgba(255,255,255,0.12)', background:'rgba(255,255,255,0.04)', color:'#e6f0ff' };
-const primaryBtnStyle: React.CSSProperties = { marginTop:12, width:'100%', padding:'12px', borderRadius:12, background:'#2563eb', color:'white', border:'none', fontWeight:700 };
-function tabStyle(active: boolean): React.CSSProperties {
-  return { flex:1, padding:'8px', borderRadius:10, border:'1px solid rgba(255,255,255,0.12)',
-    background: active ? 'rgba(37,99,235,0.2)' : 'transparent', color:'#e6f0ff' };
+/** Styles */
+const screen: React.CSSProperties = { minHeight:'100dvh', display:'grid', placeItems:'center', background:'#0b1020', color:'#e6f0ff', padding:'24px' };
+const card: React.CSSProperties = { width:'100%', maxWidth:520, background:'rgba(255,255,255,0.03)', border:'1px solid rgba(255,255,255,0.08)', borderRadius:16, padding:20, boxShadow:'0 10px 30px rgba(0,0,0,0.4)' };
+const title: React.CSSProperties = { fontSize:28, fontWeight:800, marginBottom:6 };
+const subtitle: React.CSSProperties = { opacity:.8, marginBottom:16 };
+const tabs: React.CSSProperties = { display:'flex', gap:8, marginBottom:16 };
+const label: React.CSSProperties = { display:'block', margin:'12px 4px 6px', opacity:.8, fontSize:13 };
+const input: React.CSSProperties = { width:'100%', padding:'10px 12px', borderRadius:10, border:'1px solid rgba(255,255,255,0.12)', background:'rgba(255,255,255,0.04)', color:'#e6f0ff' };
+const primaryBtn: React.CSSProperties = { marginTop:12, width:'100%', padding:'12px', borderRadius:12, background:'#2563eb', color:'white', border:'none', fontWeight:800 };
+const oauthBtn: React.CSSProperties = { width:'100%', padding:'11px 12px', borderRadius:12, background:'rgba(255,255,255,0.06)', color:'#e6f0ff', border:'1px solid rgba(255,255,255,0.12)', fontWeight:700, textAlign:'center' };
+const linkBtn: React.CSSProperties = { display:'inline-block', textDecoration:'none', padding:'10px 14px', borderRadius:10, border:'1px solid rgba(255,255,255,0.1)', color:'#e6f0ff' };
+function tab(active: boolean): React.CSSProperties {
+  return { flex:1, padding:'8px', borderRadius:10, border:'1px solid rgba(255,255,255,0.12)', background: active ? 'rgba(37,99,235,0.2)' : 'transparent', color:'#e6f0ff' };
 }
