@@ -1,19 +1,18 @@
 // app/join/page.tsx
-// Gatishil — First-time Security Ritual (Client-only, no extra packages)
-// ELI15: You just signed in. Set a password once so your device can remember it
-// (biometrics will autofill next time). Then go straight to /dashboard.
-// If already set, we auto-continue to /dashboard. If not signed in, go to /login.
+// Gatishil — First-time Security Ritual (Client-only, loop-safe, no Suspense needs)
+// ELI15: After OTP/provider, you land here once, set a password so your device
+// can remember it (biometrics will autofill later), then go straight to /dashboard.
+// If password already set, we auto-send you to /dashboard. If not signed in → /login.
 
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabaseClient';
 
 export default function JoinSecurityPage() {
   const router = useRouter();
-  const qs = useSearchParams();
   const [loading, setLoading] = useState(true);
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
@@ -22,26 +21,24 @@ export default function JoinSecurityPage() {
   useEffect(() => {
     let mounted = true;
     (async () => {
-      // 1) Require a session
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
         router.replace('/login');
         return;
       }
-      // 2) If already completed ritual → inside
       const { data: profile } = await supabase
         .from('profiles')
         .select('password_set')
         .eq('id', session.user.id)
         .maybeSingle();
 
-      if (mounted) {
-        if (profile?.password_set) {
-          router.replace('/dashboard');
-          return;
-        }
-        setLoading(false);
+      if (!mounted) return;
+
+      if (profile?.password_set) {
+        router.replace('/dashboard');
+        return;
       }
+      setLoading(false);
     })();
     return () => { mounted = false; };
   }, [router]);
@@ -61,7 +58,6 @@ export default function JoinSecurityPage() {
 
     setLoading(true);
     try {
-      // Update the signed-in user's password (device will offer to save it)
       const { error: upErr } = await supabase.auth.updateUser({ password });
       if (upErr) {
         setErr(upErr.message || 'Could not set password.');
@@ -69,7 +65,6 @@ export default function JoinSecurityPage() {
         return;
       }
 
-      // Mark ritual done so future visits skip /join
       const { data: { session } } = await supabase.auth.getSession();
       if (session?.user?.id) {
         await supabase
@@ -77,7 +72,6 @@ export default function JoinSecurityPage() {
           .upsert({ id: session.user.id, password_set: true }, { onConflict: 'id' });
       }
 
-      // Go inside
       router.replace('/dashboard');
     } catch (e: any) {
       setErr(e?.message || 'Something went wrong.');
@@ -92,14 +86,6 @@ export default function JoinSecurityPage() {
       </main>
     );
   }
-
-  const urlError = qs.get('error');
-  const hint =
-    urlError === 'weak-or-mismatch'
-      ? 'Please choose a stronger password and make sure both fields match.'
-      : urlError === 'update-failed'
-      ? 'We could not set your password. Try again.'
-      : null;
 
   return (
     <main className="min-h-screen bg-[#070b14] text-white">
@@ -119,15 +105,10 @@ export default function JoinSecurityPage() {
         <div className="rounded-3xl border border-white/10 bg-white/5 p-6 md:p-8">
           <h2 className="text-2xl md:text-3xl font-semibold">Set your key once</h2>
           <p className="text-white/70 mt-2 text-sm">
-            Save a password your device can remember. Next time, your phone or laptop
-            can unlock it with biometrics—no OTP gatekeeper.
+            Save a password your device can remember. Next time, biometrics can unlock it—no OTP gatekeeper.
           </p>
 
-          {(hint || err) && (
-            <div className="mt-4 text-sm text-red-300">
-              {hint || err}
-            </div>
-          )}
+          {err && <div className="mt-4 text-sm text-red-300">{err}</div>}
 
           <form onSubmit={onSubmit} className="mt-6 space-y-3">
             <div>
