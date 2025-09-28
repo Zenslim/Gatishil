@@ -80,10 +80,12 @@ function Starfield() {
     </motion.div>
   );
 }
-
-function DaoTooltip() {
+function DaoWord() {
   return (
-    <span className="relative inline-flex items-center group cursor-help focus:outline-none">
+    <a
+      href="/faq#dao"
+      className="relative inline-flex items-center group cursor-help focus:outline-none"
+    >
       <span
         className="underline decoration-dotted underline-offset-2"
         aria-describedby="dao-tooltip"
@@ -91,24 +93,24 @@ function DaoTooltip() {
       >
         DAO
       </span>
-      {/* Tooltip */}
       <span
         id="dao-tooltip"
         role="tooltip"
         className="pointer-events-none absolute left-0 top-[125%] w-[280px] sm:w-[320px] rounded-xl border border-white/15 bg-zinc-900/95 px-3 py-3 text-[11px] text-slate-200 shadow-2xl opacity-0 translate-y-1 group-hover:opacity-100 group-hover:translate-y-0 group-focus:opacity-100 group-focus:translate-y-0 transition"
       >
-        <span className="block text-[11px] font-semibold text-amber-300">DAO = Decentralized Autonomous Organization</span>
+        <span className="block text-[11px] font-semibold text-amber-300">
+          DAO = Decentralized Autonomous Organization
+        </span>
         <span className="block mt-1">Decentralized → Power is shared, no one owns the throne.</span>
         <span className="block">Autonomous → Rules enforce themselves, no backdoor cheating.</span>
         <span className="block">Organization → A living system, where each member’s voice adds to the whole.</span>
-        <a href="/faq#dao" className="block mt-2 text-[11px] font-semibold text-amber-300 underline underline-offset-4">
-          What is DAO? → Read the ELI15 FAQ
-        </a>
+        <span className="block mt-2 text-amber-300 underline underline-offset-4">
+          Click to read more →
+        </span>
       </span>
-    </span>
+    </a>
   );
 }
-
 export default function HomePage() {
   const [open, setOpen] = useState(false);
 
@@ -151,7 +153,7 @@ export default function HomePage() {
                 Gatishil Nepal
               </p>
               <p className="text-[11px] sm:text-[12px] text-slate-300/80">
-                <DaoTooltip /> · Guthi · Movement
+                <DaoWord /> · Guthi · Movement
               </p>
             </div>
           </a>
@@ -243,7 +245,7 @@ export default function HomePage() {
             </motion.span>
 
             <motion.h1 className="text-[28px] sm:text-4xl md:text-5xl font-extrabold leading-tight mt-3" {...fadeUp(0.05)}>
-              The <span className="bg-clip-text text-transparent bg-gradient-to-r from-amber-300 via-orange-400 to-rose-400">DAO Party</span> of the Powerless.
+              The <span className="bg-clip-text text-transparent bg-gradient-to-r from-amber-300 via-orange-400 to-rose-400"><DaoWord /> Party</span> of the Powerless.
             </motion.h1>
 
             <motion.p className="mt-4 text-slate-300/90 text-base sm:text-lg max-w-2xl" {...fadeUp(0.1)}>
