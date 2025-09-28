@@ -220,11 +220,7 @@ export default function HomePage() {
             <div className="grid grid-cols-2 gap-3">
               <NavLinks />
             </div>
-            <div className="flex gap-2 pt-1">
-              <a href="/login" className="flex-1 px-3 py-2 border border-white/10 rounded-lg text-xs hover:bg-white/5 transition text-center">Login</a>
-              <a href="/join" className="flex-1 px-3 py-2 rounded-lg bg-amber-400 text-black font-semibold text-center">✊ Join</a>
-            </div>
-          </div>
+                     </div>
         </motion.div>
       </header>
 
