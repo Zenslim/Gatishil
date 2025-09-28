@@ -299,8 +299,8 @@ export default function HomePage() {
           <SectionTitle
             id="manifesto"
             kicker="Manifesto"
-            title="Clear commitments, not empty words."
-            subtitle="Eight shields of the powerless — simple enough to retell at the tea shop."
+            title="The Power of the Powerless"
+            subtitle="Eight vows to give Nepal back to its people."
           />
 
           <div className="max-w-6xl mx-auto grid gap-4 sm:gap-6 md:grid-cols-2 lg:grid-cols-3">
@@ -404,8 +404,8 @@ export default function HomePage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-16">
           <SectionTitle
             kicker="Foundations"
-            title="Our Four Stones"
-            subtitle="Unshakable foundations for a democracy that moves."
+            title="Four Stones, One River"
+            subtitle="The path where democracy flows, not stagnates."
           />
 
           <div className="max-w-5xl mx-auto grid gap-4 sm:gap-6 sm:grid-cols-2">
