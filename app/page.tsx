@@ -5,11 +5,12 @@ import { useState } from 'react';
 
 /**
  * Gatishil — Final Animated Homepage with compelling nav + Login + hamburger
- * - Desktop nav: Why, How, What, Manifesto, Polls, Proposals, Members
+ * - Desktop nav: Why, How, What, Manifesto, Polls, Proposals, Members, Blog
  * - Header actions: Login (secondary), ✊ Join (primary)
  * - Mobile: accessible hamburger menu with animated slide-down
  * - Subtle cosmic gradient + CSS-only starfield (fades in on scroll)
- * - Hero + 4-button CTA row; framer-motion animations
+ * - Hero streamlined → ✊ Join + Read the Principles
+ * - Principles: six jaw-dropping blocks
  * - Logo in header (/public/gatishil-logo.png) and hides if missing
  */
 
@@ -95,6 +96,7 @@ export default function HomePage() {
       <a className="hover:text-white" href="/polls">Polls</a>
       <a className="hover:text-white" href="/proposals">Proposals</a>
       <a className="hover:text-white" href="/members">Members</a>
+      <a className="hover:text-white" href="/blog">Blog <span className="text-slate-400">(Our Insights)</span></a>
     </>
   );
 
@@ -181,6 +183,7 @@ export default function HomePage() {
               <a href="/polls" className="hover:text-white">Polls</a>
               <a href="/proposals" className="hover:text-white">Proposals</a>
               <a href="/members" className="hover:text-white">Members</a>
+              <a href="/blog" className="hover:text-white">Blog <span className="text-slate-400">(Our Insights)</span></a>
             </div>
             <div className="flex gap-2 pt-1">
               <a href="/login" className="flex-1 px-3 py-2 border border-white/10 rounded-lg text-xs hover:bg-white/5 transition text-center">Login</a>
@@ -210,7 +213,7 @@ export default function HomePage() {
               Build parallel life, restore culture, and grow cooperative wealth. Join the rhythm.
             </motion.p>
 
-            {/* Primary CTAs — Join + Read */}
+            {/* Primary CTAs — Join + Read (streamlined) */}
             <div className="mt-8 flex gap-3 flex-col sm:flex-row">
               <motion.a
                 href="/join"
@@ -232,23 +235,7 @@ export default function HomePage() {
               </motion.a>
             </div>
 
-            {/* 4-button CTA row (ZenTrust style) */}
-            <motion.div className="mt-8 flex flex-wrap gap-3">
-              <motion.a href="/why" className="px-4 py-2 rounded-2xl bg-white text-black text-sm font-semibold hover:scale-[1.02] transition" {...fadeUp(0.24)}>
-                🌱 Why We Exist
-              </motion.a>
-              <motion.a href="/how" className="px-4 py-2 rounded-2xl border border-white/30 text-sm hover:bg-white/5 transition" {...fadeUp(0.26)}>
-                🛠 How We Work
-              </motion.a>
-              <motion.a href="/what" className="px-4 py-2 rounded-2xl bg-emerald-500 text-white text-sm font-semibold hover:scale-[1.02] transition" {...fadeUp(0.28)}>
-                🌍 What We Offer
-              </motion.a>
-              <motion.a href="/insights" className="px-4 py-2 rounded-2xl bg-violet-600 text-white text-sm font-semibold hover:scale-[1.02] transition" {...fadeUp(0.3)}>
-                ✨ Our Insights
-              </motion.a>
-            </motion.div>
-
-            <motion.p className="text-[11px] text-slate-400 mt-3" {...fadeUp(0.32)}>
+            <motion.p className="text-[11px] text-slate-400 mt-3" {...fadeUp(0.24)}>
               By joining you agree to transparent, tamper-proof decisions.
             </motion.p>
           </div>
@@ -287,29 +274,81 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* PRINCIPLES */}
+      {/* PRINCIPLES — Six Jaw-Dropping Blocks */}
       <section id="principles" className="relative z-10 py-14">
         <div className="max-w-7xl mx-auto px-6 md:px-10 lg:px-16">
           <SectionTitle
             kicker="Principles"
-            title="DAO as Nepali Wisdom"
-            subtitle="Decentralized. Autonomous. Organization. Inspired by Guthi, Bhakari, Mandal."
+            title="A Democracy That Breathes"
+            subtitle="DAO is our ancient DNA — Guthi, Bhakari, Mandal — reborn in code."
           />
-          <div className="max-w-5xl mx-auto grid md:grid-cols-3 gap-6">
-            {[
-              { title: 'Decentralized', body: 'Power is shared; no throne to capture.' },
-              { title: 'Autonomous', body: 'Rules enforce themselves; tamper-resistant.' },
-              { title: 'Organization', body: 'A living system — every voice adds to the whole.' }
-            ].map((c, i) => (
-              <motion.div
-                key={c.title}
-                {...fadeUp(0.04 * i)}
-                className="p-6 rounded-2xl bg-white/5 border border-white/10 shadow-[0_0_35px_rgba(255,255,255,0.04)]"
-              >
-                <h3 className="font-semibold text-lg">{c.title}</h3>
-                <p className="text-slate-300/80 mt-2 text-sm">{c.body}</p>
-              </motion.div>
-            ))}
+
+          <div className="max-w-6xl mx-auto grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+            {/* 1. From Ashes to Spark */}
+            <motion.div
+              {...fadeUp(0.02)}
+              className="p-6 rounded-2xl bg-white/5 border border-white/10 shadow-[0_0_35px_rgba(255,255,255,0.04)]"
+            >
+              <h3 className="font-semibold text-lg">1) From Ashes to Spark</h3>
+              <p className="text-slate-300/80 mt-2 text-sm">
+                Their greed isn’t our grave — it’s ignition. We are not the end of their story; we are the spark that begins a new one.
+              </p>
+            </motion.div>
+
+            {/* 2. DAO = Our Ancient DNA */}
+            <motion.div
+              {...fadeUp(0.05)}
+              className="p-6 rounded-2xl bg-white/5 border border-white/10 shadow-[0_0_35px_rgba(255,255,255,0.04)]"
+            >
+              <h3 className="font-semibold text-lg">2) DAO = Our Ancient DNA</h3>
+              <p className="text-slate-300/80 mt-2 text-sm">
+                Decentralized, Autonomous, Organized — not foreign software, but Guthi, Bhakari, and Mandal reborn with technology.
+              </p>
+            </motion.div>
+
+            {/* 3. Roots Before Thrones */}
+            <motion.div
+              {...fadeUp(0.08)}
+              className="p-6 rounded-2xl bg-white/5 border border-white/10 shadow-[0_0_35px_rgba(255,255,255,0.04)]"
+            >
+              <h3 className="font-semibold text-lg">3) Roots Before Thrones</h3>
+              <p className="text-slate-300/80 mt-2 text-sm">
+                We build Pasaguthi (roots) and ZenSara (soil) first. When roots run deep and soil is fertile, politics becomes expression, not a fight.
+              </p>
+            </motion.div>
+
+            {/* 4. Service, Not Career */}
+            <motion.div
+              {...fadeUp(0.11)}
+              className="p-6 rounded-2xl bg-white/5 border border-white/10 shadow-[0_0_35px_rgba(255,255,255,0.04)]"
+            >
+              <h3 className="font-semibold text-lg">4) Service, Not Career</h3>
+              <p className="text-slate-300/80 mt-2 text-sm">
+                Our livelihood stands outside politics — farms, crafts, cooperatives, diaspora. Politics is duty, not salary. हामी पैसा माग्दैनौं, हामी भविष्य उमार्छौं।
+              </p>
+            </motion.div>
+
+            {/* 5. A Democracy That Breathes */}
+            <motion.div
+              {...fadeUp(0.14)}
+              className="p-6 rounded-2xl bg-white/5 border border-white/10 shadow-[0_0_35px_rgba(255,255,255,0.04)]"
+            >
+              <h3 className="font-semibold text-lg">5) A Democracy That Breathes</h3>
+              <p className="text-slate-300/80 mt-2 text-sm">
+                Not once in five years, but every day. Tech is our new chauṭarī; accountability is immediate; youth vote in every decision.
+              </p>
+            </motion.div>
+
+            {/* 6. The Call Beyond Thrones */}
+            <motion.div
+              {...fadeUp(0.17)}
+              className="p-6 rounded-2xl bg-white/5 border border-white/10 shadow-[0_0_35px_rgba(255,255,255,0.04)]"
+            >
+              <h3 className="font-semibold text-lg">6) The Call Beyond Thrones</h3>
+              <p className="text-slate-300/80 mt-2 text-sm">
+                We don’t seize thrones; we make them irrelevant. We are the DAO of the Powerless — and the rhythm has already begun.
+              </p>
+            </motion.div>
           </div>
         </div>
       </section>
@@ -346,6 +385,7 @@ export default function HomePage() {
             <a href="/join" className="hover:text-white">Join</a>
             <a href="/polls" className="hover:text-white">Polls</a>
             <a href="/proposals" className="hover:text-white">Proposals</a>
+            <a href="/blog" className="hover:text-white">Blog</a>
             <a href="/docs/PRD" className="hover:text-white">PRD</a>
           </nav>
         </div>
