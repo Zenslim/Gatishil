@@ -1,13 +1,16 @@
 'use client';
 
 import { motion, useScroll, useTransform } from 'framer-motion';
+import { useState } from 'react';
 
 /**
- * Gatishil — Final Animated Homepage (no duplicate "Why")
+ * Gatishil — Final Animated Homepage with compelling nav + Login + hamburger
+ * - Desktop nav: Why, How, What, Manifesto, Polls, Proposals, Members
+ * - Header actions: Login (secondary), ✊ Join (primary)
+ * - Mobile: accessible hamburger menu with animated slide-down
  * - Subtle cosmic gradient + CSS-only starfield (fades in on scroll)
- * - Hero: staggered reveal, spring CTAs (Join + Read only)
- * - 4-button CTA row: Why / How / What / Insights
- * - Logo in header (/public/gatishil-logo.png), hides if missing
+ * - Hero + 4-button CTA row; framer-motion animations
+ * - Logo in header (/public/gatishil-logo.png) and hides if missing
  */
 
 const fadeUp = (delay = 0) => ({
@@ -81,6 +84,20 @@ function Starfield() {
 }
 
 export default function HomePage() {
+  const [open, setOpen] = useState(false);
+
+  const NavLinks = () => (
+    <>
+      <a className="hover:text-white" href="/why">Why</a>
+      <a className="hover:text-white" href="/how">How</a>
+      <a className="hover:text-white" href="/what">What</a>
+      <a className="hover:text-white" href="/manifesto">Manifesto</a>
+      <a className="hover:text-white" href="/polls">Polls</a>
+      <a className="hover:text-white" href="/proposals">Proposals</a>
+      <a className="hover:text-white" href="/members">Members</a>
+    </>
+  );
+
   return (
     <main className="relative min-h-screen bg-black text-white">
       {/* Subtle cosmic base (gradients) */}
@@ -92,9 +109,9 @@ export default function HomePage() {
       <Starfield />
 
       {/* Header */}
-      <header className="max-w-7xl mx-auto px-6 md:px-10 lg:px-16 pt-8 md:pt-10 relative z-10">
+      <header className="max-w-7xl mx-auto px-6 md:px-10 lg:px-16 pt-6 md:pt-8 relative z-20">
         <div className="flex items-center justify-between">
-          <a href="/" className="flex items-center gap-3 group">
+          <a href="/" className="flex items-center gap-3">
             <img
               src="/gatishil-logo.png"
               alt="Gatishil Nepal"
@@ -107,35 +124,74 @@ export default function HomePage() {
             </div>
           </a>
 
+          {/* Desktop nav */}
           <nav className="hidden md:flex gap-6 items-center text-sm text-slate-300">
-            {[
-              ['Join', '/join'],
-              ['Why', '/why'],
-              ['How', '/how'],
-              ['Manifesto', '/manifesto'],
-              ['Polls', '/polls'],
-              ['Proposals', '/proposals']
-            ].map(([label, href]) => (
-              <a key={label} className="hover:text-white" href={href}>{label}</a>
-            ))}
+            <NavLinks />
           </nav>
 
-          <div className="flex items-center gap-2">
-            <a href="/members" className="px-3 py-2 border border-white/10 rounded-lg text-xs hover:bg-white/5 transition">Members</a>
+          {/* Desktop actions */}
+          <div className="hidden md:flex items-center gap-2">
+            <a href="/login" className="px-3 py-2 border border-white/10 rounded-lg text-xs hover:bg-white/5 transition">Login</a>
             <motion.a
               href="/join"
               whileHover={{ scale: 1.03 }}
               whileTap={{ scale: 0.98 }}
-              className="hidden sm:inline-block px-4 py-2 rounded-xl bg-amber-400 text-black font-semibold transition shadow-[0_0_30px_rgba(251,191,36,0.35)]"
+              className="px-4 py-2 rounded-xl bg-amber-400 text-black font-semibold transition shadow-[0_0_30px_rgba(251,191,36,0.35)]"
             >
               ✊ Join
             </motion.a>
           </div>
+
+          {/* Hamburger for mobile */}
+          <button
+            type="button"
+            aria-label="Open menu"
+            aria-controls="mobile-menu"
+            aria-expanded={open ? 'true' : 'false'}
+            onClick={() => setOpen((v) => !v)}
+            className="md:hidden inline-flex items-center justify-center rounded-lg p-2 border border-white/10 hover:bg-white/5"
+          >
+            {!open ? (
+              // Hamburger icon
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M4 6h16M4 12h16M4 18h16" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+              </svg>
+            ) : (
+              // Close icon
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M6 6l12 12M18 6l-12 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+              </svg>
+            )}
+          </button>
         </div>
+
+        {/* Mobile menu (animated) */}
+        <motion.div
+          id="mobile-menu"
+          initial={false}
+          animate={open ? { height: 'auto', opacity: 1 } : { height: 0, opacity: 0 }}
+          className="md:hidden overflow-hidden"
+        >
+          <div className="mt-3 rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl p-4 text-sm text-slate-300 space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <a href="/why" className="hover:text-white">Why</a>
+              <a href="/how" className="hover:text-white">How</a>
+              <a href="/what" className="hover:text-white">What</a>
+              <a href="/manifesto" className="hover:text-white">Manifesto</a>
+              <a href="/polls" className="hover:text-white">Polls</a>
+              <a href="/proposals" className="hover:text-white">Proposals</a>
+              <a href="/members" className="hover:text-white">Members</a>
+            </div>
+            <div className="flex gap-2 pt-1">
+              <a href="/login" className="flex-1 px-3 py-2 border border-white/10 rounded-lg text-xs hover:bg-white/5 transition text-center">Login</a>
+              <a href="/join" className="flex-1 px-3 py-2 rounded-lg bg-amber-400 text-black font-semibold text-center">✊ Join</a>
+            </div>
+          </div>
+        </motion.div>
       </header>
 
       {/* HERO */}
-      <section className="relative z-10 pt-16 md:pt-20 pb-10">
+      <section className="relative z-10 pt-14 md:pt-20 pb-10">
         <div className="max-w-7xl mx-auto px-6 md:px-10 lg:px-16 grid lg:grid-cols-12 gap-12 items-center">
           <div className="lg:col-span-7">
             <motion.span
@@ -150,11 +206,11 @@ export default function HomePage() {
             </motion.h1>
 
             <motion.p className="mt-5 text-slate-300/90 text-lg max-w-2xl" {...fadeUp(0.12)}>
-              Not another party of faces, but a movement that makes thrones irrelevant.
+              Not another party of faces — a movement that makes thrones irrelevant.
               Build parallel life, restore culture, and grow cooperative wealth. Join the rhythm.
             </motion.p>
 
-            {/* Primary CTAs — keep only Join + Read (removed duplicate Why) */}
+            {/* Primary CTAs — Join + Read */}
             <div className="mt-8 flex gap-3 flex-col sm:flex-row">
               <motion.a
                 href="/join"
