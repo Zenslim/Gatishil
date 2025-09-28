@@ -123,10 +123,10 @@ export default function HomePage() {
             />
             <div className="leading-tight">
               {/* Two-line balanced left block */}
-              <p className="text-[12px] sm:text-sm font-bold tracking-wide text-white">
+              <p className="text-[14px] sm:text-sm font-bold tracking-wide text-white">
                 Gatishil Nepal
               </p>
-              <p className="text-[11px] sm:text-[12px] text-slate-300/80">
+              <p className="text-[12px] sm:text-sm leading-none tracking-[0.32em] text-slate-300/80">
                 DAO · Guthi · Movement
               </p>
             </div>
@@ -149,6 +149,21 @@ export default function HomePage() {
               ✊ Join
             </motion.a>
           </div>
+{/* Mobile actions (always visible) */}
+<div className="md:hidden flex items-center gap-2">
+  <a
+    href="/login"
+    className="px-3 py-1.5 border border-white/10 rounded-lg text-[11px] hover:bg-white/5 transition"
+  >
+    Login
+  </a>
+  <a
+    href="/join"
+    className="px-3 py-1.5 rounded-lg bg-amber-400 text-black font-semibold text-[11px]"
+  >
+    ✊ Join
+  </a>
+</div>
 
           {/* Mobile hamburger */}
           <button
