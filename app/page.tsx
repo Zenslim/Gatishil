@@ -84,7 +84,7 @@ function DaoWord() {
   return (
     <a
       href="/faq#dao"
-      className="relative inline-flex items-center group cursor-help focus:outline-none"
+      className="relative group cursor-help focus:outline-none"
     >
       <span
         className="underline decoration-dotted underline-offset-2"
@@ -268,16 +268,7 @@ export default function HomePage() {
               >
                 ✋ Join Us
               </motion.a>
-              <motion.a
-                href="/faq#dao"
-                whileHover={{ y: -2 }}
-                whileTap={{ scale: 0.98 }}
-                className="px-5 py-3 rounded-2xl border border-white/15 text-sm hover:bg-white/5 transition text-center"
-                {...fadeUp(0.2)}
-              >
-                What is a DAO? (ELI15)
-              </motion.a>
-              <motion.a
+                          <motion.a
                 href="#manifesto"
                 whileHover={{ y: -2 }}
                 whileTap={{ scale: 0.98 }}
