@@ -123,7 +123,7 @@ export default function HomePage() {
             />
             <div className="leading-tight">
               {/* Two-line balanced left block */}
-              <p className="text-[14px] sm:text-sm font-bold tracking-wide text-white">
+              <p className="text-[16px] sm:text-sm font-bold tracking-wide text-white">
                 Gatishil Nepal
               </p>
               <p className="text-[11px] sm:text-[12px] text-slate-300/80">
