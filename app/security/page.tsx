@@ -1,12 +1,13 @@
-// app/security/page.tsx
+// app/security/page.tsx — Set password once, then go to /dashboard
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 
 export default function SecurityPage() {
   const router = useRouter();
+  const params = useSearchParams();
   const [email, setEmail] = useState<string>('');
   const [hasSession, setHasSession] = useState<boolean>(false);
   const [password, setPassword] = useState<string>('');
@@ -14,14 +15,24 @@ export default function SecurityPage() {
   const [msg, setMsg] = useState<string>('');
   const [err, setErr] = useState<string>('');
 
+  // optionally use name/role to enrich profile on first load
   useEffect(() => {
     (async () => {
       const { data } = await supabase.auth.getSession();
       const sess = data?.session ?? null;
       setHasSession(!!sess);
-      setEmail(sess?.user?.email ?? '');
+      const em = sess?.user?.email ?? '';
+      setEmail(em);
+
+      // optional: save name/role if present
+      const name = params.get('name');
+      const role = params.get('role');
+      if (sess && (name || role)) {
+        // if you have a profiles table, you can persist here
+        // await supabase.from('profiles').upsert({ user_id: sess.user.id, name, role });
+      }
     })();
-  }, []);
+  }, [params]);
 
   async function savePassword(e: React.FormEvent) {
     e.preventDefault();
@@ -29,8 +40,8 @@ export default function SecurityPage() {
     try {
       const { error } = await supabase.auth.updateUser({ password });
       if (error) throw error;
-      setMsg('Password set. Redirecting to your dashboard…');
-      setTimeout(() => router.replace('/dashboard'), 600);
+      setMsg('Password set. Redirecting…');
+      setTimeout(() => router.replace('/dashboard'), 500);
     } catch (e:any) {
       setErr(e.message || 'Failed to set password.');
     } finally {
@@ -43,7 +54,9 @@ export default function SecurityPage() {
       <section className="max-w-xl mx-auto rounded-2xl border border-white/10 bg-white/5 p-6">
         <p className="text-xs uppercase tracking-widest text-sky-300/80">GatishilNepal.org</p>
         <h1 className="text-2xl md:text-4xl font-bold mt-2">Security</h1>
-        <p className="text-slate-300/90 mt-2">First time you proved your identity with email or OTP. Now set a password so next time it’s one-tap via your device’s saved credentials.</p>
+        <p className="text-slate-300/90 mt-2">
+          First time you proved your identity with OTP, email, or OAuth. Now set a password so next time it’s one-tap via your device’s saved credentials.
+        </p>
 
         {!hasSession ? (
           <p className="mt-6 text-sm text-rose-300">Not signed in. Go to <a href="/join" className="underline">/join</a>.</p>

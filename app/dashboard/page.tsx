@@ -1,4 +1,4 @@
-// app/dashboard/page.tsx
+// app/dashboard/page.tsx — Private landing
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -15,10 +15,7 @@ export default function DashboardPage() {
     (async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!mounted) return;
-      if (!session) {
-        router.replace('/join'); // not signed in → gateway
-        return;
-      }
+      if (!session) { router.replace('/join'); return; }
       setEmail(session.user.email ?? null);
       setLoading(false);
     })();
