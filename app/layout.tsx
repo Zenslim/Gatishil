@@ -1,4 +1,21 @@
-export const metadata = { title: "GatishilNepal — DAO Party of the Powerless", description: "A democracy that moves — alive every day." };
+import type { Metadata } from "next";
+import "./globals.css";
+import { Inter } from "next/font/google";
+
+const inter = Inter({ subsets: ["latin"] });
+
+export const metadata: Metadata = {
+  title: "Gatishil — DAO · Guthi · Movement",
+  description: "The DAO Party of the Powerless. Build parallel life, restore culture, grow cooperative wealth.",
+  icons: [{ rel: "icon", url: "/favicon.ico" }]
+};
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
-  return (<html lang="en"><body className="min-h-dvh antialiased">{children}</body></html>);
+  return (
+    <html lang="en">
+      <body className={`${inter.className} bg-black text-white antialiased`}>
+        {children}
+      </body>
+    </html>
+  );
 }
