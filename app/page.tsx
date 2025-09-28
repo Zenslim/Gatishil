@@ -1,151 +1,97 @@
-// app/page.tsx
 'use client';
-
-import Link from 'next/link';
-import { useEffect, useState } from 'react';
-import Nav from '@/components/Nav';
-
-type PeopleResp = { data?: any[]; error?: string };
-
-export default function Home() {
-  const [count, setCount] = useState<number | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    (async () => {
-      try {
-        const res = await fetch('/api/people', { cache: 'no-store' });
-        const json: PeopleResp = await res.json();
-        setCount(Array.isArray(json?.data) ? json.data.length : 0);
-      } catch {
-        setCount(null);
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, []);
-
-  return (
-    <main style={styles.page}>
-      {/* top glow */}
-      <div style={styles.glow} />
-      <div style={styles.inner}>
-
-        {/* nav */}
-        <Nav />
-
-        {/* hero */}
-        <section style={styles.hero}>
-          <div style={styles.badge}>✅ Gatishil</div>
-          <h1 style={styles.h1}>
-            One&nbsp;Ledger. <span style={styles.accent}>Six&nbsp;Registers.</span><br />
-            Join the movement that builds before it talks.
+import { useState } from "react";
+function SectionTitle({kicker, title, subtitle}:{kicker:string;title:string;subtitle?:string}){
+  return (<div className="text-center max-w-3xl mx-auto mb-8">
+    <p className="uppercase tracking-widest text-xs text-sky-300/80">{kicker}</p>
+    <h2 className="text-2xl md:text-4xl font-bold mt-2">{title}</h2>
+    {subtitle && <p className="text-sm md:text-base text-slate-300/80 mt-3">{subtitle}</p>}
+  </div>)
+}
+export default function HomePage() {
+  const [email, setEmail] = useState("");
+  return (<main className="relative overflow-hidden">
+    <div className="bg-stars absolute inset-0 pointer-events-none" />
+    <section className="relative pt-20 pb-14 px-6 md:px-10 lg:px-16">
+      <div className="max-w-6xl mx-auto grid md:grid-cols-2 gap-10 items-center">
+        <div>
+          <p className="text-sky-300/90 text-xs tracking-widest uppercase">GatishilNepal.org</p>
+          <h1 className="text-4xl md:text-6xl font-extrabold leading-tight mt-3">
+            The <span className="text-sky-300">DAO Party</span> of the Powerless
           </h1>
-          <p style={styles.sub}>
-            Clear roles. Transparent work. Real delivery. Be a founding member and help us keep Nepal moving—quietly, cleanly, together.
+          <p className="mt-5 text-slate-300/90 text-lg">
+            Not another party of faces — a movement that makes thrones irrelevant.
+            A democracy that moves, alive every day.
           </p>
-
-          <div style={styles.ctaRow}>
-            <Link href="/join" style={{ ...styles.btn, ...styles.btnPrimary }}>🌱 Join Now</Link>
-            <Link href="/members" style={{ ...styles.btn, ...styles.btnGhost }}>
-              🧑‍🤝‍🧑 Members {loading ? '…' : (count === null ? '' : `(${count})`)}
-            </Link>
+          <div className="mt-8 flex gap-3 flex-col sm:flex-row">
+            <a href="/join" className="card px-5 py-3 text-center font-semibold hover:-translate-y-0.5 transition">✊ Join the Movement</a>
+            <a href="#principles" className="px-5 py-3 text-center font-semibold border border-white/15 rounded-2xl hover:bg-white/5 transition">Read the Principles</a>
           </div>
-
-          <div style={styles.metaRow}>
-            <Link href="/status" style={styles.metaLink}>System Status</Link>
-            <a href="/api/hello" target="_blank" rel="noreferrer" style={styles.metaLink}>Test API</a>
-            <a href="/api/people" target="_blank" rel="noreferrer" style={styles.metaLink}>People API</a>
+          <p className="text-xs text-slate-400 mt-3">By joining you agree to transparent, tamper-proof decisions.</p>
+        </div>
+        <div className="card p-5">
+          <h3 className="text-lg font-semibold">🫀 Daily Pulse</h3>
+          <p className="text-sm text-slate-300/80 mt-2">Gatishil means moving. We make micro-decisions together every day.</p>
+          <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
+            <div className="card p-4">
+              <p className="text-slate-300/80">Today&apos;s Poll</p>
+              <p className="text-sky-200 font-semibold mt-1">Should local ward meetings be livestreamed?</p>
+              <a href="/polls" className="inline-block mt-3 text-xs font-semibold underline underline-offset-4">Vote now →</a>
+            </div>
+            <div className="card p-4">
+              <p className="text-slate-300/80">Active Proposal</p>
+              <p className="text-sky-200 font-semibold mt-1">Publish MLA attendance dashboard weekly</p>
+              <a href="/proposals" className="inline-block mt-3 text-xs font-semibold underline underline-offset-4">Review & vote →</a>
+            </div>
           </div>
-        </section>
-
-        {/* registers grid */}
-        <section style={styles.grid}>
-          <Card title="👥 People" href="/members" desc="Profiles, roles, availability, contact." />
-          <Card title="🏛 Orgs" href="/orgs" desc="Teams, circles, accountability, handovers." />
-          <Card title="🧭 Projects" href="/projects" desc="Roadmaps, milestones, demos, proof." />
-          <Card title="💸 Money" href="/money" desc="Budgets, inflows/outflows, vendor trackers." />
-          <Card title="📚 Knowledge" href="/knowledge" desc="Docs, decisions, playbooks, SOPs." />
-          <Card title="🗳 Polls & Proposals" href="/polls" desc="Signals, votes, decisions that move." />
-        </section>
-
-        {/* promise strip */}
-        <section style={styles.strip}>
-          <div style={styles.stripInner}>
-            <span>Compassion over friction</span>
-            <span>•</span>
-            <span>Clarity over complexity</span>
-            <span>•</span>
-            <span>Proof over promises</span>
-          </div>
-        </section>
-
+        </div>
       </div>
-    </main>
-  );
+    </section>
+    <section id="principles" className="relative py-14 px-6 md:px-10 lg:px-16">
+      <SectionTitle kicker="Principles" title="DAO as Nepali Wisdom" subtitle="Decentralized. Autonomous. Organization. Inspired by Guthi, Bhakari, Mandal, Madal — collective rhythm." />
+      <div className="max-w-5xl mx-auto grid md:grid-cols-3 gap-4">
+        {[
+          {title: "Decentralized", body: "Power is shared. No throne to capture."},
+          {title: "Autonomous", body: "Rules enforce themselves. No backdoor cheating."},
+          {title: "Organization", body: "Every member’s voice adds to the whole."},
+        ].map((c) => (<div key={c.title} className="card p-5">
+            <h3 className="font-semibold">{c.title}</h3>
+            <p className="text-slate-300/80 text-sm mt-2">{c.body}</p>
+          </div>
+        ))}
+      </div>
+    </section>
+    <section className="relative py-14 px-6 md:px-10 lg:px-16">
+      <SectionTitle kicker="Goals" title="Now → Next → Later" />
+      <div className="max-w-5xl mx-auto grid md:grid-cols-3 gap-4">
+        {[
+          {k:"Now", t:"Launch Movement Hub", d:"GatishilNepal.org as the digital face; clear story & call-to-action."},
+          {k:"Next", t:"Interactive Decisions", d:"Polls, proposals, and an accountability feed for daily rhythm."},
+          {k:"Later", t:"DAO Party", d:"Formalize as the DAO Party of the Powerless when the movement is ready."},
+        ].map((g)=>(<div key={g.k} className="card p-5">
+            <p className="uppercase tracking-widest text-xs text-sky-300/80">{g.k}</p>
+            <h3 className="font-semibold mt-2">{g.t}</h3>
+            <p className="text-slate-300/80 text-sm mt-2">{g.d}</p>
+          </div>
+        ))}
+      </div>
+    </section>
+    <section className="relative py-14 px-6 md:px-10 lg:px-16">
+      <SectionTitle kicker="Stay in the Loop" title="Get movement updates" subtitle="We’ll only send essential decisions and outcomes." />
+      <form onSubmit={(e)=>{e.preventDefault(); alert('Subscribed (placeholder) — hook your provider later.')}} className="max-w-md mx-auto card p-3 flex gap-2">
+        <input type="email" required placeholder="you@example.com" value={email} onChange={(e)=>setEmail(e.target.value)} className="flex-1 bg-transparent outline-none placeholder:text-slate-400 text-sm px-3" />
+        <button className="px-4 py-2 rounded-xl bg-white/90 text-ink font-semibold hover:bg-white">Subscribe</button>
+      </form>
+    </section>
+    <footer className="py-10 px-6 md:px-10 lg:px-16 text-sm text-slate-400">
+      <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
+        <p>© {new Date().getFullYear()} GatishilNepal.org · A democracy that moves.</p>
+        <nav className="flex gap-5">
+          <a href="/join" className="hover:text-white">Join</a>
+          <a href="/polls" className="hover:text-white">Polls</a>
+          <a href="/proposals" className="hover:text-white">Proposals</a>
+          <a href="/docs/PRD" className="hover:text-white">PRD</a>
+        </nav>
+      </div>
+    </footer>
+  </main>);
 }
-
-function Card({ title, desc, href }: { title: string; desc: string; href: string }) {
-  return (
-    <Link href={href} style={styles.card}>
-      <div style={styles.cardTitle}>{title}</div>
-      <div style={styles.cardDesc}>{desc}</div>
-    </Link>
-  );
-}
-
-const styles: { [k: string]: React.CSSProperties } = {
-  page: {
-    position: 'relative',
-    minHeight: '100vh',
-    background: 'radial-gradient(1200px 600px at 50% -10%, rgba(16,185,129,0.25), transparent), #000'
-  },
-  glow: {
-    position: 'absolute',
-    inset: 0,
-    background: 'radial-gradient(600px 300px at 80% 0%, rgba(59,130,246,0.22), transparent)'
-  },
-  inner: { position: 'relative', zIndex: 1, maxWidth: 1100, margin: '0 auto', padding: '32px 20px 80px' },
-
-  hero: { textAlign: 'center', marginTop: 30, marginBottom: 36 },
-  badge: {
-    display: 'inline-block', padding: '6px 10px', borderRadius: 999,
-    background: 'rgba(16,185,129,0.12)', border: '1px solid rgba(16,185,129,0.35)', fontSize: 12, letterSpacing: 1.2
-  },
-  h1: { margin: '14px auto 10px', lineHeight: 1.15, fontWeight: 900, fontSize: 42, maxWidth: 900 },
-  accent: { background: 'linear-gradient(90deg,#22c55e,#3b82f6)', WebkitBackgroundClip: 'text', color: 'transparent' as any },
-  sub: { opacity: 0.9, maxWidth: 760, margin: '10px auto 22px', fontSize: 16 },
-
-  ctaRow: { display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap', marginTop: 6 },
-  btn: {
-    padding: '12px 18px', borderRadius: 12, fontWeight: 700, textDecoration: 'none',
-    border: '1px solid rgba(255,255,255,0.12)'
-  },
-  btnPrimary: {
-    background: 'linear-gradient(90deg,#22c55e,#10b981)',
-    color: '#00140a', border: '1px solid rgba(16,185,129,0.5)', boxShadow: '0 10px 30px rgba(34,197,94,0.25)'
-  },
-  btnGhost: { background: 'rgba(255,255,255,0.06)', color: '#fff' },
-
-  metaRow: { display: 'flex', gap: 14, justifyContent: 'center', marginTop: 12, flexWrap: 'wrap', opacity: 0.8, fontSize: 13 },
-  metaLink: { textDecoration: 'none', color: '#9bd6ff' },
-
-  grid: {
-    display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(240px,1fr))',
-    gap: 16, marginTop: 28
-  },
-  card: {
-    background: 'linear-gradient(180deg,#0f172a,#0b1222)', border: '1px solid #1f2a44', borderRadius: 16,
-    padding: 16, textDecoration: 'none', color: '#fff'
-  },
-  cardTitle: { fontWeight: 800, marginBottom: 6 },
-  cardDesc: { opacity: 0.9, fontSize: 14 },
-
-  strip: { marginTop: 36 },
-  stripInner: {
-    display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap',
-    padding: '12px 16px', borderRadius: 999,
-    background: 'linear-gradient(90deg,rgba(255,255,255,0.06),rgba(255,255,255,0.02))',
-    border: '1px solid rgba(255,255,255,0.12)', fontSize: 13, opacity: 0.9
-  }
-};

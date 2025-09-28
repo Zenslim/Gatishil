@@ -1,14 +1,4 @@
-export const metadata = {
-  title: 'Gatishil',
-  description: 'One Ledger — Six Registers'
-};
-
+export const metadata = { title: "GatishilNepal — DAO Party of the Powerless", description: "A democracy that moves — alive every day." };
 export default function RootLayout({ children }: { children: React.ReactNode }) {
-  return (
-    <html lang="en">
-      <body style={{background:'#000',color:'#fff',minHeight:'100vh',margin:0}}>
-        {children}
-      </body>
-    </html>
-  );
+  return (<html lang="en"><body className="min-h-dvh antialiased">{children}</body></html>);
 }

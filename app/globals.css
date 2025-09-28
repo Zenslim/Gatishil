@@ -1,0 +1,8 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+:root { --bg: #0b0f14; --fg: #e6f0ff; --muted: #a0b4d0; --accent: #88e0ff; }
+html, body { height: 100%; }
+body { background: radial-gradient(1200px 800px at 70% -10%, #112032 0%, #0b0f14 60%) no-repeat, var(--bg); color: var(--fg); }
+.bg-stars { background-image: radial-gradient(#ffffff33 1px, transparent 1px); background-size: 2px 2px; mask-image: radial-gradient(circle at 50% -30%, black 0%, black 30%, transparent 75%); opacity: .35; }
+.card { @apply rounded-2xl bg-white/5 backdrop-blur-sm border border-white/10 shadow-lg shadow-black/30; }
