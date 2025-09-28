@@ -1,289 +1,351 @@
 'use client';
 
 import { motion, useScroll, useTransform } from 'framer-motion';
-import Link from 'next/link';
-import { useRef } from 'react';
+import { useMemo } from 'react';
 
 /**
- * Gatishil — Home (Hero + Principles, final)
- * - Cosmic gradient + starfield
- * - Only two CTAs: "Read the Principles" and "Our Insights"
- * - ELI15 structure, bold, thought-provoking copy
- * - Remote-only stack: Next.js + Tailwind + Vercel + Supabase (no local steps)
+ * Gatishil — Animated Homepage (Subtle Cosmic base + starfield that fades in on scroll)
+ * - No extra libs beyond framer-motion + Tailwind (already in your stack)
+ * - Hero: staggered reveal + spring CTAs
+ * - Cards: viewport-aware fade/slide-in
+ * - Background: elegant gradient, starfield layer fades in as you scroll
  */
 
-export default function Home() {
-  const ref = useRef<HTMLDivElement>(null);
-  const { scrollYProgress } = useScroll({ target: ref, offset: ['start start', 'end start'] });
-  const opacity = useTransform(scrollYProgress, [0, 0.6, 1], [1, 0.85, 0.75]);
-  const y = useTransform(scrollYProgress, [0, 1], [0, -30]);
+const fadeUp = (delay = 0) => ({
+  initial: { opacity: 0, y: 18 },
+  animate: { opacity: 1, y: 0, transition: { duration: 0.7, ease: 'easeOut', delay } }
+});
+
+const staggerParent = {
+  initial: { opacity: 1 },
+  animate: {
+    opacity: 1,
+    transition: { staggerChildren: 0.12, delayChildren: 0.1 }
+  }
+};
+
+function SectionTitle({ kicker, title, subtitle }: { kicker?: string; title: string; subtitle?: string }) {
+  return (
+    <div className="text-center max-w-3xl mx-auto mb-8">
+      {kicker && <p className="uppercase tracking-widest text-[10px] text-amber-300/85">{kicker}</p>}
+      <h2 className="text-2xl md:text-4xl font-bold mt-2">{title}</h2>
+      {subtitle && <p className="text-sm md:text-base text-slate-300/80 mt-3">{subtitle}</p>}
+    </div>
+  );
+}
+
+/** Starfield: pure CSS layers, opacity bound to scroll progress (0 → 35% = 0 → 1) */
+function Starfield() {
+  const { scrollYProgress } = useScroll();
+  const opacity = useTransform(scrollYProgress, [0, 0.35], [0, 1]);
+
+  // Precompute star layers (static strings → faster)
+  const layers = useMemo(() => {
+    const gen = (count: number) =>
+      Array.from({ length: count })
+        .map(() => {
+          const x = Math.floor(Math.random() * 2000) - 1000; // spread beyond viewport
+          const y = Math.floor(Math.random() * 2000) - 1000;
+          return `${x}px ${y}px 1px rgba(255,255,255,0.9)`;
+        })
+        .join(', ');
+    return {
+      small: gen(500),
+      mid: gen(200),
+      big: gen(80)
+    };
+  }, []);
 
   return (
-    <main ref={ref} className="relative min-h-screen overflow-hidden bg-black text-white">
-      {/* Cosmic backdrop */}
-      <div className="pointer-events-none absolute inset-0">
-        <div className="absolute inset-0 bg-[radial-gradient(1000px_700px_at_50%_-200px,rgba(80,130,255,0.25),transparent_70%)]" />
-        <StarField />
-        <div className="absolute inset-0 bg-[radial-gradient(800px_600px_at_10%_110%,rgba(0,180,150,0.18),transparent_60%)]" />
-        <div className="absolute inset-0 bg-[radial-gradient(900px_650px_at_90%_120%,rgba(220,90,255,0.15),transparent_60%)]" />
+    <motion.div style={{ opacity }} className="pointer-events-none fixed inset-0 z-0">
+      {/* three static star layers that subtly twinkle via keyframes inlined below */}
+      <div className="absolute inset-0">
+        <div className="stars-small" />
+        <div className="stars-mid" />
+        <div className="stars-big" />
       </div>
 
-      {/* Header */}
-      <header className="relative z-20">
-        <div className="mx-auto flex w-full max-w-6xl items-center justify-between px-4 py-5 md:px-6">
-          <div className="flex items-center gap-3">
-            {/* Optional logo if present in /public */}
-            <div className="h-8 w-8 rounded-xl bg-white/10 ring-1 ring-white/15 backdrop-blur" />
-            <span className="text-lg font-semibold tracking-wide">Gatishil Loktantric Party</span>
-          </div>
+      <style jsx global>{`
+        .stars-small,
+        .stars-mid,
+        .stars-big {
+          position: absolute;
+          top: 50%;
+          left: 50%;
+          width: 1px;
+          height: 1px;
+          background: transparent;
+          box-shadow: ${layers.small};
+          animation: twinkle 5s linear infinite;
+          transform: translate(-50%, -50%);
+        }
+        .stars-mid {
+          width: 2px;
+          height: 2px;
+          box-shadow: ${layers.mid};
+          animation-duration: 7s;
+        }
+        .stars-big {
+          width: 3px;
+          height: 3px;
+          box-shadow: ${layers.big};
+          animation-duration: 9s;
+        }
+        @keyframes twinkle {
+          0%, 100% { opacity: 0.8; }
+          50%      { opacity: 0.3; }
+        }
+      `}</style>
+    </motion.div>
+  );
+}
 
-          {/* Only two CTAs on the right */}
-          <nav className="hidden items-center gap-2 sm:flex">
-            <Link
-              href="#principles"
-              className="rounded-xl border border-white/20 px-4 py-2 text-sm font-medium hover:bg-white/10"
+export default function HomePage() {
+  return (
+    <main className="relative min-h-screen bg-black text-white">
+      {/* Subtle cosmic base (gradients) */}
+      <div className="absolute inset-0 -z-10 pointer-events-none">
+        <div className="absolute inset-0 opacity-[0.85] bg-[radial-gradient(1200px_600px_at_50%_-10%,rgba(255,255,255,0.06),transparent_60%),radial-gradient(900px_500px_at_80%_10%,rgba(251,191,36,0.08),transparent_60%),radial-gradient(900px_500px_at_20%_10%,rgba(244,114,182,0.06),transparent_60%)]" />
+      </div>
+
+      {/* Cinematic starfield (fades in on scroll) */}
+      <Starfield />
+
+      {/* Header */}
+      <header className="container max-w-7xl mx-auto px-6 md:px-10 lg:px-16 pt-8 md:pt-10 relative z-10">
+        <div className="flex items-center justify-between">
+          <a href="/" className="flex items-center gap-3 group">
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ type: 'spring', stiffness: 120, damping: 14 }}
+              className="h-9 w-9 rounded-xl bg-white/10 border border-white/10 grid place-items-center shadow-[0_0_35px_rgba(251,191,36,0.25)] group-hover:shadow-[0_0_55px_rgba(251,191,36,0.35)] transition-shadow"
             >
-              Read the Principles
-            </Link>
-            <Link
-              href="/insights"
-              className="rounded-xl bg-white px-4 py-2 text-sm font-semibold text-black hover:bg-white/90"
-            >
-              Our Insights
-            </Link>
+              ✶
+            </motion.div>
+            <div>
+              <p className="text-[10px] text-amber-300/90 uppercase tracking-widest">Gatishil</p>
+              <p className="text-[11px] text-slate-300/70">DAO · Guthi · Movement</p>
+            </div>
+          </a>
+
+          <nav className="hidden md:flex gap-6 items-center text-sm text-slate-300">
+            {[
+              ['Join', '/join'],
+              ['Why', '/why'],
+              ['How', '/how'],
+              ['Manifesto', '/manifesto'],
+              ['Polls', '/polls'],
+              ['Proposals', '/proposals']
+            ].map(([label, href]) => (
+              <a key={label} className="hover:text-white" href={href}>{label}</a>
+            ))}
           </nav>
+
+          <div className="flex items-center gap-2">
+            <a href="/members" className="px-3 py-2 border border-white/10 rounded-lg text-xs hover:bg-white/5 transition">Members</a>
+            <motion.a
+              href="/join"
+              whileHover={{ scale: 1.03 }}
+              whileTap={{ scale: 0.98 }}
+              className="hidden sm:inline-block px-4 py-2 rounded-xl bg-amber-400 text-black font-semibold transition shadow-[0_0_30px_rgba(251,191,36,0.35)]"
+            >
+              ✊ Join
+            </motion.a>
+          </div>
         </div>
       </header>
 
-      {/* Hero */}
-      <motion.section
-        style={{ opacity, y }}
-        className="relative z-10 mx-auto grid w-full max-w-6xl items-center px-4 pt-16 md:grid-cols-12 md:gap-8 md:px-6 md:pt-24"
-      >
-        <div className="md:col-span-7">
-          <motion.h1
-            initial={{ opacity: 0, y: 18 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.7, ease: 'easeOut' }}
-            className="text-balance text-4xl font-extrabold leading-tight md:text-6xl"
-          >
-            The DAO Party of the Powerless.
-          </motion.h1>
-
-          <motion.p
-            initial={{ opacity: 0, y: 18 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.08, duration: 0.6, ease: 'easeOut' }}
-            className="mt-4 max-w-2xl text-pretty text-lg text-white/85 md:text-xl"
-          >
-            We don’t chase thrones. We make them irrelevant. Culture + Economics first → Politics
-            later. Daily, living democracy — not silence between elections.
-          </motion.p>
-
-          <motion.div
-            initial={{ opacity: 0, y: 18 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.16, type: 'spring', stiffness: 140, damping: 16 }}
-            className="mt-8 flex flex-wrap gap-3"
-          >
-            <Link
-              href="#principles"
-              className="rounded-xl bg-white px-5 py-3 text-sm font-semibold text-black hover:bg-white/90"
+      {/* HERO */}
+      <section className="relative z-10 pt-16 md:pt-20 pb-14">
+        <div className="container max-w-7xl mx-auto px-6 md:px-10 lg:px-16 grid md:grid-cols-2 gap-12 items-center">
+          <motion.div variants={staggerParent} initial="initial" animate="animate">
+            <motion.span
+              className="inline-block text-[10px] uppercase tracking-widest text-amber-300/90 px-2 py-1 border border-amber-300/30 rounded-full"
+              {...fadeUp(0)}
             >
-              Read the Principles
-            </Link>
-            <Link
-              href="/insights"
-              className="rounded-xl border border-white/20 px-5 py-3 text-sm font-semibold hover:bg-white/10"
+              GatishilNepal.org
+            </motion.span>
+
+            <motion.h1
+              className="text-4xl md:text-6xl font-extrabold leading-tight mt-4"
+              {...fadeUp(0.05)}
             >
-              Our Insights
-            </Link>
+              The <span className="bg-clip-text text-transparent bg-gradient-to-r from-amber-300 via-orange-400 to-rose-400">DAO Party</span> of the Powerless
+            </motion.h1>
+
+            <motion.p
+              className="mt-5 text-slate-300/90 text-lg max-w-2xl"
+              {...fadeUp(0.12)}
+            >
+              Not another party of faces — a movement that makes thrones irrelevant.
+              Build parallel life, restore culture, and grow cooperative wealth. Join the rhythm.
+            </motion.p>
+
+            <motion.div className="mt-8 flex gap-3 flex-col sm:flex-row" variants={staggerParent}>
+              <motion.a
+                href="/join"
+                whileHover={{ y: -2, boxShadow: '0 0 40px rgba(251,191,36,0.35)' }}
+                whileTap={{ scale: 0.98 }}
+                className="px-5 py-3 rounded-2xl bg-amber-400 text-black font-semibold transition"
+              >
+                ✊ Join the Movement
+              </motion.a>
+              <motion.a
+                href="#principles"
+                whileHover={{ y: -2 }}
+                whileTap={{ scale: 0.98 }}
+                className="px-5 py-3 rounded-2xl border border-white/15 text-sm hover:bg-white/5 transition"
+              >
+                Read the Principles
+              </motion.a>
+              <motion.a
+                href="/why"
+                whileHover={{ y: -2 }}
+                whileTap={{ scale: 0.98 }}
+                className="px-5 py-3 rounded-2xl border border-amber-400 text-amber-300 text-sm hover:bg-amber-600/10 transition"
+              >
+                Why We Exist
+              </motion.a>
+            </motion.div>
+
+            <motion.p className="text-[11px] text-slate-400 mt-3" {...fadeUp(0.22)}>
+              By joining you agree to transparent, tamper-proof decisions.
+            </motion.p>
           </motion.div>
 
-          <p className="mt-6 text-sm text-white/60">
-            ELI15: We build roots (culture) and soil (economics) first, so politics serves people —
-            not donors.
-          </p>
+          {/* Right: Pulse card */}
+          <motion.aside
+            {...fadeUp(0.15)}
+            className="p-6 rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl shadow-[0_0_35px_rgba(255,255,255,0.05)]"
+          >
+            <h3 className="text-lg font-semibold">🫀 Daily Pulse</h3>
+            <p className="text-sm text-slate-300/80 mt-2">
+              Gatishil moves every day — small decisions, big rhythm.
+            </p>
+
+            <div className="mt-4 grid grid-cols-1 gap-3">
+              <motion.div
+                initial={{ opacity: 0, y: 14 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true, amount: 0.3 }}
+                transition={{ duration: 0.5, ease: 'easeOut' }}
+                className="grid grid-cols-2 gap-3"
+              >
+                <div className="p-4 rounded-xl bg-white/5 border border-white/10">
+                  <p className="text-slate-300/80 text-xs">Today’s Poll</p>
+                  <p className="text-amber-200 font-semibold mt-1 text-sm">Should ward meetings livestream?</p>
+                  <a href="/polls" className="inline-block mt-3 text-xs font-semibold underline underline-offset-4">
+                    Vote now →
+                  </a>
+                </div>
+                <div className="p-4 rounded-xl bg-white/5 border border-white/10">
+                  <p className="text-slate-300/80 text-xs">Active Proposal</p>
+                  <p className="text-amber-200 font-semibold mt-1 text-sm">Publish MLA attendance weekly</p>
+                  <a href="/proposals" className="inline-block mt-3 text-xs font-semibold underline underline-offset-4">
+                    Review →
+                  </a>
+                </div>
+              </motion.div>
+
+              <motion.div
+                initial={{ opacity: 0, y: 14 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true, amount: 0.3 }}
+                transition={{ duration: 0.5, ease: 'easeOut', delay: 0.06 }}
+                className="p-4 rounded-xl bg-white/5 border border-white/10"
+              >
+                <p className="text-xs text-slate-300/80">Quick Join</p>
+                <div className="mt-2 flex gap-2">
+                  <a href="/join" className="flex-1 px-3 py-2 text-sm text-black bg-amber-300 rounded-lg text-center font-semibold">
+                    Start
+                  </a>
+                  <a href="/explore" className="px-3 py-2 border border-white/10 rounded-lg text-sm">
+                    Explore
+                  </a>
+                </div>
+              </motion.div>
+            </div>
+          </motion.aside>
         </div>
-
-        {/* Side highlight */}
-        <motion.aside
-          initial={{ opacity: 0, x: 20 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ delay: 0.2, duration: 0.6, ease: 'easeOut' }}
-          className="mt-10 rounded-2xl border border-white/10 bg-white/5 p-5 ring-1 ring-inset ring-white/10 backdrop-blur md:col-span-5 md:mt-0"
-        >
-          <h3 className="text-base font-semibold">Why only two buttons?</h3>
-          <p className="mt-2 text-sm text-white/80">
-            Clarity wins. “Read the Principles” (truth), “Our Insights” (proof). Delete
-            “Why/What/How” buttons — fewer choices, stronger action.
-          </p>
-        </motion.aside>
-      </motion.section>
-
-      {/* Principles */}
-      <section id="principles" className="relative z-10 mx-auto w-full max-w-6xl px-4 pb-20 pt-16 md:px-6 md:pb-28">
-        <div className="grid gap-6 md:grid-cols-3">
-          <Card
-            title="1) Why We Exist"
-            lines={[
-              'Rulers turned power into a private guthi.',
-              'Their greed taught us: every lie sparks fire.',
-              'We are that fire — not the ashes, but the dawn.',
-            ]}
-          />
-          <Card
-            title="2) What We Are"
-            lines={[
-              'We are not faces; we are a rhythm — a DAO.',
-              'DAO = Nepali wisdom reborn in code (Guthi, Bhakari, Madal).',
-              'Power shared. Rules enforce themselves.',
-            ]}
-          />
-          <Card
-            title="3) How We Work"
-            lines={[
-              'Politics = duty, not salary.',
-              'Members stand on independent livelihoods (farms, crafts, diaspora, co-ops).',
-              'Every decision on-chain, open as the sky.',
-            ]}
-          />
-        </div>
-
-        <div className="mt-8 grid gap-6 md:grid-cols-2">
-          <Card
-            title="4) The Order of Life"
-            lines={[
-              'Roots (culture) + soil (economics) → trunk (governance).',
-              'Culture is the immune system of a nation.',
-              'Economics + Culture first → Politics later.',
-            ]}
-          />
-          <Card
-            title="5) A Democracy That Moves"
-            lines={[
-              'Old democracy: one vote, five years of silence.',
-              'Gatishil: alive every day — youth in every decision.',
-              'Digital chauṭarī; accountability is immediate.',
-            ]}
-          />
-        </div>
-
-        <Callout />
       </section>
 
-      {/* Footer minimal */}
-      <footer className="relative z-10 border-t border-white/10 bg-black/40 py-10">
-        <div className="mx-auto flex w-full max-w-6xl flex-col items-center justify-between gap-4 px-4 md:flex-row md:px-6">
-          <p className="text-sm text-white/60">
-            © {new Date().getFullYear()} Gatishil Loktantric Party — The DAO Party of the Powerless
-          </p>
-          <div className="flex items-center gap-3">
-            <Link
-              href="#principles"
-              className="rounded-lg border border-white/15 px-3 py-1.5 text-xs hover:bg-white/10"
-            >
-              Read the Principles
-            </Link>
-            <Link
-              href="/insights"
-              className="rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-black hover:bg-white/90"
-            >
-              Our Insights
-            </Link>
+      {/* PRINCIPLES */}
+      <section id="principles" className="relative z-10 py-14">
+        <div className="container max-w-7xl mx-auto px-6 md:px-10 lg:px-16">
+          <SectionTitle
+            kicker="Principles"
+            title="DAO as Nepali Wisdom"
+            subtitle="Decentralized. Autonomous. Organization. Inspired by Guthi, Bhakari, Mandal."
+          />
+          <div className="max-w-5xl mx-auto grid md:grid-cols-3 gap-6">
+            {[
+              { title: 'Decentralized', body: 'Power is shared; no throne to capture.' },
+              { title: 'Autonomous', body: 'Rules enforce themselves; tamper-resistant.' },
+              { title: 'Organization', body: 'A living system — every voice adds to the whole.' }
+            ].map((c) => (
+              <motion.div
+                key={c.title}
+                initial={{ opacity: 0, y: 16 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true, amount: 0.3 }}
+                transition={{ duration: 0.55, ease: 'easeOut' }}
+                className="p-6 rounded-2xl bg-white/5 border border-white/10 shadow-[0_0_35px_rgba(255,255,255,0.04)]"
+              >
+                <h3 className="font-semibold text-lg">{c.title}</h3>
+                <p className="text-slate-300/80 mt-2 text-sm">{c.body}</p>
+              </motion.div>
+            ))}
           </div>
+        </div>
+      </section>
+
+      {/* GOALS */}
+      <section className="relative z-10 pb-14">
+        <div className="container max-w-7xl mx-auto px-6 md:px-10 lg:px-16">
+          <SectionTitle kicker="Goals" title="Now → Next → Later" subtitle="A rhythm, not a rush." />
+          <div className="max-w-5xl mx-auto grid md:grid-cols-3 gap-6">
+            {[
+              { k: 'Now', t: 'Launch Movement Hub', d: 'Clear story, strong CTA, daily pulse.' },
+              { k: 'Next', t: 'Interactive Decisions', d: 'Polls, proposals, and accountability feeds.' },
+              { k: 'Later', t: 'DAO Party', d: 'Formalize when members are economically independent.' }
+            ].map((g, i) => (
+              <motion.div
+                key={g.k}
+                initial={{ opacity: 0, y: 18 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true, amount: 0.3 }}
+                transition={{ duration: 0.55, ease: 'easeOut', delay: i * 0.05 }}
+                className="p-6 rounded-2xl bg-white/5 border border-white/10"
+              >
+                <p className="uppercase tracking-widest text-[10px] text-amber-300/80">{g.k}</p>
+                <h3 className="font-semibold mt-2">{g.t}</h3>
+                <p className="text-slate-300/80 text-sm mt-2">{g.d}</p>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* FOOTER */}
+      <footer className="relative z-10 py-10 text-sm text-slate-400">
+        <div className="container max-w-7xl mx-auto px-6 md:px-10 lg:px-16 flex flex-col sm:flex-row items-center justify-between gap-3">
+          <p>© {new Date().getFullYear()} GatishilNepal.org · A democracy that moves.</p>
+          <nav className="flex gap-4">
+            <a href="/join" className="hover:text-white">Join</a>
+            <a href="/polls" className="hover:text-white">Polls</a>
+            <a href="/proposals" className="hover:text-white">Proposals</a>
+            <a href="/docs/PRD" className="hover:text-white">PRD</a>
+          </nav>
         </div>
       </footer>
     </main>
   );
 }
 
-/* --- UI Pieces --- */
-
-function Card({ title, lines }: { title: string; lines: string[] }) {
-  return (
-    <motion.article
-      initial={{ opacity: 0, y: 18 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true, margin: '-20% 0px -20% 0px' }}
-      transition={{ duration: 0.6, ease: 'easeOut' }}
-      className="rounded-2xl border border-white/10 bg-white/5 p-6 ring-1 ring-inset ring-white/10 backdrop-blur"
-    >
-      <h3 className="text-lg font-semibold">{title}</h3>
-      <ul className="mt-3 space-y-2 text-sm text-white/85">
-        {lines.map((l, i) => (
-          <li key={i} className="leading-relaxed">
-            • {l}
-          </li>
-        ))}
-      </ul>
-    </motion.article>
-  );
-}
-
-function Callout() {
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 18 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true }}
-      transition={{ delay: 0.05, duration: 0.6, ease: 'easeOut' }}
-      className="mt-10 rounded-2xl border border-white/10 bg-gradient-to-br from-white/10 to-white/5 p-6 text-center ring-1 ring-inset ring-white/10 backdrop-blur"
-    >
-      <p className="text-pretty text-base leading-relaxed text-white/90 md:text-lg">
-        <span className="block font-semibold">
-          We are the contradiction their folly created.
-        </span>
-        <span className="block">
-          We are the spark that grows from their failure. And the rhythm has already begun.
-        </span>
-      </p>
-    </motion.div>
-  );
-}
-
-function StarField({ count = 140 }: { count?: number }) {
-  // Lightweight, static starfield (no canvas needed)
-  const stars = Array.from({ length: count }).map((_, i) => {
-    const top = Math.random() * 100;
-    const left = Math.random() * 100;
-    const size = Math.random() * 1.8 + 0.4;
-    const opacity = Math.random() * 0.7 + 0.3;
-    const delay = Math.random() * 6;
-    const dur = Math.random() * 6 + 4;
-    return { i, top, left, size, opacity, delay, dur };
-  });
-
-  return (
-    <div aria-hidden className="absolute inset-0">
-      {stars.map((s) => (
-        <span
-          key={s.i}
-          className="absolute rounded-full bg-white/90 shadow-[0_0_8px_2px_rgba(255,255,255,0.35)]"
-          style={{
-            top: `${s.top}%`,
-            left: `${s.left}%`,
-            width: s.size,
-            height: s.size,
-            opacity: s.opacity,
-            animation: `twinkle ${s.dur}s ease-in-out ${s.delay}s infinite`,
-          }}
-        />
-      ))}
-
-      <style jsx global>{`
-        @keyframes twinkle {
-          0%,
-          100% {
-            opacity: 0.25;
-            transform: translateY(0px) scale(1);
-          }
-          50% {
-            opacity: 1;
-            transform: translateY(-0.6px) scale(1.1);
-          }
-        }
-      `}</style>
-    </div>
-  );
+/* Tailwind helper (shared feel with ZenTrust) — if you prefer, move to globals.css */
+declare global {
+  interface CSSStyleDeclaration {
+    // allow css custom properties above without TS complaining
+  }
 }
