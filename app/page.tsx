@@ -126,7 +126,7 @@ export default function HomePage() {
               <p className="text-[14px] sm:text-sm font-bold tracking-wide text-white">
                 Gatishil Nepal
               </p>
-              <p className="text-[12px] sm:text-sm leading-none tracking-[0.32em] text-slate-300/80">
+              <p className="text-[11px] sm:text-[12px] text-slate-300/80">
                 DAO · Guthi · Movement
               </p>
             </div>
