@@ -4,37 +4,38 @@ import { motion, useScroll, useTransform } from 'framer-motion';
 import { useState } from 'react';
 
 /**
- * Gatishil — Final Animated Homepage (icons in Principles, Blog label simplified)
- * - Desktop nav: Why, How, What, Manifesto, Polls, Proposals, Members, Blog
- * - Header actions: Login (secondary), ✊ Join (primary)
- * - Mobile: accessible hamburger menu with animated slide-down
- * - Subtle cosmic gradient + CSS-only starfield (fades in on scroll)
- * - Hero streamlined → ✊ Join + Read the Principles
- * - Principles: six jaw-dropping blocks with icons (no numbering)
- * - Logo in header (/public/gatishil-logo.png) and hides if missing
+ * Gatishil — Mobile-first Homepage (merged Manifesto + Principles, 4 Stones)
+ * - Header (left): two-line balanced "Gatishil Nepal" over "DAO · Guthi · Movement"
+ * - Hero: big slogan + subtext + Join / Read Our Manifesto (#manifesto anchor)
+ * - Manifesto: 8 emotional blocks (stories & metaphors)
+ * - Our Four Stones: 4 jaw-dropping slogans replacing "Goals"
+ * - Footer (centered): © {year} + "Democracy That Flows — Not Stagnates."
+ * - Right footer links: Join, Polls, Proposals, Blog
+ * - Mobile-first layout; desktop enhances gracefully
  */
 
 const fadeUp = (delay = 0) => ({
   initial: { opacity: 0, y: 18 },
   whileInView: { opacity: 1, y: 0, transition: { duration: 0.7, ease: 'easeOut', delay } },
-  viewport: { once: true, amount: 0.4 }
+  viewport: { once: true, amount: 0.35 }
 });
 
-function SectionTitle(props: { kicker?: string; title: string; subtitle?: string }) {
-  const { kicker, title, subtitle } = props;
+/** Section title */
+function SectionTitle(props: { id?: string; kicker?: string; title: string; subtitle?: string }) {
+  const { id, kicker, title, subtitle } = props;
   return (
-    <div className="text-center max-w-3xl mx-auto mb-8">
+    <div id={id} className="text-center max-w-3xl mx-auto mb-8 px-2">
       {kicker && <p className="uppercase tracking-widest text-[10px] text-amber-300/85">{kicker}</p>}
-      <h2 className="text-2xl md:text-4xl font-bold mt-2">{title}</h2>
-      {subtitle && <p className="text-sm md:text-base text-slate-300/80 mt-3">{subtitle}</p>}
+      <h2 className="text-2xl sm:text-3xl font-bold mt-2">{title}</h2>
+      {subtitle && <p className="text-sm sm:text-base text-slate-300/85 mt-3">{subtitle}</p>}
     </div>
   );
 }
 
-/** CSS-only starfield, opacity bound to scroll progress (no template strings) */
+/** Subtle starfield that fades in on scroll */
 function Starfield() {
   const { scrollYProgress } = useScroll();
-  const opacity = useTransform(scrollYProgress, [0, 0.35], [0, 1]);
+  const opacity = useTransform(scrollYProgress, [0, 0.3], [0, 1]);
 
   return (
     <motion.div style={{ opacity }} className="fixed inset-0 -z-10 pointer-events-none">
@@ -92,7 +93,8 @@ export default function HomePage() {
       <a className="hover:text-white" href="/why">Why</a>
       <a className="hover:text-white" href="/how">How</a>
       <a className="hover:text-white" href="/what">What</a>
-      <a className="hover:text-white" href="/manifesto">Manifesto</a>
+      {/* Manifesto is on this page (anchor) */}
+      <a className="hover:text-white" href="#manifesto">Manifesto</a>
       <a className="hover:text-white" href="/polls">Polls</a>
       <a className="hover:text-white" href="/proposals">Proposals</a>
       <a className="hover:text-white" href="/members">Members</a>
@@ -102,27 +104,31 @@ export default function HomePage() {
 
   return (
     <main className="relative min-h-screen bg-black text-white">
-      {/* Subtle cosmic base (gradients) */}
+      {/* Background gradients */}
       <div className="absolute inset-0 -z-20 pointer-events-none">
         <div className="absolute inset-0 opacity-[0.85] bg-[radial-gradient(1200px_600px_at_50%_-10%,rgba(255,255,255,0.06),transparent_60%),radial-gradient(900px_500px_at_80%_10%,rgba(251,191,36,0.08),transparent_60%),radial-gradient(900px_500px_at_20%_10%,rgba(244,114,182,0.06),transparent_60%)]" />
       </div>
 
-      {/* Cinematic starfield (fades in on scroll) */}
       <Starfield />
 
       {/* Header */}
-      <header className="max-w-7xl mx-auto px-6 md:px-10 lg:px-16 pt-6 md:pt-8 relative z-20">
+      <header className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-16 pt-4 sm:pt-6 relative z-20">
         <div className="flex items-center justify-between">
           <a href="/" className="flex items-center gap-3">
             <img
               src="/gatishil-logo.png"
               alt="Gatishil Nepal"
-              className="h-9 w-auto"
+              className="h-8 sm:h-9 w-auto"
               onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
             />
-            <div>
-              <p className="text-[10px] text-amber-300/90 uppercase tracking-widest">Gatishil Nepal</p>
-              <p className="text-[11px] text-slate-300/70">DAO · Guthi · Movement</p>
+            <div className="leading-tight">
+              {/* Two-line balanced left block */}
+              <p className="text-[12px] sm:text-sm font-bold tracking-wide text-white">
+                Gatishil Nepal
+              </p>
+              <p className="text-[11px] sm:text-[12px] text-slate-300/80">
+                DAO · Guthi · Movement
+              </p>
             </div>
           </a>
 
@@ -144,7 +150,7 @@ export default function HomePage() {
             </motion.a>
           </div>
 
-          {/* Hamburger for mobile */}
+          {/* Mobile hamburger */}
           <button
             type="button"
             aria-label="Open menu"
@@ -154,12 +160,10 @@ export default function HomePage() {
             className="md:hidden inline-flex items-center justify-center rounded-lg p-2 border border-white/10 hover:bg-white/5"
           >
             {!open ? (
-              // Hamburger icon
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                 <path d="M4 6h16M4 12h16M4 18h16" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
               </svg>
             ) : (
-              // Close icon
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                 <path d="M6 6l12 12M18 6l-12 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
               </svg>
@@ -167,7 +171,7 @@ export default function HomePage() {
           </button>
         </div>
 
-        {/* Mobile menu (animated) */}
+        {/* Mobile menu */}
         <motion.div
           id="mobile-menu"
           initial={false}
@@ -176,14 +180,7 @@ export default function HomePage() {
         >
           <div className="mt-3 rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl p-4 text-sm text-slate-300 space-y-3">
             <div className="grid grid-cols-2 gap-3">
-              <a href="/why" className="hover:text-white">Why</a>
-              <a href="/how" className="hover:text-white">How</a>
-              <a href="/what" className="hover:text-white">What</a>
-              <a href="/manifesto" className="hover:text-white">Manifesto</a>
-              <a href="/polls" className="hover:text-white">Polls</a>
-              <a href="/proposals" className="hover:text-white">Proposals</a>
-              <a href="/members" className="hover:text-white">Members</a>
-              <a href="/blog" className="hover:text-white">Blog</a>
+              <NavLinks />
             </div>
             <div className="flex gap-2 pt-1">
               <a href="/login" className="flex-1 px-3 py-2 border border-white/10 rounded-lg text-xs hover:bg-white/5 transition text-center">Login</a>
@@ -194,8 +191,9 @@ export default function HomePage() {
       </header>
 
       {/* HERO */}
-      <section className="relative z-10 pt-14 md:pt-20 pb-10">
-        <div className="max-w-7xl mx-auto px-6 md:px-10 lg:px-16 grid lg:grid-cols-12 gap-12 items-center">
+      <section className="relative z-10 pt-10 sm:pt-14 pb-8">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-16 grid lg:grid-cols-12 gap-8 items-start">
+          {/* Left text */}
           <div className="lg:col-span-7">
             <motion.span
               className="inline-block text-[10px] uppercase tracking-widest text-amber-300/90 px-2 py-1 border border-amber-300/30 rounded-full"
@@ -204,34 +202,38 @@ export default function HomePage() {
               GatishilNepal.org
             </motion.span>
 
-            <motion.h1 className="text-4xl md:text-6xl font-extrabold leading-tight mt-4" {...fadeUp(0.05)}>
-              The <span className="bg-clip-text text-transparent bg-gradient-to-r from-amber-300 via-orange-400 to-rose-400">DAO Party</span> of the Powerless
+            <motion.h1 className="text-[28px] sm:text-4xl md:text-5xl font-extrabold leading-tight mt-3" {...fadeUp(0.05)}>
+              The <span className="bg-clip-text text-transparent bg-gradient-to-r from-amber-300 via-orange-400 to-rose-400">DAO Party</span> of the Powerless.
             </motion.h1>
 
-            <motion.p className="mt-5 text-slate-300/90 text-lg max-w-2xl" {...fadeUp(0.12)}>
-              Not another party of faces — a movement that makes thrones irrelevant.
-              Build parallel life, restore culture, and grow cooperative wealth. Join the rhythm.
+            <motion.p className="mt-4 text-slate-300/90 text-base sm:text-lg max-w-2xl" {...fadeUp(0.1)}>
+              <span className="font-semibold">Service, Not Career. Community, Not Power.</span>
             </motion.p>
 
-            {/* Primary CTAs — Join + Read (streamlined) */}
-            <div className="mt-8 flex gap-3 flex-col sm:flex-row">
+            <motion.p className="mt-2 text-slate-300/90 text-sm sm:text-base max-w-2xl" {...fadeUp(0.14)}>
+              Not another party of faces, but a movement that makes thrones irrelevant.
+              Build parallel life, restore culture, and grow cooperative wealth.
+            </motion.p>
+
+            {/* CTAs */}
+            <div className="mt-6 flex gap-3 flex-col xs:flex-row">
               <motion.a
                 href="/join"
                 whileHover={{ y: -2, boxShadow: '0 0 40px rgba(251,191,36,0.35)' }}
                 whileTap={{ scale: 0.98 }}
-                className="px-5 py-3 rounded-2xl bg-amber-400 text-black font-semibold transition"
+                className="px-5 py-3 rounded-2xl bg-amber-400 text-black font-semibold text-center transition"
                 {...fadeUp(0.18)}
               >
-                ✊ Join the Movement
+                ✋ Join Us
               </motion.a>
               <motion.a
-                href="#principles"
+                href="#manifesto"
                 whileHover={{ y: -2 }}
                 whileTap={{ scale: 0.98 }}
-                className="px-5 py-3 rounded-2xl border border-white/15 text-sm hover:bg-white/5 transition"
+                className="px-5 py-3 rounded-2xl border border-white/15 text-sm hover:bg-white/5 transition text-center"
                 {...fadeUp(0.2)}
               >
-                Read the Principles
+                Read Our Manifesto
               </motion.a>
             </div>
 
@@ -240,30 +242,32 @@ export default function HomePage() {
             </motion.p>
           </div>
 
-          {/* Right: Pulse card */}
+          {/* Right: Daily Pulse (collapsible on mobile) */}
           <motion.aside
-            className="lg:col-span-5 p-6 rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl shadow-[0_0_35px_rgba(255,255,255,0.05)]"
+            className="lg:col-span-5 p-5 rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl shadow-[0_0_35px_rgba(255,255,255,0.05)]"
             {...fadeUp(0.18)}
           >
-            <h3 className="text-lg font-semibold">🫀 Daily Pulse</h3>
-            <p className="text-sm text-slate-300/80 mt-2">Gatishil moves every day — small decisions, big rhythm.</p>
+            <h3 className="text-base sm:text-lg font-semibold">🫀 Daily Pulse</h3>
+            <p className="text-xs sm:text-sm text-slate-300/80 mt-1">
+              Gatishil moves every day — small decisions, big rhythm.
+            </p>
 
-            <div className="mt-4 grid grid-cols-1 gap-3">
+            <div className="mt-3 grid grid-cols-1 gap-3">
               <motion.div className="grid grid-cols-2 gap-3" {...fadeUp(0.22)}>
-                <div className="p-4 rounded-xl bg-white/5 border border-white/10">
-                  <p className="text-slate-300/80 text-xs">Today’s Poll</p>
-                  <p className="text-amber-200 font-semibold mt-1 text-sm">Should ward meetings livestream?</p>
-                  <a href="/polls" className="inline-block mt-3 text-xs font-semibold underline underline-offset-4">Vote now →</a>
+                <div className="p-3 rounded-xl bg-white/5 border border-white/10">
+                  <p className="text-slate-300/80 text-[11px]">Today’s Poll</p>
+                  <p className="text-amber-200 font-semibold mt-1 text-xs sm:text-sm">Should ward meetings livestream?</p>
+                  <a href="/polls" className="inline-block mt-2 text-[11px] font-semibold underline underline-offset-4">Vote now →</a>
                 </div>
-                <div className="p-4 rounded-xl bg-white/5 border border-white/10">
-                  <p className="text-slate-300/80 text-xs">Active Proposal</p>
-                  <p className="text-amber-200 font-semibold mt-1 text-sm">Publish MLA attendance weekly</p>
-                  <a href="/proposals" className="inline-block mt-3 text-xs font-semibold underline underline-offset-4">Review →</a>
+                <div className="p-3 rounded-xl bg-white/5 border border-white/10">
+                  <p className="text-slate-300/80 text-[11px]">Active Proposal</p>
+                  <p className="text-amber-200 font-semibold mt-1 text-xs sm:text-sm">Publish MLA attendance weekly</p>
+                  <a href="/proposals" className="inline-block mt-2 text-[11px] font-semibold underline underline-offset-4">Review →</a>
                 </div>
               </motion.div>
 
-              <motion.div className="p-4 rounded-xl bg-white/5 border border-white/10" {...fadeUp(0.26)}>
-                <p className="text-xs text-slate-300/80">Quick Join</p>
+              <motion.div className="p-3 rounded-xl bg-white/5 border border-white/10" {...fadeUp(0.26)}>
+                <p className="text-[11px] text-slate-300/80">Quick Join</p>
                 <div className="mt-2 flex gap-2">
                   <a href="/join" className="flex-1 px-3 py-2 text-sm text-black bg-amber-300 rounded-lg text-center font-semibold">Start</a>
                   <a href="/explore" className="px-3 py-2 border border-white/10 rounded-lg text-sm">Explore</a>
@@ -274,132 +278,170 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* PRINCIPLES — Six Jaw-Dropping Icon Blocks */}
-      <section id="principles" className="relative z-10 py-14">
-        <div className="max-w-7xl mx-auto px-6 md:px-10 lg:px-16">
+      {/* MANIFESTO — 8 Blocks */}
+      <section className="relative z-10 py-10 sm:py-12">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-16">
           <SectionTitle
-            kicker="Principles"
-            title="A Democracy That Breathes"
-            subtitle="DAO is our ancient DNA — Guthi, Bhakari, Mandal — reborn in code."
+            id="manifesto"
+            kicker="Manifesto"
+            title="Clear commitments, not empty words."
+            subtitle="Eight shields of the powerless — simple enough to retell at the tea shop."
           />
 
-          <div className="max-w-6xl mx-auto grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-            {/* 🔥 From Ashes to Spark */}
-            <motion.div
-              {...fadeUp(0.02)}
-              className="p-6 rounded-2xl bg-white/5 border border-white/10 shadow-[0_0_35px_rgba(255,255,255,0.04)]"
-            >
-              <h3 className="font-semibold text-lg flex items-center gap-2">
-                <span role="img" aria-label="spark">🔥</span> From Ashes to Spark
+          <div className="max-w-6xl mx-auto grid gap-4 sm:gap-6 md:grid-cols-2 lg:grid-cols-3">
+            {/* 1 Courage */}
+            <motion.div {...fadeUp(0.02)} className="p-5 sm:p-6 rounded-2xl bg-white/5 border border-white/10">
+              <h3 className="font-semibold text-base sm:text-lg flex items-center gap-2">
+                🔥 Courage
               </h3>
-              <p className="text-slate-300/80 mt-2 text-sm">
-                Their greed isn’t our grave — it’s ignition. We are not the end of their story; we are the spark that begins a new one.
-              </p>
+              <ul className="mt-2 space-y-2 text-slate-300/85 text-sm">
+                <li>• A goat tied too long forgets the taste of grass.</li>
+                <li>• One voice in darkness sparks others to speak.</li>
+              </ul>
             </motion.div>
 
-            {/* 🧬 DAO = Our Ancient DNA */}
-            <motion.div
-              {...fadeUp(0.05)}
-              className="p-6 rounded-2xl bg-white/5 border border-white/10 shadow-[0_0_35px_rgba(255,255,255,0.04)]"
-            >
-              <h3 className="font-semibold text-lg flex items-center gap-2">
-                <span role="img" aria-label="dna">🧬</span> DAO = Our Ancient DNA
+            {/* 2 Livelihood */}
+            <motion.div {...fadeUp(0.04)} className="p-5 sm:p-6 rounded-2xl bg-white/5 border border-white/10">
+              <h3 className="font-semibold text-base sm:text-lg flex items-center gap-2">
+                🌱 Livelihood
               </h3>
-              <p className="text-slate-300/80 mt-2 text-sm">
-                Decentralized, Autonomous, Organized — not foreign software, but Guthi, Bhakari, and Mandal reborn with technology.
-              </p>
+              <ul className="mt-2 space-y-2 text-slate-300/85 text-sm">
+                <li>• The elephant rope: strength wasted if you think you’re still tied.</li>
+                <li>• Eat from your own harvest — no one can buy your hunger.</li>
+              </ul>
             </motion.div>
 
-            {/* 🌳 Roots Before Thrones */}
-            <motion.div
-              {...fadeUp(0.08)}
-              className="p-6 rounded-2xl bg-white/5 border border-white/10 shadow-[0_0_35px_rgba(255,255,255,0.04)]"
-            >
-              <h3 className="font-semibold text-lg flex items-center gap-2">
-                <span role="img" aria-label="roots">🌳</span> Roots Before Thrones
+            {/* 3 Justice */}
+            <motion.div {...fadeUp(0.06)} className="p-5 sm:p-6 rounded-2xl bg-white/5 border border-white/10">
+              <h3 className="font-semibold text-base sm:text-lg flex items-center gap-2">
+                ⚖️ Justice
               </h3>
-              <p className="text-slate-300/80 mt-2 text-sm">
-                We build Pasaguthi (roots) and ZenSara (soil) first. When roots run deep and soil is fertile, politics becomes expression, not a fight.
-              </p>
+              <ul className="mt-2 space-y-2 text-slate-300/85 text-sm">
+                <li>• If the fence eats the crops, who protects the field?</li>
+                <li>• One law for all — minister and mason alike.</li>
+              </ul>
             </motion.div>
 
-            {/* 🛡️ Service, Not Career */}
-            <motion.div
-              {...fadeUp(0.11)}
-              className="p-6 rounded-2xl bg-white/5 border border-white/10 shadow-[0_0_35px_rgba(255,255,255,0.04)]"
-            >
-              <h3 className="font-semibold text-lg flex items-center gap-2">
-                <span role="img" aria-label="shield">🛡️</span> Service, Not Career
+            {/* 4 Transparency */}
+            <motion.div {...fadeUp(0.08)} className="p-5 sm:p-6 rounded-2xl bg-white/5 border border-white/10">
+              <h3 className="font-semibold text-base sm:text-lg flex items-center gap-2">
+                🌍 Transparency
               </h3>
-              <p className="text-slate-300/80 mt-2 text-sm">
-                Our livelihood stands outside politics — farms, crafts, cooperatives, diaspora. Politics is duty, not salary. हामी पैसा माग्दैनौं, हामी भविष्य उमार्छौं।
-              </p>
+              <ul className="mt-2 space-y-2 text-slate-300/85 text-sm">
+                <li>• A thief steals in the dark — decisions must live in sunlight.</li>
+                <li>• Muddy water hides fish; clear water builds trust.</li>
+              </ul>
             </motion.div>
 
-            {/* 🫁 A Democracy That Breathes */}
-            <motion.div
-              {...fadeUp(0.14)}
-              className="p-6 rounded-2xl bg-white/5 border border-white/10 shadow-[0_0_35px_rgba(255,255,255,0.04)]"
-            >
-              <h3 className="font-semibold text-lg flex items-center gap-2">
-                <span role="img" aria-label="lungs">🫁</span> A Democracy That Breathes
+            {/* 5 Solidarity */}
+            <motion.div {...fadeUp(0.1)} className="p-5 sm:p-6 rounded-2xl bg-white/5 border border-white/10">
+              <h3 className="font-semibold text-base sm:text-lg flex items-center gap-2">
+                🤝 Solidarity
               </h3>
-              <p className="text-slate-300/80 mt-2 text-sm">
-                Not once in five years, but every day. Tech is our new chauṭarī; accountability is immediate; youth vote in every decision.
-              </p>
+              <ul className="mt-2 space-y-2 text-slate-300/85 text-sm">
+                <li>• One stick breaks; a bundle does not.</li>
+                <li>• One drum sounds hollow; many drums shake the earth.</li>
+              </ul>
             </motion.div>
 
-            {/* 👑✖️ The Call Beyond Thrones */}
-            <motion.div
-              {...fadeUp(0.17)}
-              className="p-6 rounded-2xl bg-white/5 border border-white/10 shadow-[0_0_35px_rgba(255,255,255,0.04)]"
-            >
-              <h3 className="font-semibold text-lg flex items-center gap-2">
-                <span role="img" aria-label="no-crown">👑✖️</span> The Call Beyond Thrones
+            {/* 6 Servitude */}
+            <motion.div {...fadeUp(0.12)} className="p-5 sm:p-6 rounded-2xl bg-white/5 border border-white/10">
+              <h3 className="font-semibold text-base sm:text-lg flex items-center gap-2">
+                🛠 Servitude
               </h3>
-              <p className="text-slate-300/80 mt-2 text-sm">
-                We don’t seize thrones; we make them irrelevant. We are the DAO of the Powerless — and the rhythm has already begun.
-              </p>
+              <ul className="mt-2 space-y-2 text-slate-300/85 text-sm">
+                <li>• Politics is not a shop; we close the shop.</li>
+                <li>• Serving is like carrying water to a thirsty neighbor — duty, not salary.</li>
+              </ul>
+            </motion.div>
+
+            {/* 7 Culture */}
+            <motion.div {...fadeUp(0.14)} className="p-5 sm:p-6 rounded-2xl bg-white/5 border border-white/10">
+              <h3 className="font-semibold text-base sm:text-lg flex items-center gap-2">
+                🎶 Culture
+              </h3>
+              <ul className="mt-2 space-y-2 text-slate-300/85 text-sm">
+                <li>• A drum has rhythm only when both sides strike.</li>
+                <li>• A feast works because everyone brings a dish.</li>
+              </ul>
+            </motion.div>
+
+            {/* 8 Freedom */}
+            <motion.div {...fadeUp(0.16)} className="p-5 sm:p-6 rounded-2xl bg-white/5 border border-white/10">
+              <h3 className="font-semibold text-base sm:text-lg flex items-center gap-2">
+                ❤️ Freedom
+              </h3>
+              <ul className="mt-2 space-y-2 text-slate-300/85 text-sm">
+                <li>• A throne looks powerful only while we kneel.</li>
+                <li>• A bird in a cage forgets the sky until it flies.</li>
+              </ul>
             </motion.div>
           </div>
+
+          <p className="mt-8 text-center text-[12px] text-slate-400">
+            Learn it. Share it. Live it.
+          </p>
         </div>
       </section>
 
-      {/* GOALS */}
-      <section className="relative z-10 pb-14">
-        <div className="max-w-7xl mx-auto px-6 md:px-10 lg:px-16">
-          <SectionTitle kicker="Goals" title="Now → Next → Later" subtitle="A rhythm, not a rush." />
-          <div className="max-w-5xl mx-auto grid md:grid-cols-3 gap-6">
-            {[
-              { k: 'Now', t: 'Launch Movement Hub', d: 'Clear story, strong CTA, daily pulse.' },
-              { k: 'Next', t: 'Interactive Decisions', d: 'Polls, proposals, and accountability feeds.' },
-              { k: 'Later', t: 'DAO Party', d: 'Formalize when members are economically independent.' }
-            ].map((g, i) => (
-              <motion.div
-                key={g.k}
-                {...fadeUp(0.05 * i)}
-                className="p-6 rounded-2xl bg-white/5 border border-white/10"
-              >
-                <p className="uppercase tracking-widest text-[10px] text-amber-300/80">{g.k}</p>
-                <h3 className="font-semibold mt-2">{g.t}</h3>
-                <p className="text-slate-300/80 text-sm mt-2">{g.d}</p>
-              </motion.div>
-            ))}
+      {/* OUR FOUR STONES — replaces "Goals" */}
+      <section className="relative z-10 pb-10 sm:pb-14">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-16">
+          <SectionTitle
+            kicker="Foundations"
+            title="Our Four Stones"
+            subtitle="Unshakable foundations for a democracy that moves."
+          />
+
+          <div className="max-w-5xl mx-auto grid gap-4 sm:gap-6 sm:grid-cols-2">
+            {/* Tech-Forward Campaigns */}
+            <motion.div {...fadeUp(0.02)} className="p-5 sm:p-6 rounded-2xl bg-white/5 border border-white/10">
+              <h3 className="text-lg font-semibold">🗳 Tech-Forward Campaigns</h3>
+              <p className="mt-2 text-slate-300/85 text-sm">
+                <span className="font-semibold">Your Voice, Coded in Trust.</span> Like dropping your vote in a box everyone can see, but no one can steal.
+              </p>
+            </motion.div>
+
+            {/* Anti-Corruption */}
+            <motion.div {...fadeUp(0.04)} className="p-5 sm:p-6 rounded-2xl bg-white/5 border border-white/10">
+              <h3 className="text-lg font-semibold">💰 Anti-Corruption</h3>
+              <p className="mt-2 text-slate-300/85 text-sm">
+                <span className="font-semibold">Every Rupee Tracked. Every Promise Coded.</span> Like grain in a clear jar — all can see, none can steal.
+              </p>
+            </motion.div>
+
+            {/* Grassroots Mobilization */}
+            <motion.div {...fadeUp(0.06)} className="p-5 sm:p-6 rounded-2xl bg-white/5 border border-white/10">
+              <h3 className="text-lg font-semibold">🌱 Grassroots Mobilization</h3>
+              <p className="mt-2 text-slate-300/85 text-sm">
+                <span className="font-semibold">The Party is You. The Mandate is Ours.</span> Like a field where all farmers plant — no harvest unless all work.
+              </p>
+            </motion.div>
+
+            {/* Philosophical Foundation */}
+            <motion.div {...fadeUp(0.08)} className="p-5 sm:p-6 rounded-2xl bg-white/5 border border-white/10">
+              <h3 className="text-lg font-semibold">📜 Philosophical Foundation</h3>
+              <p className="mt-2 text-slate-300/85 text-sm">
+                <span className="font-semibold">A New Dharma for a Digital Nepal.</span> Like ancient guthi rules, but written in code — fair, tamper-proof, shared by all.
+              </p>
+            </motion.div>
           </div>
         </div>
       </section>
 
       {/* FOOTER */}
-      <footer className="relative z-10 py-10 text-sm text-slate-400">
-        <div className="max-w-7xl mx-auto px-6 md:px-10 lg:px-16 flex flex-col sm:flex-row items-center justify-between gap-3">
-          <p>© {new Date().getFullYear()} GatishilNepal.org · A democracy that moves.</p>
-          <nav className="flex gap-4">
-            <a href="/join" className="hover:text-white">Join</a>
-            <a href="/polls" className="hover:text-white">Polls</a>
-            <a href="/proposals" className="hover:text-white">Proposals</a>
-            <a href="/blog" className="hover:text-white">Blog</a>
-            <a href="/docs/PRD" className="hover:text-white">PRD</a>
-          </nav>
+      <footer className="relative z-10 py-8 sm:py-10 text-sm text-slate-300">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-16">
+          <div className="flex flex-col items-center gap-2">
+            <p className="text-center">© {new Date().getFullYear()} GatishilNepal.org</p>
+            <p className="text-center text-slate-400">Democracy That Flows — Not Stagnates.</p>
+            <nav className="mt-3 flex flex-wrap items-center justify-center gap-4 text-slate-300">
+              <a href="/join" className="hover:text-white">Join</a>
+              <a href="/polls" className="hover:text-white">Polls</a>
+              <a href="/proposals" className="hover:text-white">Proposals</a>
+              <a href="/blog" className="hover:text-white">Blog</a>
+            </nav>
+          </div>
         </div>
       </footer>
     </main>
