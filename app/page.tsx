@@ -4,11 +4,11 @@ import { motion, useScroll, useTransform } from 'framer-motion';
 import { useMemo } from 'react';
 
 /**
- * Gatishil — Animated Homepage (Subtle Cosmic base + starfield that fades in on scroll)
- * - No extra libs beyond framer-motion + Tailwind (already in your stack)
- * - Hero: staggered reveal + spring CTAs
- * - Cards: viewport-aware fade/slide-in
- * - Background: elegant gradient, starfield layer fades in as you scroll
+ * Gatishil — Final Animated Homepage
+ * - Subtle cosmic gradient + starfield fades in on scroll
+ * - Hero: staggered reveal, spring CTAs
+ * - 4-button CTA row: Why / How / What / Insights (ZenTrust style)
+ * - Logo in header (/public/gatishil-logo.png), hides if missing
  */
 
 const fadeUp = (delay = 0) => ({
@@ -18,10 +18,7 @@ const fadeUp = (delay = 0) => ({
 
 const staggerParent = {
   initial: { opacity: 1 },
-  animate: {
-    opacity: 1,
-    transition: { staggerChildren: 0.12, delayChildren: 0.1 }
-  }
+  animate: { opacity: 1, transition: { staggerChildren: 0.12, delayChildren: 0.1 } }
 };
 
 function SectionTitle({ kicker, title, subtitle }: { kicker?: string; title: string; subtitle?: string }) {
@@ -34,37 +31,30 @@ function SectionTitle({ kicker, title, subtitle }: { kicker?: string; title: str
   );
 }
 
-/** Starfield: pure CSS layers, opacity bound to scroll progress (0 → 35% = 0 → 1) */
+/** Starfield: CSS layers, opacity bound to scroll progress */
 function Starfield() {
   const { scrollYProgress } = useScroll();
   const opacity = useTransform(scrollYProgress, [0, 0.35], [0, 1]);
 
-  // Precompute star layers (static strings → faster)
   const layers = useMemo(() => {
     const gen = (count: number) =>
       Array.from({ length: count })
         .map(() => {
-          const x = Math.floor(Math.random() * 2000) - 1000; // spread beyond viewport
+          const x = Math.floor(Math.random() * 2000) - 1000;
           const y = Math.floor(Math.random() * 2000) - 1000;
           return `${x}px ${y}px 1px rgba(255,255,255,0.9)`;
         })
         .join(', ');
-    return {
-      small: gen(500),
-      mid: gen(200),
-      big: gen(80)
-    };
+    return { small: gen(500), mid: gen(200), big: gen(80) };
   }, []);
 
   return (
     <motion.div style={{ opacity }} className="pointer-events-none fixed inset-0 z-0">
-      {/* three static star layers that subtly twinkle via keyframes inlined below */}
       <div className="absolute inset-0">
         <div className="stars-small" />
         <div className="stars-mid" />
         <div className="stars-big" />
       </div>
-
       <style jsx global>{`
         .stars-small,
         .stars-mid,
@@ -79,22 +69,9 @@ function Starfield() {
           animation: twinkle 5s linear infinite;
           transform: translate(-50%, -50%);
         }
-        .stars-mid {
-          width: 2px;
-          height: 2px;
-          box-shadow: ${layers.mid};
-          animation-duration: 7s;
-        }
-        .stars-big {
-          width: 3px;
-          height: 3px;
-          box-shadow: ${layers.big};
-          animation-duration: 9s;
-        }
-        @keyframes twinkle {
-          0%, 100% { opacity: 0.8; }
-          50%      { opacity: 0.3; }
-        }
+        .stars-mid { width: 2px; height: 2px; box-shadow: ${layers.mid}; animation-duration: 7s; }
+        .stars-big { width: 3px; height: 3px; box-shadow: ${layers.big}; animation-duration: 9s; }
+        @keyframes twinkle { 0%,100%{opacity:0.8;} 50%{opacity:0.3;} }
       `}</style>
     </motion.div>
   );
@@ -112,17 +89,15 @@ export default function HomePage() {
       <Starfield />
 
       {/* Header */}
-      <header className="container max-w-7xl mx-auto px-6 md:px-10 lg:px-16 pt-8 md:pt-10 relative z-10">
+      <header className="max-w-7xl mx-auto px-6 md:px-10 lg:px-16 pt-8 md:pt-10 relative z-10">
         <div className="flex items-center justify-between">
           <a href="/" className="flex items-center gap-3 group">
-            <motion.div
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              transition={{ type: 'spring', stiffness: 120, damping: 14 }}
-              className="h-9 w-9 rounded-xl bg-white/10 border border-white/10 grid place-items-center shadow-[0_0_35px_rgba(251,191,36,0.25)] group-hover:shadow-[0_0_55px_rgba(251,191,36,0.35)] transition-shadow"
-            >
-              ✶
-            </motion.div>
+            <img
+              src="/gatishil-logo.png"
+              alt="Gatishil Nepal"
+              className="h-9 w-auto"
+              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+            />
             <div>
               <p className="text-[10px] text-amber-300/90 uppercase tracking-widest">Gatishil</p>
               <p className="text-[11px] text-slate-300/70">DAO · Guthi · Movement</p>
@@ -157,9 +132,9 @@ export default function HomePage() {
       </header>
 
       {/* HERO */}
-      <section className="relative z-10 pt-16 md:pt-20 pb-14">
-        <div className="container max-w-7xl mx-auto px-6 md:px-10 lg:px-16 grid md:grid-cols-2 gap-12 items-center">
-          <motion.div variants={staggerParent} initial="initial" animate="animate">
+      <section className="relative z-10 pt-16 md:pt-20 pb-10">
+        <div className="max-w-7xl mx-auto px-6 md:px-10 lg:px-16 grid lg:grid-cols-12 gap-12 items-center">
+          <motion.div variants={staggerParent} initial="initial" animate="animate" className="lg:col-span-7">
             <motion.span
               className="inline-block text-[10px] uppercase tracking-widest text-amber-300/90 px-2 py-1 border border-amber-300/30 rounded-full"
               {...fadeUp(0)}
@@ -167,21 +142,16 @@ export default function HomePage() {
               GatishilNepal.org
             </motion.span>
 
-            <motion.h1
-              className="text-4xl md:text-6xl font-extrabold leading-tight mt-4"
-              {...fadeUp(0.05)}
-            >
+            <motion.h1 className="text-4xl md:text-6xl font-extrabold leading-tight mt-4" {...fadeUp(0.05)}>
               The <span className="bg-clip-text text-transparent bg-gradient-to-r from-amber-300 via-orange-400 to-rose-400">DAO Party</span> of the Powerless
             </motion.h1>
 
-            <motion.p
-              className="mt-5 text-slate-300/90 text-lg max-w-2xl"
-              {...fadeUp(0.12)}
-            >
+            <motion.p className="mt-5 text-slate-300/90 text-lg max-w-2xl" {...fadeUp(0.12)}>
               Not another party of faces — a movement that makes thrones irrelevant.
               Build parallel life, restore culture, and grow cooperative wealth. Join the rhythm.
             </motion.p>
 
+            {/* Primary CTAs */}
             <motion.div className="mt-8 flex gap-3 flex-col sm:flex-row" variants={staggerParent}>
               <motion.a
                 href="/join"
@@ -209,7 +179,27 @@ export default function HomePage() {
               </motion.a>
             </motion.div>
 
-            <motion.p className="text-[11px] text-slate-400 mt-3" {...fadeUp(0.22)}>
+            {/* 4-button CTA row (ZenTrust style) */}
+            <motion.div
+              className="mt-8 flex flex-wrap gap-3"
+              initial={{ opacity: 0, y: 14 }}
+              animate={{ opacity: 1, y: 0, transition: { duration: 0.6, ease: 'easeOut', delay: 0.2 } }}
+            >
+              <a href="/why" className="px-4 py-2 rounded-2xl bg-white text-black text-sm font-semibold hover:scale-[1.02] transition">
+                🌱 Why We Exist
+              </a>
+              <a href="/how" className="px-4 py-2 rounded-2xl border border-white/30 text-sm hover:bg-white/5 transition">
+                🛠 How We Work
+              </a>
+              <a href="/what" className="px-4 py-2 rounded-2xl bg-emerald-500 text-white text-sm font-semibold hover:scale-[1.02] transition">
+                🌍 What We Offer
+              </a>
+              <a href="/insights" className="px-4 py-2 rounded-2xl bg-violet-600 text-white text-sm font-semibold hover:scale-[1.02] transition">
+                ✨ Our Insights
+              </a>
+            </motion.div>
+
+            <motion.p className="text-[11px] text-slate-400 mt-3" {...fadeUp(0.26)}>
               By joining you agree to transparent, tamper-proof decisions.
             </motion.p>
           </motion.div>
@@ -217,12 +207,10 @@ export default function HomePage() {
           {/* Right: Pulse card */}
           <motion.aside
             {...fadeUp(0.15)}
-            className="p-6 rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl shadow-[0_0_35px_rgba(255,255,255,0.05)]"
+            className="lg:col-span-5 p-6 rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl shadow-[0_0_35px_rgba(255,255,255,0.05)]"
           >
             <h3 className="text-lg font-semibold">🫀 Daily Pulse</h3>
-            <p className="text-sm text-slate-300/80 mt-2">
-              Gatishil moves every day — small decisions, big rhythm.
-            </p>
+            <p className="text-sm text-slate-300/80 mt-2">Gatishil moves every day — small decisions, big rhythm.</p>
 
             <div className="mt-4 grid grid-cols-1 gap-3">
               <motion.div
@@ -235,16 +223,12 @@ export default function HomePage() {
                 <div className="p-4 rounded-xl bg-white/5 border border-white/10">
                   <p className="text-slate-300/80 text-xs">Today’s Poll</p>
                   <p className="text-amber-200 font-semibold mt-1 text-sm">Should ward meetings livestream?</p>
-                  <a href="/polls" className="inline-block mt-3 text-xs font-semibold underline underline-offset-4">
-                    Vote now →
-                  </a>
+                  <a href="/polls" className="inline-block mt-3 text-xs font-semibold underline underline-offset-4">Vote now →</a>
                 </div>
                 <div className="p-4 rounded-xl bg-white/5 border border-white/10">
                   <p className="text-slate-300/80 text-xs">Active Proposal</p>
                   <p className="text-amber-200 font-semibold mt-1 text-sm">Publish MLA attendance weekly</p>
-                  <a href="/proposals" className="inline-block mt-3 text-xs font-semibold underline underline-offset-4">
-                    Review →
-                  </a>
+                  <a href="/proposals" className="inline-block mt-3 text-xs font-semibold underline underline-offset-4">Review →</a>
                 </div>
               </motion.div>
 
@@ -257,12 +241,8 @@ export default function HomePage() {
               >
                 <p className="text-xs text-slate-300/80">Quick Join</p>
                 <div className="mt-2 flex gap-2">
-                  <a href="/join" className="flex-1 px-3 py-2 text-sm text-black bg-amber-300 rounded-lg text-center font-semibold">
-                    Start
-                  </a>
-                  <a href="/explore" className="px-3 py-2 border border-white/10 rounded-lg text-sm">
-                    Explore
-                  </a>
+                  <a href="/join" className="flex-1 px-3 py-2 text-sm text-black bg-amber-300 rounded-lg text-center font-semibold">Start</a>
+                  <a href="/explore" className="px-3 py-2 border border-white/10 rounded-lg text-sm">Explore</a>
                 </div>
               </motion.div>
             </div>
@@ -272,7 +252,7 @@ export default function HomePage() {
 
       {/* PRINCIPLES */}
       <section id="principles" className="relative z-10 py-14">
-        <div className="container max-w-7xl mx-auto px-6 md:px-10 lg:px-16">
+        <div className="max-w-7xl mx-auto px-6 md:px-10 lg:px-16">
           <SectionTitle
             kicker="Principles"
             title="DAO as Nepali Wisdom"
@@ -302,7 +282,7 @@ export default function HomePage() {
 
       {/* GOALS */}
       <section className="relative z-10 pb-14">
-        <div className="container max-w-7xl mx-auto px-6 md:px-10 lg:px-16">
+        <div className="max-w-7xl mx-auto px-6 md:px-10 lg:px-16">
           <SectionTitle kicker="Goals" title="Now → Next → Later" subtitle="A rhythm, not a rush." />
           <div className="max-w-5xl mx-auto grid md:grid-cols-3 gap-6">
             {[
@@ -329,7 +309,7 @@ export default function HomePage() {
 
       {/* FOOTER */}
       <footer className="relative z-10 py-10 text-sm text-slate-400">
-        <div className="container max-w-7xl mx-auto px-6 md:px-10 lg:px-16 flex flex-col sm:flex-row items-center justify-between gap-3">
+        <div className="max-w-7xl mx-auto px-6 md:px-10 lg:px-16 flex flex-col sm:flex-row items-center justify-between gap-3">
           <p>© {new Date().getFullYear()} GatishilNepal.org · A democracy that moves.</p>
           <nav className="flex gap-4">
             <a href="/join" className="hover:text-white">Join</a>
@@ -341,11 +321,4 @@ export default function HomePage() {
       </footer>
     </main>
   );
-}
-
-/* Tailwind helper (shared feel with ZenTrust) — if you prefer, move to globals.css */
-declare global {
-  interface CSSStyleDeclaration {
-    // allow css custom properties above without TS complaining
-  }
 }
