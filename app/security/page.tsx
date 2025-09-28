@@ -1,13 +1,18 @@
-// app/security/page.tsx — Set password once, then go to /dashboard
+// app/security/page.tsx — Set password once, then go to /dashboard (Suspense-safe)
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 
-export default function SecurityPage() {
+// Stop static prerender so we don’t trip over CSR hooks during build
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
+function SecurityInner() {
   const router = useRouter();
   const params = useSearchParams();
+
   const [email, setEmail] = useState<string>('');
   const [hasSession, setHasSession] = useState<boolean>(false);
   const [password, setPassword] = useState<string>('');
@@ -15,20 +20,18 @@ export default function SecurityPage() {
   const [msg, setMsg] = useState<string>('');
   const [err, setErr] = useState<string>('');
 
-  // optionally use name/role to enrich profile on first load
   useEffect(() => {
     (async () => {
       const { data } = await supabase.auth.getSession();
       const sess = data?.session ?? null;
       setHasSession(!!sess);
-      const em = sess?.user?.email ?? '';
-      setEmail(em);
+      setEmail(sess?.user?.email ?? '');
 
-      // optional: save name/role if present
+      // Optional: enrich profile on first load using query params
       const name = params.get('name');
       const role = params.get('role');
       if (sess && (name || role)) {
-        // if you have a profiles table, you can persist here
+        // Example: if you have public.profiles, upsert here
         // await supabase.from('profiles').upsert({ user_id: sess.user.id, name, role });
       }
     })();
@@ -41,9 +44,9 @@ export default function SecurityPage() {
       const { error } = await supabase.auth.updateUser({ password });
       if (error) throw error;
       setMsg('Password set. Redirecting…');
-      setTimeout(() => router.replace('/dashboard'), 500);
-    } catch (e:any) {
-      setErr(e.message || 'Failed to set password.');
+      setTimeout(() => router.replace('/dashboard'), 600);
+    } catch (e: any) {
+      setErr(e?.message || 'Failed to set password.');
     } finally {
       setSaving(false);
     }
@@ -55,24 +58,32 @@ export default function SecurityPage() {
         <p className="text-xs uppercase tracking-widest text-sky-300/80">GatishilNepal.org</p>
         <h1 className="text-2xl md:text-4xl font-bold mt-2">Security</h1>
         <p className="text-slate-300/90 mt-2">
-          First time you proved your identity with OTP, email, or OAuth. Now set a password so next time it’s one-tap via your device’s saved credentials.
+          You proved your identity with OTP/email/OAuth. Now set a password so next time your device
+          can unlock it with biometrics (no OTP loops).
         </p>
 
         {!hasSession ? (
-          <p className="mt-6 text-sm text-rose-300">Not signed in. Go to <a href="/join" className="underline">/join</a>.</p>
+          <p className="mt-6 text-sm text-rose-300">
+            Not signed in. Go to <a href="/join" className="underline">/join</a>.
+          </p>
         ) : (
           <form onSubmit={savePassword} className="mt-6 space-y-3">
-            <div className="text-sm text-slate-300/80">Signed in as <span className="text-white font-semibold">{email || 'unknown'}</span></div>
+            <div className="text-sm text-slate-300/80">
+              Signed in as <span className="text-white font-semibold">{email || 'unknown'}</span>
+            </div>
             <input
               type="password"
               required
               minLength={8}
               value={password}
-              onChange={(e)=>setPassword(e.target.value)}
+              onChange={(e) => setPassword(e.target.value)}
               placeholder="New password (min 8 chars)"
               className="w-full rounded-xl bg-transparent border border-white/15 px-3 py-2 placeholder:text-slate-400"
             />
-            <button disabled={saving || password.length<8} className="w-full px-4 py-2 rounded-xl bg-white text-black font-semibold disabled:opacity-60">
+            <button
+              disabled={saving || password.length < 8}
+              className="w-full px-4 py-2 rounded-xl bg-white text-black font-semibold disabled:opacity-60"
+            >
               {saving ? 'Saving…' : 'Save & Go to Dashboard'}
             </button>
             {!!msg && <p className="text-xs text-emerald-300">{msg}</p>}
@@ -81,5 +92,17 @@ export default function SecurityPage() {
         )}
       </section>
     </main>
+  );
+}
+
+export default function SecurityPage() {
+  return (
+    <Suspense fallback={
+      <main className="min-h-dvh grid place-items-center text-sm text-slate-400">
+        Preparing security setup…
+      </main>
+    }>
+      <SecurityInner />
+    </Suspense>
   );
 }
