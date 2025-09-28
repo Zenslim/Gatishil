@@ -1,27 +1,23 @@
 'use client';
 
 import { motion, useScroll, useTransform } from 'framer-motion';
-import { useMemo } from 'react';
 
 /**
- * Gatishil — Final Animated Homepage
- * - Subtle cosmic gradient + starfield fades in on scroll
- * - Hero: staggered reveal, spring CTAs
- * - 4-button CTA row: Why / How / What / Insights (ZenTrust style)
+ * Gatishil — Final Animated Homepage (no duplicate "Why")
+ * - Subtle cosmic gradient + CSS-only starfield (fades in on scroll)
+ * - Hero: staggered reveal, spring CTAs (Join + Read only)
+ * - 4-button CTA row: Why / How / What / Insights
  * - Logo in header (/public/gatishil-logo.png), hides if missing
  */
 
 const fadeUp = (delay = 0) => ({
   initial: { opacity: 0, y: 18 },
-  animate: { opacity: 1, y: 0, transition: { duration: 0.7, ease: 'easeOut', delay } }
+  whileInView: { opacity: 1, y: 0, transition: { duration: 0.7, ease: 'easeOut', delay } },
+  viewport: { once: true, amount: 0.4 }
 });
 
-const staggerParent = {
-  initial: { opacity: 1 },
-  animate: { opacity: 1, transition: { staggerChildren: 0.12, delayChildren: 0.1 } }
-};
-
-function SectionTitle({ kicker, title, subtitle }: { kicker?: string; title: string; subtitle?: string }) {
+function SectionTitle(props: { kicker?: string; title: string; subtitle?: string }) {
+  const { kicker, title, subtitle } = props;
   return (
     <div className="text-center max-w-3xl mx-auto mb-8">
       {kicker && <p className="uppercase tracking-widest text-[10px] text-amber-300/85">{kicker}</p>}
@@ -31,47 +27,54 @@ function SectionTitle({ kicker, title, subtitle }: { kicker?: string; title: str
   );
 }
 
-/** Starfield: CSS layers, opacity bound to scroll progress */
+/** CSS-only starfield, opacity bound to scroll progress (no template strings) */
 function Starfield() {
   const { scrollYProgress } = useScroll();
   const opacity = useTransform(scrollYProgress, [0, 0.35], [0, 1]);
 
-  const layers = useMemo(() => {
-    const gen = (count: number) =>
-      Array.from({ length: count })
-        .map(() => {
-          const x = Math.floor(Math.random() * 2000) - 1000;
-          const y = Math.floor(Math.random() * 2000) - 1000;
-          return `${x}px ${y}px 1px rgba(255,255,255,0.9)`;
-        })
-        .join(', ');
-    return { small: gen(500), mid: gen(200), big: gen(80) };
-  }, []);
-
   return (
-    <motion.div style={{ opacity }} className="pointer-events-none fixed inset-0 z-0">
-      <div className="absolute inset-0">
-        <div className="stars-small" />
-        <div className="stars-mid" />
-        <div className="stars-big" />
+    <motion.div style={{ opacity }} className="fixed inset-0 -z-10 pointer-events-none">
+      <div className="absolute inset-0 starfield">
+        <div className="layer layer-s"></div>
+        <div className="layer layer-m"></div>
+        <div className="layer layer-l"></div>
       </div>
-      <style jsx global>{`
-        .stars-small,
-        .stars-mid,
-        .stars-big {
-          position: absolute;
-          top: 50%;
-          left: 50%;
-          width: 1px;
-          height: 1px;
-          background: transparent;
-          box-shadow: ${layers.small};
-          animation: twinkle 5s linear infinite;
-          transform: translate(-50%, -50%);
+
+      <style jsx>{`
+        .starfield { position: absolute; inset: 0; overflow: hidden; }
+        .layer { position: absolute; inset: -50%; animation: drift 60s linear infinite; opacity: 0.9; }
+        .layer-s {
+          background-image:
+            radial-gradient(white 1px, transparent 1.5px),
+            radial-gradient(white 1px, transparent 1.5px);
+          background-size: 120px 120px, 160px 160px;
+          background-position: 0 0, 60px 80px;
+          filter: drop-shadow(0 0 1px rgba(255,255,255,0.35));
+          animation-duration: 90s;
         }
-        .stars-mid { width: 2px; height: 2px; box-shadow: ${layers.mid}; animation-duration: 7s; }
-        .stars-big { width: 3px; height: 3px; box-shadow: ${layers.big}; animation-duration: 9s; }
-        @keyframes twinkle { 0%,100%{opacity:0.8;} 50%{opacity:0.3;} }
+        .layer-m {
+          background-image:
+            radial-gradient(white 1.5px, transparent 2px),
+            radial-gradient(white 1.5px, transparent 2px);
+          background-size: 200px 200px, 260px 260px;
+          background-position: 40px 20px, 160px 100px;
+          filter: drop-shadow(0 0 2px rgba(255,255,255,0.25));
+          animation-duration: 120s;
+        }
+        .layer-l {
+          background-image:
+            radial-gradient(white 2px, transparent 2.5px),
+            radial-gradient(white 2px, transparent 2.5px);
+          background-size: 320px 320px, 420px 420px;
+          background-position: 120px 60px, 260px 180px;
+          filter: drop-shadow(0 0 3px rgba(255,255,255,0.2));
+          animation-duration: 150s;
+        }
+        @keyframes drift {
+          0%   { transform: translate3d(0, 0, 0); }
+          50%  { transform: translate3d(-2%, -3%, 0); }
+          100% { transform: translate3d(0, 0, 0); }
+        }
       `}</style>
     </motion.div>
   );
@@ -81,7 +84,7 @@ export default function HomePage() {
   return (
     <main className="relative min-h-screen bg-black text-white">
       {/* Subtle cosmic base (gradients) */}
-      <div className="absolute inset-0 -z-10 pointer-events-none">
+      <div className="absolute inset-0 -z-20 pointer-events-none">
         <div className="absolute inset-0 opacity-[0.85] bg-[radial-gradient(1200px_600px_at_50%_-10%,rgba(255,255,255,0.06),transparent_60%),radial-gradient(900px_500px_at_80%_10%,rgba(251,191,36,0.08),transparent_60%),radial-gradient(900px_500px_at_20%_10%,rgba(244,114,182,0.06),transparent_60%)]" />
       </div>
 
@@ -134,8 +137,13 @@ export default function HomePage() {
       {/* HERO */}
       <section className="relative z-10 pt-16 md:pt-20 pb-10">
         <div className="max-w-7xl mx-auto px-6 md:px-10 lg:px-16 grid lg:grid-cols-12 gap-12 items-center">
-          <motion.div variants={staggerParent} initial="initial" animate="animate" className="lg:col-span-7">
-                        </motion.span>
+          <div className="lg:col-span-7">
+            <motion.span
+              className="inline-block text-[10px] uppercase tracking-widest text-amber-300/90 px-2 py-1 border border-amber-300/30 rounded-full"
+              {...fadeUp(0)}
+            >
+              GatishilNepal.org
+            </motion.span>
 
             <motion.h1 className="text-4xl md:text-6xl font-extrabold leading-tight mt-4" {...fadeUp(0.05)}>
               The <span className="bg-clip-text text-transparent bg-gradient-to-r from-amber-300 via-orange-400 to-rose-400">DAO Party</span> of the Powerless
@@ -146,13 +154,14 @@ export default function HomePage() {
               Build parallel life, restore culture, and grow cooperative wealth. Join the rhythm.
             </motion.p>
 
-            {/* Primary CTAs */}
-            <motion.div className="mt-8 flex gap-3 flex-col sm:flex-row" variants={staggerParent}>
+            {/* Primary CTAs — keep only Join + Read (removed duplicate Why) */}
+            <div className="mt-8 flex gap-3 flex-col sm:flex-row">
               <motion.a
                 href="/join"
                 whileHover={{ y: -2, boxShadow: '0 0 40px rgba(251,191,36,0.35)' }}
                 whileTap={{ scale: 0.98 }}
                 className="px-5 py-3 rounded-2xl bg-amber-400 text-black font-semibold transition"
+                {...fadeUp(0.18)}
               >
                 ✊ Join the Movement
               </motion.a>
@@ -161,57 +170,43 @@ export default function HomePage() {
                 whileHover={{ y: -2 }}
                 whileTap={{ scale: 0.98 }}
                 className="px-5 py-3 rounded-2xl border border-white/15 text-sm hover:bg-white/5 transition"
+                {...fadeUp(0.2)}
               >
                 Read the Principles
               </motion.a>
-              <motion.a
-                href="/why"
-                whileHover={{ y: -2 }}
-                whileTap={{ scale: 0.98 }}
-                className="px-5 py-3 rounded-2xl border border-amber-400 text-amber-300 text-sm hover:bg-amber-600/10 transition"
-                        </motion.div>
+            </div>
 
             {/* 4-button CTA row (ZenTrust style) */}
-            <motion.div
-              className="mt-8 flex flex-wrap gap-3"
-              initial={{ opacity: 0, y: 14 }}
-              animate={{ opacity: 1, y: 0, transition: { duration: 0.6, ease: 'easeOut', delay: 0.2 } }}
-            >
-              <a href="/why" className="px-4 py-2 rounded-2xl bg-white text-black text-sm font-semibold hover:scale-[1.02] transition">
+            <motion.div className="mt-8 flex flex-wrap gap-3">
+              <motion.a href="/why" className="px-4 py-2 rounded-2xl bg-white text-black text-sm font-semibold hover:scale-[1.02] transition" {...fadeUp(0.24)}>
                 🌱 Why We Exist
-              </a>
-              <a href="/how" className="px-4 py-2 rounded-2xl border border-white/30 text-sm hover:bg-white/5 transition">
+              </motion.a>
+              <motion.a href="/how" className="px-4 py-2 rounded-2xl border border-white/30 text-sm hover:bg-white/5 transition" {...fadeUp(0.26)}>
                 🛠 How We Work
-              </a>
-              <a href="/what" className="px-4 py-2 rounded-2xl bg-emerald-500 text-white text-sm font-semibold hover:scale-[1.02] transition">
+              </motion.a>
+              <motion.a href="/what" className="px-4 py-2 rounded-2xl bg-emerald-500 text-white text-sm font-semibold hover:scale-[1.02] transition" {...fadeUp(0.28)}>
                 🌍 What We Offer
-              </a>
-              <a href="/insights" className="px-4 py-2 rounded-2xl bg-violet-600 text-white text-sm font-semibold hover:scale-[1.02] transition">
+              </motion.a>
+              <motion.a href="/insights" className="px-4 py-2 rounded-2xl bg-violet-600 text-white text-sm font-semibold hover:scale-[1.02] transition" {...fadeUp(0.3)}>
                 ✨ Our Insights
-              </a>
+              </motion.a>
             </motion.div>
 
-            <motion.p className="text-[11px] text-slate-400 mt-3" {...fadeUp(0.26)}>
+            <motion.p className="text-[11px] text-slate-400 mt-3" {...fadeUp(0.32)}>
               By joining you agree to transparent, tamper-proof decisions.
             </motion.p>
-          </motion.div>
+          </div>
 
           {/* Right: Pulse card */}
           <motion.aside
-            {...fadeUp(0.15)}
             className="lg:col-span-5 p-6 rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl shadow-[0_0_35px_rgba(255,255,255,0.05)]"
+            {...fadeUp(0.18)}
           >
             <h3 className="text-lg font-semibold">🫀 Daily Pulse</h3>
             <p className="text-sm text-slate-300/80 mt-2">Gatishil moves every day — small decisions, big rhythm.</p>
 
             <div className="mt-4 grid grid-cols-1 gap-3">
-              <motion.div
-                initial={{ opacity: 0, y: 14 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true, amount: 0.3 }}
-                transition={{ duration: 0.5, ease: 'easeOut' }}
-                className="grid grid-cols-2 gap-3"
-              >
+              <motion.div className="grid grid-cols-2 gap-3" {...fadeUp(0.22)}>
                 <div className="p-4 rounded-xl bg-white/5 border border-white/10">
                   <p className="text-slate-300/80 text-xs">Today’s Poll</p>
                   <p className="text-amber-200 font-semibold mt-1 text-sm">Should ward meetings livestream?</p>
@@ -224,13 +219,7 @@ export default function HomePage() {
                 </div>
               </motion.div>
 
-              <motion.div
-                initial={{ opacity: 0, y: 14 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true, amount: 0.3 }}
-                transition={{ duration: 0.5, ease: 'easeOut', delay: 0.06 }}
-                className="p-4 rounded-xl bg-white/5 border border-white/10"
-              >
+              <motion.div className="p-4 rounded-xl bg-white/5 border border-white/10" {...fadeUp(0.26)}>
                 <p className="text-xs text-slate-300/80">Quick Join</p>
                 <div className="mt-2 flex gap-2">
                   <a href="/join" className="flex-1 px-3 py-2 text-sm text-black bg-amber-300 rounded-lg text-center font-semibold">Start</a>
@@ -255,13 +244,10 @@ export default function HomePage() {
               { title: 'Decentralized', body: 'Power is shared; no throne to capture.' },
               { title: 'Autonomous', body: 'Rules enforce themselves; tamper-resistant.' },
               { title: 'Organization', body: 'A living system — every voice adds to the whole.' }
-            ].map((c) => (
+            ].map((c, i) => (
               <motion.div
                 key={c.title}
-                initial={{ opacity: 0, y: 16 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true, amount: 0.3 }}
-                transition={{ duration: 0.55, ease: 'easeOut' }}
+                {...fadeUp(0.04 * i)}
                 className="p-6 rounded-2xl bg-white/5 border border-white/10 shadow-[0_0_35px_rgba(255,255,255,0.04)]"
               >
                 <h3 className="font-semibold text-lg">{c.title}</h3>
@@ -284,10 +270,7 @@ export default function HomePage() {
             ].map((g, i) => (
               <motion.div
                 key={g.k}
-                initial={{ opacity: 0, y: 18 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true, amount: 0.3 }}
-                transition={{ duration: 0.55, ease: 'easeOut', delay: i * 0.05 }}
+                {...fadeUp(0.05 * i)}
                 className="p-6 rounded-2xl bg-white/5 border border-white/10"
               >
                 <p className="uppercase tracking-widest text-[10px] text-amber-300/80">{g.k}</p>
