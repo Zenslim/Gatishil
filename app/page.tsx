@@ -99,7 +99,7 @@ export default function HomePage() {
               onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
             />
             <div>
-              <p className="text-[10px] text-amber-300/90 uppercase tracking-widest">Gatishil</p>
+              <p className="text-[10px] text-amber-300/90 uppercase tracking-widest">Gatishil Nepal</p>
               <p className="text-[11px] text-slate-300/70">DAO · Guthi · Movement</p>
             </div>
           </a>
@@ -135,19 +135,14 @@ export default function HomePage() {
       <section className="relative z-10 pt-16 md:pt-20 pb-10">
         <div className="max-w-7xl mx-auto px-6 md:px-10 lg:px-16 grid lg:grid-cols-12 gap-12 items-center">
           <motion.div variants={staggerParent} initial="initial" animate="animate" className="lg:col-span-7">
-            <motion.span
-              className="inline-block text-[10px] uppercase tracking-widest text-amber-300/90 px-2 py-1 border border-amber-300/30 rounded-full"
-              {...fadeUp(0)}
-            >
-              GatishilNepal.org
-            </motion.span>
+                        </motion.span>
 
             <motion.h1 className="text-4xl md:text-6xl font-extrabold leading-tight mt-4" {...fadeUp(0.05)}>
               The <span className="bg-clip-text text-transparent bg-gradient-to-r from-amber-300 via-orange-400 to-rose-400">DAO Party</span> of the Powerless
             </motion.h1>
 
             <motion.p className="mt-5 text-slate-300/90 text-lg max-w-2xl" {...fadeUp(0.12)}>
-              Not another party of faces — a movement that makes thrones irrelevant.
+              Not another party of faces, but a movement that makes thrones irrelevant.
               Build parallel life, restore culture, and grow cooperative wealth. Join the rhythm.
             </motion.p>
 
@@ -174,10 +169,7 @@ export default function HomePage() {
                 whileHover={{ y: -2 }}
                 whileTap={{ scale: 0.98 }}
                 className="px-5 py-3 rounded-2xl border border-amber-400 text-amber-300 text-sm hover:bg-amber-600/10 transition"
-              >
-                Why We Exist
-              </motion.a>
-            </motion.div>
+                        </motion.div>
 
             {/* 4-button CTA row (ZenTrust style) */}
             <motion.div
