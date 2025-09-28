@@ -80,14 +80,12 @@ function Starfield() {
     </motion.div>
   );
 }
-function DaoWord() {
+// Replace your DaoWord with this version (supports gradient via className)
+function DaoWord({ className = "" }: { className?: string }) {
   return (
-    <a
-      href="/faq#dao"
-      className="relative group cursor-help focus:outline-none"
-    >
+    <a href="/faq#dao" className="relative group cursor-help focus:outline-none">
       <span
-        className="underline decoration-dotted underline-offset-2"
+        className={`underline decoration-dotted underline-offset-2 ${className}`}
         aria-describedby="dao-tooltip"
         tabIndex={0}
       >
@@ -104,9 +102,7 @@ function DaoWord() {
         <span className="block mt-1">Decentralized → Power is shared, no one owns the throne.</span>
         <span className="block">Autonomous → Rules enforce themselves, no backdoor cheating.</span>
         <span className="block">Organization → A living system, where each member’s voice adds to the whole.</span>
-        <span className="block mt-2 text-amber-300 underline underline-offset-4">
-          Click to read more →
-        </span>
+        <span className="block mt-2 text-amber-300 underline underline-offset-4">Click to read more →</span>
       </span>
     </a>
   );
@@ -244,10 +240,9 @@ export default function HomePage() {
               GatishilNepal.org
             </motion.span>
 
-            <motion.h1 className="text-[28px] sm:text-4xl md:text-5xl font-extrabold leading-tight mt-3" {...fadeUp(0.05)}>
-              The <span className="bg-clip-text text-transparent bg-gradient-to-r from-amber-300 via-orange-400 to-rose-400"><DaoWord /> Party</span> of the Powerless.
-            </motion.h1>
-
+          <motion.h1 className="text-[28px] sm:text-4xl md:text-5xl font-extrabold leading-tight mt-3" {...fadeUp(0.05)}>
+  The <DaoWord className="bg-clip-text text-transparent bg-gradient-to-r from-amber-300 via-orange-400 to-rose-400" /> Party of the Powerless.
+</motion.h1>
             <motion.p className="mt-4 text-slate-300/90 text-base sm:text-lg max-w-2xl" {...fadeUp(0.1)}>
               <span className="font-semibold">Service, Not Career. Community, Not Power.</span>
             </motion.p>
