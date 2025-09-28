@@ -168,7 +168,7 @@ export default function HomePage() {
               whileTap={{ scale: 0.98 }}
               className="px-4 py-2 rounded-xl bg-amber-400 text-black font-semibold transition shadow-[0_0_30px_rgba(251,191,36,0.35)]"
             >
-              ✊ Join
+              Join
             </motion.a>
           </div>
 
@@ -184,7 +184,7 @@ export default function HomePage() {
               href="/join"
               className="px-3 py-1.5 rounded-lg bg-amber-400 text-black font-semibold text-[11px]"
             >
-              ✊ Join
+              Join
             </a>
           </div>
 
@@ -261,7 +261,7 @@ export default function HomePage() {
                 className="px-5 py-3 rounded-2xl bg-amber-400 text-black font-semibold text-center transition"
                 {...fadeUp(0.18)}
               >
-                ✋ Join Us
+                Join Us
               </motion.a>
                           <motion.a
                 href="#manifesto"
