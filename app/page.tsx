@@ -4,14 +4,10 @@ import { motion, useScroll, useTransform } from 'framer-motion';
 import { useState } from 'react';
 
 /**
- * Gatishil — Mobile-first Homepage (merged Manifesto + Principles, 4 Stones)
- * - Header (left): two-line balanced "Gatishil Nepal" over "DAO · Guthi · Movement"
- * - Hero: big slogan + subtext + Join / Read Our Manifesto (#manifesto anchor)
- * - Manifesto: 8 emotional blocks (stories & metaphors)
- * - Our Four Stones: 4 jaw-dropping slogans replacing "Goals"
- * - Footer (centered): © {year} + "Democracy That Flows — Not Stagnates."
- * - Right footer links: Join, Polls, Proposals, Blog
- * - Mobile-first layout; desktop enhances gracefully
+ * Gatishil — Mobile-first Homepage (DAO tooltip + FAQ link)
+ * - Header tagline: "DAO · Guthi · Movement" with an accessible tooltip on "DAO"
+ * - Nav includes FAQ linking to /faq#dao
+ * - Manifesto + Four Stones unchanged (except minor link additions)
  */
 
 const fadeUp = (delay = 0) => ({
@@ -85,6 +81,34 @@ function Starfield() {
   );
 }
 
+function DaoTooltip() {
+  return (
+    <span className="relative inline-flex items-center group cursor-help focus:outline-none">
+      <span
+        className="underline decoration-dotted underline-offset-2"
+        aria-describedby="dao-tooltip"
+        tabIndex={0}
+      >
+        DAO
+      </span>
+      {/* Tooltip */}
+      <span
+        id="dao-tooltip"
+        role="tooltip"
+        className="pointer-events-none absolute left-0 top-[125%] w-[280px] sm:w-[320px] rounded-xl border border-white/15 bg-zinc-900/95 px-3 py-3 text-[11px] text-slate-200 shadow-2xl opacity-0 translate-y-1 group-hover:opacity-100 group-hover:translate-y-0 group-focus:opacity-100 group-focus:translate-y-0 transition"
+      >
+        <span className="block text-[11px] font-semibold text-amber-300">DAO = Decentralized Autonomous Organization</span>
+        <span className="block mt-1">Decentralized → Power is shared, no one owns the throne.</span>
+        <span className="block">Autonomous → Rules enforce themselves, no backdoor cheating.</span>
+        <span className="block">Organization → A living system, where each member’s voice adds to the whole.</span>
+        <a href="/faq#dao" className="block mt-2 text-[11px] font-semibold text-amber-300 underline underline-offset-4">
+          What is DAO? → Read the ELI15 FAQ
+        </a>
+      </span>
+    </span>
+  );
+}
+
 export default function HomePage() {
   const [open, setOpen] = useState(false);
 
@@ -93,12 +117,12 @@ export default function HomePage() {
       <a className="hover:text-white" href="/why">Why</a>
       <a className="hover:text-white" href="/how">How</a>
       <a className="hover:text-white" href="/what">What</a>
-      {/* Manifesto is on this page (anchor) */}
       <a className="hover:text-white" href="#manifesto">Manifesto</a>
       <a className="hover:text-white" href="/polls">Polls</a>
       <a className="hover:text-white" href="/proposals">Proposals</a>
       <a className="hover:text-white" href="/members">Members</a>
       <a className="hover:text-white" href="/blog">Blog</a>
+      <a className="hover:text-white" href="/faq#dao">FAQ</a>
     </>
   );
 
@@ -127,7 +151,7 @@ export default function HomePage() {
                 Gatishil Nepal
               </p>
               <p className="text-[11px] sm:text-[12px] text-slate-300/80">
-                DAO · Guthi · Movement
+                <DaoTooltip /> · Guthi · Movement
               </p>
             </div>
           </a>
@@ -149,21 +173,22 @@ export default function HomePage() {
               ✊ Join
             </motion.a>
           </div>
-{/* Mobile actions (always visible) */}
-<div className="md:hidden flex items-center gap-2">
-  <a
-    href="/login"
-    className="px-3 py-1.5 border border-white/10 rounded-lg text-[11px] hover:bg-white/5 transition"
-  >
-    Login
-  </a>
-  <a
-    href="/join"
-    className="px-3 py-1.5 rounded-lg bg-amber-400 text-black font-semibold text-[11px]"
-  >
-    ✊ Join
-  </a>
-</div>
+
+          {/* Mobile actions (always visible) */}
+          <div className="md:hidden flex items-center gap-2">
+            <a
+              href="/login"
+              className="px-3 py-1.5 border border-white/10 rounded-lg text-[11px] hover:bg-white/5 transition"
+            >
+              Login
+            </a>
+            <a
+              href="/join"
+              className="px-3 py-1.5 rounded-lg bg-amber-400 text-black font-semibold text-[11px]"
+            >
+              ✊ Join
+            </a>
+          </div>
 
           {/* Mobile hamburger */}
           <button
@@ -242,11 +267,20 @@ export default function HomePage() {
                 ✋ Join Us
               </motion.a>
               <motion.a
-                href="#manifesto"
+                href="/faq#dao"
                 whileHover={{ y: -2 }}
                 whileTap={{ scale: 0.98 }}
                 className="px-5 py-3 rounded-2xl border border-white/15 text-sm hover:bg-white/5 transition text-center"
                 {...fadeUp(0.2)}
+              >
+                What is a DAO? (ELI15)
+              </motion.a>
+              <motion.a
+                href="#manifesto"
+                whileHover={{ y: -2 }}
+                whileTap={{ scale: 0.98 }}
+                className="px-5 py-3 rounded-2xl border border-white/15 text-sm hover:bg-white/5 transition text-center"
+                {...fadeUp(0.22)}
               >
                 Read Our Manifesto
               </motion.a>
@@ -257,7 +291,7 @@ export default function HomePage() {
             </motion.p>
           </div>
 
-          {/* Right: Daily Pulse (collapsible on mobile) */}
+          {/* Right: Daily Pulse */}
           <motion.aside
             className="lg:col-span-5 p-5 rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl shadow-[0_0_35px_rgba(255,255,255,0.05)]"
             {...fadeUp(0.18)}
@@ -293,118 +327,137 @@ export default function HomePage() {
         </div>
       </section>
 
-    {/* MANIFESTO — 8 Blocks */}
-<section className="relative z-10 py-10 sm:py-12">
-  <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-16">
-    <SectionTitle
-      id="manifesto"
-      kicker="Manifesto"
-      title="The Power of the Powerless"
-      subtitle="Eight vows to give Nepal back to its people."
-    />
+      {/* MANIFESTO — 8 Blocks */}
+      <section className="relative z-10 py-10 sm:py-12">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-16">
+          <SectionTitle
+            id="manifesto"
+            kicker="Manifesto"
+            title="The Power of the Powerless"
+            subtitle="Eight vows to give Nepal back to its people."
+          />
 
-    <div className="max-w-6xl mx-auto grid gap-4 sm:gap-6 md:grid-cols-2 lg:grid-cols-3">
-      {/* 1 Courage */}
-      <motion.div {...fadeUp(0.02)} className="p-5 sm:p-6 rounded-2xl bg-white/5 border border-white/10">
-        <h3 className="font-semibold text-base sm:text-lg flex items-center gap-2">🔥 Courage — Awaken the Giant</h3>
-        <ul className="mt-2 space-y-2 text-slate-300/85 text-sm">
-          <li>Stop accepting helplessness. Our strength is immense but sleeping.</li>
-          <li>• The elephant rope: strength wasted if you believe you’re tied.</li>
-          <li>• The mightiest river begins as a forgotten spring.</li>
-          <li>• The system sells fear; we return to the flow.</li>
-        </ul>
-        <p className="mt-3 text-amber-200 text-xs sm:text-sm">🤔 Will we keep living as captives when we were born as giants?</p>
-      </motion.div>
+          <div className="max-w-6xl mx-auto grid gap-4 sm:gap-6 md:grid-cols-2 lg:grid-cols-3">
+            {/* 1 Courage */}
+            <motion.div {...fadeUp(0.02)} className="p-5 sm:p-6 rounded-2xl bg-white/5 border border-white/10">
+              <h3 className="font-semibold text-base sm:text-lg flex items-center gap-2">
+                🔥 Courage — Awaken the Giant
+              </h3>
+              <ul className="mt-2 space-y-2 text-slate-300/85 text-sm">
+                <li>Stop accepting helplessness. Our strength is immense but sleeping.</li>
+                <li>• The elephant rope: strength wasted if you believe you’re tied.</li>
+                <li>• The mightiest river begins as a forgotten spring.</li>
+                <li>• The system sells fear; we return to the flow.</li>
+              </ul>
+              <p className="mt-3 text-amber-200 text-xs sm:text-sm">🤔 Will we keep living as captives when we were born as giants?</p>
+            </motion.div>
 
-      {/* 2 Livelihood */}
-      <motion.div {...fadeUp(0.04)} className="p-5 sm:p-6 rounded-2xl bg-white/5 border border-white/10">
-        <h3 className="font-semibold text-base sm:text-lg flex items-center gap-2">🌱 Livelihood — Root Our Economy</h3>
-        <ul className="mt-2 space-y-2 text-slate-300/85 text-sm">
-          <li>True prosperity is self-reliance, not borrowed survival.</li>
-          <li>• You cannot build a house on borrowed bricks.</li>
-          <li>• Eat from your own harvest, no one can buy your hunger.</li>
-          <li>• Work is dignity; dependence is chains.</li>
-        </ul>
-        <p className="mt-3 text-amber-200 text-xs sm:text-sm">🤔 How long will we feed on scraps when our soil waits for seed?</p>
-      </motion.div>
+            {/* 2 Livelihood */}
+            <motion.div {...fadeUp(0.04)} className="p-5 sm:p-6 rounded-2xl bg-white/5 border border-white/10">
+              <h3 className="font-semibold text-base sm:text-lg flex items-center gap-2">
+                🌱 Livelihood — Root Our Economy
+              </h3>
+              <ul className="mt-2 space-y-2 text-slate-300/85 text-sm">
+                <li>True prosperity is self-reliance, not borrowed survival.</li>
+                <li>• You cannot build a house on borrowed bricks.</li>
+                <li>• Eat from your own harvest; no one can buy your hunger.</li>
+                <li>• Work is dignity; dependence is chains.</li>
+              </ul>
+              <p className="mt-3 text-amber-200 text-xs sm:text-sm">🤔 How long will we feed on scraps when our soil waits for seed?</p>
+            </motion.div>
 
-      {/* 3 Justice */}
-      <motion.div {...fadeUp(0.06)} className="p-5 sm:p-6 rounded-2xl bg-white/5 border border-white/10">
-        <h3 className="font-semibold text-base sm:text-lg flex items-center gap-2">⚖️ Justice — Judge the Judge</h3>
-        <ul className="mt-2 space-y-2 text-slate-300/85 text-sm">
-          <li>The law must be blind, especially to the powerful.</li>
-          <li>• If the fence eats the crops, who protects the field?</li>
-          <li>• The scale must be balanced, not for sale.</li>
-          <li>• Justice is owed, not gifted.</li>
-        </ul>
-        <p className="mt-3 text-amber-200 text-xs sm:text-sm">🤔 Who will guard the people if justice itself is sold?</p>
-      </motion.div>
+            {/* 3 Justice */}
+            <motion.div {...fadeUp(0.06)} className="p-5 sm:p-6 rounded-2xl bg-white/5 border border-white/10">
+              <h3 className="font-semibold text-base sm:text-lg flex items-center gap-2">
+                ⚖️ Justice — Judge the Judge
+              </h3>
+              <ul className="mt-2 space-y-2 text-slate-300/85 text-sm">
+                <li>The law must be blind, especially to the powerful.</li>
+                <li>• If the fence eats the crops, who protects the field?</li>
+                <li>• The scale must be balanced, not for sale.</li>
+                <li>• Justice is owed, not gifted.</li>
+              </ul>
+              <p className="mt-3 text-amber-200 text-xs sm:text-sm">🤔 Who will guard the people if justice itself is sold?</p>
+            </motion.div>
 
-      {/* 4 Transparency */}
-      <motion.div {...fadeUp(0.08)} className="p-5 sm:p-6 rounded-2xl bg-white/5 border border-white/10">
-        <h3 className="font-semibold text-base sm:text-lg flex items-center gap-2">🌍 Transparency — Sunlight as Policy</h3>
-        <ul className="mt-2 space-y-2 text-slate-300/85 text-sm">
-          <li>Every decision, every rupee, must live in sunlight.</li>
-          <li>• A thief steals in the dark — sunlight is the cure.</li>
-          <li>• Muddy water hides fish; clear water builds trust.</li>
-          <li>• Secrecy feeds the corrupt, openness feeds the people.</li>
-        </ul>
-        <p className="mt-3 text-amber-200 text-xs sm:text-sm">🤔 If leaders fear the light, what are they hiding from us?</p>
-      </motion.div>
+            {/* 4 Transparency */}
+            <motion.div {...fadeUp(0.08)} className="p-5 sm:p-6 rounded-2xl bg-white/5 border border-white/10">
+              <h3 className="font-semibold text-base sm:text-lg flex items-center gap-2">
+                🌍 Transparency — Sunlight as Policy
+              </h3>
+              <ul className="mt-2 space-y-2 text-slate-300/85 text-sm">
+                <li>Every decision, every rupee, must live in sunlight.</li>
+                <li>• A thief steals in the dark — sunlight is the cure.</li>
+                <li>• Muddy water hides fish; clear water builds trust.</li>
+                <li>• Secrecy feeds the corrupt; openness feeds the people.</li>
+              </ul>
+              <p className="mt-3 text-amber-200 text-xs sm:text-sm">🤔 If leaders fear the light, what are they hiding from us?</p>
+            </motion.div>
 
-      {/* 5 Solidarity */}
-      <motion.div {...fadeUp(0.1)} className="p-5 sm:p-6 rounded-2xl bg-white/5 border border-white/10">
-        <h3 className="font-semibold text-base sm:text-lg flex items-center gap-2">🤝 Solidarity — Bundle the Sticks</h3>
-        <ul className="mt-2 space-y-2 text-slate-300/85 text-sm">
-          <li>Our unity is our only undeniable strength.</li>
-          <li>• One stick breaks, a bundle does not.</li>
-          <li>• One drum sounds hollow, many drums shake the earth.</li>
-          <li>• Alone we are prey; together we are thunder.</li>
-        </ul>
-        <p className="mt-3 text-amber-200 text-xs sm:text-sm">🤔 Why fight alone when together we can shake the sky?</p>
-      </motion.div>
+            {/* 5 Solidarity */}
+            <motion.div {...fadeUp(0.1)} className="p-5 sm:p-6 rounded-2xl bg-white/5 border border-white/10">
+              <h3 className="font-semibold text-base sm:text-lg flex items-center gap-2">
+                🤝 Solidarity — Bundle the Sticks
+              </h3>
+              <ul className="mt-2 space-y-2 text-slate-300/85 text-sm">
+                <li>Our unity is our only undeniable strength.</li>
+                <li>• One stick breaks; a bundle does not.</li>
+                <li>• One drum sounds hollow; many drums shake the earth.</li>
+                <li>• Alone we are prey; together we are thunder.</li>
+              </ul>
+              <p className="mt-3 text-amber-200 text-xs sm:text-sm">🤔 Why fight alone when together we can shake the sky?</p>
+            </motion.div>
 
-      {/* 6 Servitude */}
-      <motion.div {...fadeUp(0.12)} className="p-5 sm:p-6 rounded-2xl bg-white/5 border border-white/10">
-        <h3 className="font-semibold text-base sm:text-lg flex items-center gap-2">🛠 Servitude — Serve, Don’t Rule</h3>
-        <ul className="mt-2 space-y-2 text-slate-300/85 text-sm">
-          <li>Leadership is service, not reward. Politics is duty, not business.</li>
-          <li>• The true shepherd eats after the flock, not from it.</li>
-          <li>• Power is not ownership; it is responsibility.</li>
-          <li>• To serve is to carry water to a thirsty neighbor.</li>
-        </ul>
-        <p className="mt-3 text-amber-200 text-xs sm:text-sm">🤔 What kind of leader feasts while their people starve?</p>
-      </motion.div>
+            {/* 6 Servitude */}
+            <motion.div {...fadeUp(0.12)} className="p-5 sm:p-6 rounded-2xl bg-white/5 border border-white/10">
+              <h3 className="font-semibold text-base sm:text-lg flex items-center gap-2">
+                🛠 Servitude — Serve, Don’t Rule
+              </h3>
+              <ul className="mt-2 space-y-2 text-slate-300/85 text-sm">
+                <li>Leadership is service, not reward. Politics is duty, not business.</li>
+                <li>• The true shepherd eats after the flock, not from it.</li>
+                <li>• Power is not ownership; it is responsibility.</li>
+                <li>• To serve is to carry water to a thirsty neighbor.</li>
+              </ul>
+              <p className="mt-3 text-amber-200 text-xs sm:text-sm">🤔 What kind of leader feasts while their people starve?</p>
+            </motion.div>
 
-      {/* 7 Culture */}
-      <motion.div {...fadeUp(0.14)} className="p-5 sm:p-6 rounded-2xl bg-white/5 border border-white/10">
-        <h3 className="font-semibold text-base sm:text-lg flex items-center gap-2">🎶 Culture — Every Voice Sings</h3>
-        <ul className="mt-2 space-y-2 text-slate-300/85 text-sm">
-          <li>Our culture is a collaborative masterpiece.</li>
-          <li>• Crafted by many, mastered by none.</li>
-          <li>• We are not a solo, we are a chorus.</li>
-          <li>• Culture is the immune system of a people.</li>
-        </ul>
-        <p className="mt-3 text-amber-200 text-xs sm:text-sm">🤔 What song remains if we silence the choir?</p>
-      </motion.div>
+            {/* 7 Culture */}
+            <motion.div {...fadeUp(0.14)} className="p-5 sm:p-6 rounded-2xl bg-white/5 border border-white/10">
+              <h3 className="font-semibold text-base sm:text-lg flex items-center gap-2">
+                🎶 Culture — Every Voice Sings
+              </h3>
+              <ul className="mt-2 space-y-2 text-slate-300/85 text-sm">
+                <li>Our culture is a collaborative masterpiece.</li>
+                <li>• Crafted by many, mastered by none.</li>
+                <li>• We are not a solo; we are a chorus.</li>
+                <li>• Culture is the immune system of a people.</li>
+              </ul>
+              <p className="mt-3 text-amber-200 text-xs sm:text-sm">🤔 What song remains if we silence the choir?</p>
+            </motion.div>
 
-      {/* 8 Freedom */}
-      <motion.div {...fadeUp(0.16)} className="p-5 sm:p-6 rounded-2xl bg-white/5 border border-white/10">
-        <h3 className="font-semibold text-base sm:text-lg flex items-center gap-2">❤️ Freedom — Dare to Fly</h3>
-        <ul className="mt-2 space-y-2 text-slate-300/85 text-sm">
-          <li>Freedom is our natural state; we’ve just forgotten its taste.</li>
-          <li>• A throne looks powerful only while we kneel.</li>
-          <li>• A bird in a cage forgets the sky until it flies.</li>
-          <li>• Freedom is not a privilege; it is the air we breathe.</li>
-        </ul>
-        <p className="mt-3 text-amber-200 text-xs sm:text-sm">🤔 Why beg for a candle when we were born under the sun?</p>
-      </motion.div>
-    </div>
+            {/* 8 Freedom */}
+            <motion.div {...fadeUp(0.16)} className="p-5 sm:p-6 rounded-2xl bg-white/5 border border-white/10">
+              <h3 className="font-semibold text-base sm:text-lg flex items-center gap-2">
+                ❤️ Freedom — Dare to Fly
+              </h3>
+              <ul className="mt-2 space-y-2 text-slate-300/85 text-sm">
+                <li>Freedom is our natural state; we’ve just forgotten its taste.</li>
+                <li>• A throne looks powerful only while we kneel.</li>
+                <li>• A bird in a cage forgets the sky until it flies.</li>
+                <li>• Freedom is not a privilege; it is the air we breathe.</li>
+              </ul>
+              <p className="mt-3 text-amber-200 text-xs sm:text-sm">🤔 Why beg for a candle when we were born under the sun?</p>
+            </motion.div>
+          </div>
 
-    <p className="mt-8 text-center text-[12px] text-slate-400">Learn it. Share it. Live it.</p>
-  </div>
-</section>
-      {/* OUR FOUR STONES — replaces "Goals" */}
+          <p className="mt-8 text-center text-[12px] text-slate-400">
+            Learn it. Share it. Live it.
+          </p>
+        </div>
+      </section>
+
+      {/* OUR FOUR STONES */}
       <section className="relative z-10 pb-10 sm:pb-14">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-16">
           <SectionTitle
@@ -414,7 +467,6 @@ export default function HomePage() {
           />
 
           <div className="max-w-5xl mx-auto grid gap-4 sm:gap-6 sm:grid-cols-2">
-            {/* Tech-Forward Campaigns */}
             <motion.div {...fadeUp(0.02)} className="p-5 sm:p-6 rounded-2xl bg-white/5 border border-white/10">
               <h3 className="text-lg font-semibold">🗳 Tech-Forward Campaigns</h3>
               <p className="mt-2 text-slate-300/85 text-sm">
@@ -422,7 +474,6 @@ export default function HomePage() {
               </p>
             </motion.div>
 
-            {/* Anti-Corruption */}
             <motion.div {...fadeUp(0.04)} className="p-5 sm:p-6 rounded-2xl bg-white/5 border border-white/10">
               <h3 className="text-lg font-semibold">💰 Anti-Corruption</h3>
               <p className="mt-2 text-slate-300/85 text-sm">
@@ -430,7 +481,6 @@ export default function HomePage() {
               </p>
             </motion.div>
 
-            {/* Grassroots Mobilization */}
             <motion.div {...fadeUp(0.06)} className="p-5 sm:p-6 rounded-2xl bg-white/5 border border-white/10">
               <h3 className="text-lg font-semibold">🌱 Grassroots Mobilization</h3>
               <p className="mt-2 text-slate-300/85 text-sm">
@@ -438,7 +488,6 @@ export default function HomePage() {
               </p>
             </motion.div>
 
-            {/* Philosophical Foundation */}
             <motion.div {...fadeUp(0.08)} className="p-5 sm:p-6 rounded-2xl bg-white/5 border border-white/10">
               <h3 className="text-lg font-semibold">📜 Philosophical Foundation</h3>
               <p className="mt-2 text-slate-300/85 text-sm">
@@ -460,6 +509,7 @@ export default function HomePage() {
               <a href="/polls" className="hover:text-white">Polls</a>
               <a href="/proposals" className="hover:text-white">Proposals</a>
               <a href="/blog" className="hover:text-white">Blog</a>
+              <a href="/faq#dao" className="hover:text-white">FAQ</a>
             </nav>
           </div>
         </div>
