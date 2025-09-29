@@ -1,52 +1,25 @@
 "use client";
 
 /**
- * Gatishil — Digital Chauṭarī Onboarding (Photo Mandatory)
- * Remote-only: Next.js (App Router) + Vercel + Supabase
+ * Gatishil — Digital Chauṭarī Onboarding (Roots JSON integration)
+ * Remote-only stack: Next.js + Supabase + Vercel
  *
- * What this file does:
- * - Phone-joined member completes profile as a warm, step-by-step ritual.
- * - Photo is MANDATORY: upload any image, crop to a circle, compress to WebP.
- * - Photo is uploaded to Supabase Storage at profiles/photos/{userId}/profile.webp
- * - Profile data is upserted into `profiles` table with public photo URL.
+ * What’s new:
+ * - Roots step uses <ChautariLocationPicker/>
+ * - Saves full ward/city object into profiles.roots_json / diaspora_json (JSONB)
+ * - Keeps legacy text columns (roots/diaspora) for human-readable labels
+ * - Photo is mandatory with circle crop → uploads to Supabase Storage
  *
- * Requirements:
+ * Requires:
  *   npm i @supabase/supabase-js react-easy-crop
- * Env (Vercel Project Settings → Environment Variables):
- *   NEXT_PUBLIC_SUPABASE_URL
- *   NEXT_PUBLIC_SUPABASE_ANON_KEY
- *
- * Storage Bucket (once):
- *   Create bucket "profiles" (public) in Supabase → Storage
- *   Folder structure will be created automatically: profiles/photos/{userId}/profile.webp
- *
- * DB (once):
- *   create table if not exists public.profiles (
- *     user_id uuid primary key references auth.users(id) on delete cascade,
- *     name text,
- *     photo_url text,
- *     roots text,
- *     diaspora text,
- *     livelihood text,
- *     skills text[],         -- store as array of text (or pivot later)
- *     circles text[],
- *     family text,
- *     offer text[],
- *     needs text[],
- *     story text,
- *     vow text,
- *     updated_at timestamptz default now()
- *   );
- *   -- RLS: enable and allow user to upsert own row
- *   alter table public.profiles enable row level security;
- *   create policy "upsert own profile"
- *     on public.profiles for all
- *     using (auth.uid() = user_id) with check (auth.uid() = user_id);
+ *   NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY (Vercel env)
+ *   Storage bucket "profiles" (public) in Supabase
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Cropper from "react-easy-crop";
 import { createClient } from "@supabase/supabase-js";
+import ChautariLocationPicker from "./ChautariLocationPicker";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -72,9 +45,11 @@ export default function OnboardingFlow() {
 
   const [form, setForm] = useState({
     name: "",
-    photoUrlFinal: "", // final public URL after upload
-    roots: "",
-    diaspora: "",
+    photoUrlFinal: "",
+    // roots now stores the normalized selection object from the picker
+    roots: null,        // { type:'ward'|'city', id, label, ... }
+    diaspora_obj: null, // reserved if you want a separate diaspora-only flow
+    diaspora_text: "",  // human label if abroad
     livelihood: "",
     skills: [],
     circles: [],
@@ -85,17 +60,15 @@ export default function OnboardingFlow() {
     vow: "",
   });
 
-  // Photo handling
-  const [rawPhotoSrc, setRawPhotoSrc] = useState(""); // object URL of selected file
-  const [rawFile, setRawFile] = useState(null);
+  // Photo state
+  const [rawPhotoSrc, setRawPhotoSrc] = useState("");
   const [crop, setCrop] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
   const [croppedAreaPixels, setCroppedAreaPixels] = useState(null);
+  const [croppedPreview, setCroppedPreview] = useState("");
   const [cropping, setCropping] = useState(false);
-  const [croppedPreview, setCroppedPreview] = useState(""); // preview data URL
   const [uploading, setUploading] = useState(false);
 
-  // Fetch logged-in user (joined by phone already)
   useEffect(() => {
     (async () => {
       const { data } = await supabase.auth.getUser();
@@ -130,29 +103,10 @@ export default function OnboardingFlow() {
     canvas.width = outputSize;
     canvas.height = outputSize;
     const ctx = canvas.getContext("2d");
-
-    // draw cropped square into canvas
     const { x, y, width, height } = cropPixels;
-    // scale to output square
-    ctx.drawImage(
-      image,
-      x,
-      y,
-      width,
-      height,
-      0,
-      0,
-      outputSize,
-      outputSize
-    );
-
-    // export as webp (~0.8 quality)
+    ctx.drawImage(image, x, y, width, height, 0, 0, outputSize, outputSize);
     return await new Promise((resolve) =>
-      canvas.toBlob(
-        (blob) => resolve(blob),
-        "image/webp",
-        0.8
-      )
+      canvas.toBlob((blob) => resolve(blob), "image/webp", 0.8)
     );
   }
 
@@ -168,7 +122,7 @@ export default function OnboardingFlow() {
     }
   }, [rawPhotoSrc, croppedAreaPixels]);
 
-  const next = (nextStep) => setStep(nextStep);
+  const next = (s) => setStep(s);
 
   async function uploadPhotoAndSaveProfile() {
     if (!userId) {
@@ -176,19 +130,23 @@ export default function OnboardingFlow() {
       return;
     }
     if (!croppedPreview) {
-      alert("Please upload and crop your photo first.");
+      alert("Please upload and crop your photo.");
       return;
     }
+    // Validate roots selection
+    if (!form.roots || !form.roots.label) {
+      alert("Please select your Ward/City in Roots.");
+      setStep("roots");
+      return;
+    }
+
     setUploading(true);
     try {
-      // fetch blob back from preview URL
+      // upload photo
       const resp = await fetch(croppedPreview);
       const blob = await resp.blob();
-
       const path = `photos/${userId}/profile.webp`;
-      // remove any existing
       await supabase.storage.from("profiles").remove([path]).catch(() => {});
-      // upload
       const { error: upErr } = await supabase.storage
         .from("profiles")
         .upload(path, blob, {
@@ -198,18 +156,44 @@ export default function OnboardingFlow() {
         });
       if (upErr) throw upErr;
 
-      // get public URL
       const {
         data: { publicUrl },
       } = supabase.storage.from("profiles").getPublicUrl(path);
 
-      // upsert profile
+      // build roots json
+      const rootsJson =
+        form.roots?.type === "ward"
+          ? {
+              type: "ward",
+              ward_id: form.roots.id,
+              ward_no: form.roots.ward_no ?? null,
+              local_level_id: form.roots.local_level_id ?? null,
+              district_id: form.roots.district_id ?? null,
+              province_id: form.roots.province_id ?? null,
+              label: form.roots.label,
+            }
+          : form.roots?.type === "city"
+          ? {
+              type: "city",
+              city_id: form.roots.city_id ?? form.roots.id,
+              country_code: form.roots.country_code ?? null,
+              label: form.roots.label,
+            }
+          : null;
+
+      // optional: separate diaspora_json if you want to keep local vs abroad distinct
+      const diasporaJson = rootsJson?.type === "city" ? rootsJson : null;
+
       const payload = {
         user_id: userId,
         name: form.name || null,
         photo_url: publicUrl,
-        roots: form.roots || null,
-        diaspora: form.diaspora || null,
+        -- legacy text labels for quick reads
+        roots: rootsJson?.type === "ward" ? rootsJson.label : null,
+        diaspora: rootsJson?.type === "city" ? rootsJson.label : null,
+        -- jsonb columns for querying
+        roots_json: rootsJson,
+        diaspora_json: diasporaJson,
         livelihood: form.livelihood || null,
         skills: form.skills?.length ? form.skills : null,
         circles: form.circles?.length ? form.circles : null,
@@ -218,8 +202,10 @@ export default function OnboardingFlow() {
         needs: form.needs?.length ? form.needs : null,
         story: form.story || null,
         vow: form.vow || null,
+        updated_at: new Date().toISOString(),
       };
 
+      // upsert
       const { error: dbErr } = await supabase
         .from("profiles")
         .upsert(payload, { onConflict: "user_id" });
@@ -245,7 +231,7 @@ export default function OnboardingFlow() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-black text-white p-6">
       <div className="w-full max-w-md rounded-2xl bg-white/5 p-6 backdrop-blur-xl space-y-6 border border-white/10">
-        {/* STEP: Entry */}
+        {/* Entry */}
         {step === "entry" && (
           <div className="space-y-4 text-center">
             <h1 className="text-2xl font-bold">🌳 Welcome to the Chauṭarī</h1>
@@ -261,12 +247,10 @@ export default function OnboardingFlow() {
           </div>
         )}
 
-        {/* STEP: Name + Photo (MANDATORY) */}
+        {/* Name + Photo (mandatory) */}
         {step === "name_photo" && (
           <div className="space-y-4">
-            <h2 className="text-xl font-semibold">
-              What should we call you in the circle?
-            </h2>
+            <h2 className="text-xl font-semibold">What should we call you in the circle?</h2>
             <input
               type="text"
               placeholder="Your Name"
@@ -278,17 +262,16 @@ export default function OnboardingFlow() {
             <div className="space-y-2">
               <p className="text-slate-300">Add your photo (no mask in the chauṭarī)</p>
 
-              {!rawPhotoSrc && (
+              {!rawPhotoSrc && !croppedPreview && (
                 <input
                   type="file"
                   accept="image/*"
                   onChange={async (e) => {
                     const file = e.target.files?.[0];
                     if (!file) return;
-                    setRawFile(file);
                     const durl = await fileToDataURL(file);
                     setRawPhotoSrc(durl);
-                    setCroppedPreview(""); // reset previous crop
+                    setCroppedPreview("");
                   }}
                   className="block w-full text-sm text-slate-400
                     file:mr-4 file:rounded-lg file:border-0
@@ -298,7 +281,6 @@ export default function OnboardingFlow() {
                 />
               )}
 
-              {/* Cropper */}
               {rawPhotoSrc && !croppedPreview && (
                 <div className="space-y-3">
                   <div className="relative h-64 w-full overflow-hidden rounded-xl border border-white/10">
@@ -335,7 +317,6 @@ export default function OnboardingFlow() {
                     <button
                       onClick={() => {
                         setRawPhotoSrc("");
-                        setRawFile(null);
                         setCroppedPreview("");
                       }}
                       className="rounded-lg border border-white/20 px-4 py-2"
@@ -346,7 +327,6 @@ export default function OnboardingFlow() {
                 </div>
               )}
 
-              {/* Cropped preview */}
               {croppedPreview && (
                 <div className="text-center space-y-2">
                   <img
@@ -355,10 +335,7 @@ export default function OnboardingFlow() {
                     className="mx-auto h-24 w-24 rounded-full object-cover"
                   />
                   <button
-                    onClick={() => {
-                      // re-crop if they want
-                      setCroppedPreview("");
-                    }}
+                    onClick={() => setCroppedPreview("")}
                     className="text-xs text-slate-300 underline"
                   >
                     Re-crop
@@ -378,32 +355,33 @@ export default function OnboardingFlow() {
           </div>
         )}
 
-        {/* STEP: Roots */}
-       {step === "roots" && (
-  <div className="space-y-4">
-    <h2 className="text-xl font-semibold">
-      Where do your roots touch the earth?
-    </h2>
+        {/* Roots (with JSON output) */}
+        {step === "roots" && (
+          <div className="space-y-4">
+            <h2 className="text-xl font-semibold">Where do your roots touch the earth?</h2>
 
-    <ChautariLocationPicker
-      value={form.roots}
-      onChange={(v) => setForm({ ...form, roots: v })}
-    />
+            <ChautariLocationPicker
+              value={form.roots}
+              onChange={(v) => setForm({ ...form, roots: v })}
+            />
 
-    <button
-      onClick={() => next("livelihood")}
-      className="w-full rounded-lg bg-amber-400 px-4 py-2 font-semibold text-black"
-    >
-      Continue
-    </button>
-  </div>
-)}
-        {/* STEP: Livelihood */}
+            {form.roots?.label && (
+              <p className="text-sm text-slate-300">Selected: {form.roots.label}</p>
+            )}
+
+            <button
+              onClick={() => next("livelihood")}
+              className="w-full rounded-lg bg-amber-400 px-4 py-2 font-semibold text-black"
+            >
+              Continue
+            </button>
+          </div>
+        )}
+
+        {/* Livelihood */}
         {step === "livelihood" && (
           <div className="space-y-4">
-            <h2 className="text-xl font-semibold">
-              What work do your hands and mind do?
-            </h2>
+            <h2 className="text-xl font-semibold">What work do your hands and mind do?</h2>
             <input
               type="text"
               placeholder="Work / Livelihood"
@@ -415,7 +393,10 @@ export default function OnboardingFlow() {
               type="text"
               placeholder="Skills (comma-separated)"
               onChange={(e) =>
-                setForm({ ...form, skills: e.target.value.split(",").map((s) => s.trim()).filter(Boolean) })
+                setForm({
+                  ...form,
+                  skills: e.target.value.split(",").map((s) => s.trim()).filter(Boolean),
+                })
               }
               className="w-full rounded-lg border border-white/20 bg-black/30 p-2"
             />
@@ -428,17 +409,18 @@ export default function OnboardingFlow() {
           </div>
         )}
 
-        {/* STEP: Circles */}
+        {/* Circles */}
         {step === "circles" && (
           <div className="space-y-4">
-            <h2 className="text-xl font-semibold">
-              Which circles or groups do you walk with?
-            </h2>
+            <h2 className="text-xl font-semibold">Which circles or groups do you walk with?</h2>
             <input
               type="text"
               placeholder="Affiliations (comma-separated)"
               onChange={(e) =>
-                setForm({ ...form, circles: e.target.value.split(",").map((s) => s.trim()).filter(Boolean) })
+                setForm({
+                  ...form,
+                  circles: e.target.value.split(",").map((s) => s.trim()).filter(Boolean),
+                })
               }
               className="w-full rounded-lg border border-white/20 bg-black/30 p-2"
             />
@@ -451,7 +433,7 @@ export default function OnboardingFlow() {
           </div>
         )}
 
-        {/* STEP: Family (optional) */}
+        {/* Family (optional) */}
         {step === "family" && (
           <div className="space-y-4">
             <h2 className="text-xl font-semibold">Who walks beside you at home? (optional)</h2>
@@ -471,21 +453,27 @@ export default function OnboardingFlow() {
           </div>
         )}
 
-        {/* STEP: Solidarity */}
+        {/* Solidarity */}
         {step === "solidarity" && (
           <div className="space-y-3">
             <h2 className="text-xl font-semibold">Solidarity Exchange</h2>
             <textarea
               placeholder="What can you offer? (comma-separated: time, skills, resources)"
               onChange={(e) =>
-                setForm({ ...form, offer: e.target.value.split(",").map((s) => s.trim()).filter(Boolean) })
+                setForm({
+                  ...form,
+                  offer: e.target.value.split(",").map((s) => s.trim()).filter(Boolean),
+                })
               }
               className="w-full rounded-lg border border-white/20 bg-black/30 p-2"
             />
             <textarea
               placeholder="What do you need? (comma-separated: knowledge, help, connection)"
               onChange={(e) =>
-                setForm({ ...form, needs: e.target.value.split(",").map((s) => s.trim()).filter(Boolean) })
+                setForm({
+                  ...form,
+                  needs: e.target.value.split(",").map((s) => s.trim()).filter(Boolean),
+                })
               }
               className="w-full rounded-lg border border-white/20 bg-black/30 p-2"
             />
@@ -498,7 +486,7 @@ export default function OnboardingFlow() {
           </div>
         )}
 
-        {/* STEP: Story */}
+        {/* Story */}
         {step === "story" && (
           <div className="space-y-4">
             <h2 className="text-xl font-semibold">What’s your story?</h2>
@@ -517,7 +505,7 @@ export default function OnboardingFlow() {
           </div>
         )}
 
-        {/* STEP: Vow */}
+        {/* Vow */}
         {step === "vow" && (
           <div className="space-y-4">
             <h2 className="text-xl font-semibold">Which vow speaks to you most?</h2>
@@ -555,7 +543,7 @@ export default function OnboardingFlow() {
           </div>
         )}
 
-        {/* STEP: Reveal */}
+        {/* Reveal */}
         {step === "reveal" && (
           <div className="space-y-4 text-center">
             <h2 className="text-xl font-bold">✨ Your circle is alive</h2>
