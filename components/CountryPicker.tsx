@@ -1,14 +1,20 @@
+// components/CountryPicker.tsx
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { CountryDial } from '@/app/data/countries';
-import { COUNTRIES } from '@/app/data/countries';
+import { COUNTRIES as RAW_COUNTRIES } from '@/app/data/countries';
+
+// Use a local type that matches what this component needs.
+type Country = { flag: string; dial: string; name: string };
+
+// Cast the imported data to our local shape (safe if file has these fields).
+const COUNTRIES = RAW_COUNTRIES as Country[];
 
 type Props = {
   open: boolean;
   onClose: () => void;
-  value: CountryDial | null;
-  onChange: (c: CountryDial) => void;
+  value: Country | null;
+  onChange: (c: Country) => void;
 };
 
 export default function CountryPicker({ open, onClose, value, onChange }: Props) {
@@ -17,15 +23,14 @@ export default function CountryPicker({ open, onClose, value, onChange }: Props)
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
-    if (open) {
-      setQ('');
-      // focus search on open
-      setTimeout(() => inputRef.current?.focus(), 0);
-      // basic focus trap
-      const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
-      document.addEventListener('keydown', onKey);
-      return () => document.removeEventListener('keydown', onKey);
-    }
+    if (!open) return;
+    setQ('');
+    // focus search on open
+    setTimeout(() => inputRef.current?.focus(), 0);
+    // ESC to close
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
   }, [open, onClose]);
 
   const filtered = useMemo(() => {
@@ -48,12 +53,12 @@ export default function CountryPicker({ open, onClose, value, onChange }: Props)
       className="fixed inset-0 z-50 flex items-end md:items-center justify-center"
       onClick={(e) => { if (e.target === dialogRef.current) onClose(); }}
     >
-      {/* backdrop */}
+      {/* Backdrop */}
       <div className="absolute inset-0 bg-black/60" />
 
-      {/* sheet/card */}
+      {/* Sheet/Card */}
       <div className="relative w-full md:max-w-md md:rounded-2xl bg-slate-900 border border-white/10 shadow-xl
-                      p-4 md:p-5 translate-y-0 md:translate-y-0 rounded-t-2xl">
+                      p-4 md:p-5 rounded-t-2xl">
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-sm font-semibold text-slate-200">Select Country</h2>
           <button onClick={onClose} aria-label="Close"
