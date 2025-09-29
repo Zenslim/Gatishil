@@ -185,14 +185,14 @@ export default function OnboardingFlow() {
       const diasporaJson = rootsJson?.type === "city" ? rootsJson : null;
 
       const payload = {
-        user_id: userId,
-        name: form.name || null,
-        photo_url: publicUrl,
-        -- legacy text labels for quick reads
-        roots: rootsJson?.type === "ward" ? rootsJson.label : null,
-        diaspora: rootsJson?.type === "city" ? rootsJson.label : null,
-        -- jsonb columns for querying
-        roots_json: rootsJson,
+       user_id: userId,
+name: form.name || null,
+photo_url: publicUrl,
+// legacy text labels for quick reads
+roots: rootsJson?.type === "ward" ? rootsJson.label : null,
+diaspora: rootsJson?.type === "city" ? rootsJson.label : null,
+// jsonb columns for querying
+roots_json: rootsJson || null,
         diaspora_json: diasporaJson,
         livelihood: form.livelihood || null,
         skills: form.skills?.length ? form.skills : null,
