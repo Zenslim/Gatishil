@@ -379,34 +379,25 @@ export default function OnboardingFlow() {
         )}
 
         {/* STEP: Roots */}
-        {step === "roots" && (
-          <div className="space-y-4">
-            <h2 className="text-xl font-semibold">
-              Where do your roots touch the earth?
-            </h2>
-            <input
-              type="text"
-              placeholder="Ward/District or City"
-              value={form.roots}
-              onChange={(e) => setForm({ ...form, roots: e.target.value })}
-              className="w-full rounded-lg border border-white/20 bg-black/30 p-2"
-            />
-            <input
-              type="text"
-              placeholder="Diaspora (Country/City) — optional"
-              value={form.diaspora}
-              onChange={(e) => setForm({ ...form, diaspora: e.target.value })}
-              className="w-full rounded-lg border border-white/20 bg-black/30 p-2"
-            />
-            <button
-              onClick={() => next("livelihood")}
-              className="w-full rounded-lg bg-amber-400 px-4 py-2 font-semibold text-black"
-            >
-              Continue
-            </button>
-          </div>
-        )}
+       {step === "roots" && (
+  <div className="space-y-4">
+    <h2 className="text-xl font-semibold">
+      Where do your roots touch the earth?
+    </h2>
 
+    <ChautariLocationPicker
+      value={form.roots}
+      onChange={(v) => setForm({ ...form, roots: v })}
+    />
+
+    <button
+      onClick={() => next("livelihood")}
+      className="w-full rounded-lg bg-amber-400 px-4 py-2 font-semibold text-black"
+    >
+      Continue
+    </button>
+  </div>
+)}
         {/* STEP: Livelihood */}
         {step === "livelihood" && (
           <div className="space-y-4">
