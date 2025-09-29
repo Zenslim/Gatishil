@@ -1,8 +1,7 @@
-// app/join/page.tsx — Join → OnboardingFlow (polished to match homepage)
+// app/join/page.tsx — Join → OnboardingFlow (clean build-safe)
 // Stack: Next.js App Router + Supabase + Vercel
 'use client';
 
-import CountryPicker from '@/app/components/CountryPicker';
 import { Suspense, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import OnboardingFlow from '@/components/OnboardingFlow';
@@ -18,13 +17,16 @@ const supabase = createClient(
 type Phase = 'auth' | 'verify' | 'onboarding';
 type Channel = 'phone' | 'email';
 
+// Outer wrapper to satisfy App Router requirement for useSearchParams
 export default function JoinPage() {
   return (
-    <Suspense fallback={
-      <main className="min-h-dvh grid place-items-center bg-black text-slate-300">
-        <div className="text-sm opacity-80">Loading…</div>
-      </main>
-    }>
+    <Suspense
+      fallback={
+        <main className="min-h-dvh grid place-items-center bg-black text-slate-300">
+          <div className="text-sm opacity-80">Loading…</div>
+        </main>
+      }
+    >
       <JoinPageInner />
     </Suspense>
   );
@@ -34,11 +36,12 @@ function JoinPageInner() {
   const router = useRouter();
   const params = useSearchParams();
 
+  // Phase & channel
   const [phase, setPhase] = useState<Phase>('auth');
   const [channel, setChannel] = useState<Channel>('phone');
 
   // Country + phone
-  const [country, setCountry] = useState<CountryDial>(COUNTRIES[0]);
+  const [country, setCountry] = useState<CountryDial>(COUNTRIES[0]); // 🇳🇵 default
   const [localNumber, setLocalNumber] = useState('');
   const e164 = useMemo(() => {
     const digits = (localNumber || '').replace(/\D/g, '');
@@ -49,24 +52,33 @@ function JoinPageInner() {
   const [otp, setOtp] = useState('');
   const [email, setEmail] = useState('');
 
-  // Prefill (optional)
+  // Optional prefill
   const [name, setName] = useState('');
   const [role, setRole] = useState('');
-  const [showPersonalize, setShowPersonalize] = useState(false);
 
-  // UI
+  // UI state
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  const resetAlerts = () => { setMsg(null); setErr(null); };
+  const resetAlerts = () => {
+    setMsg(null);
+    setErr(null);
+  };
 
-  // Fast-path
+  // Fast-path: if already signed in
   useEffect(() => {
     (async () => {
       const { data: { session } } = await supabase.auth.getSession();
       const wantsOnboarding = params.get('onboarding') === '1';
-      if (session && wantsOnboarding) { setPhase('onboarding'); return; }
-      if (session && !wantsOnboarding) { router.replace('/dashboard'); return; }
+      if (session && wantsOnboarding) {
+        setPhase('onboarding');
+        return;
+      }
+      if (session && !wantsOnboarding) {
+        router.replace('/dashboard');
+        return;
+      }
+      // else stay on auth
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -74,22 +86,29 @@ function JoinPageInner() {
   // Helpers
   async function safeJson(res: Response): Promise<any> {
     const ct = res.headers.get('content-type') || '';
-    if (ct.includes('application/json')) { try { return await res.json(); } catch { return {}; } }
-    const txt = await res.text().catch(() => ''); try { return JSON.parse(txt); } catch { return { raw: txt }; }
+    if (ct.includes('application/json')) {
+      try { return await res.json(); } catch { return {}; }
+    }
+    const txt = await res.text().catch(() => '');
+    try { return JSON.parse(txt); } catch { return { raw: txt }; }
   }
   function httpErr(res: Response, data: any) {
     return (data && (data.error || data.message || data.raw)) || `HTTP ${res.status}`;
   }
 
-  // PHONE OTP — send/verify
+  // PHONE OTP — send
   async function sendPhoneOtp() {
     resetAlerts();
-    if (!/^\+\d{8,15}$/.test(e164)) { setErr('Please enter a valid phone number.'); return; }
+    if (!/^\+\d{8,15}$/.test(e164)) {
+      setErr('Please enter a valid phone number.');
+      return;
+    }
     setLoading(true);
     try {
       const res = await fetch('/api/otp/send', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: e164 }),
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: e164 })
       });
       const data = await safeJson(res);
       if (!res.ok) { setErr(httpErr(res, data)); return; }
@@ -98,53 +117,69 @@ function JoinPageInner() {
       setPhase('verify');
     } catch (e: any) {
       setErr(e?.message || 'Network error while sending OTP');
-    } finally { setLoading(false); }
+    } finally {
+      setLoading(false);
+    }
   }
 
+  // PHONE OTP — verify
   async function verifyPhoneOtp() {
     resetAlerts();
-    if (!/^\d{6}$/.test(otp.trim())) { setErr('Enter the 6-digit code.'); return; }
+    if (!/^\d{6}$/.test(otp.trim())) {
+      setErr('Enter the 6-digit code.');
+      return;
+    }
     setLoading(true);
     try {
       const res = await fetch('/api/otp/verify', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: e164, code: otp.trim(), name, role }),
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: e164, code: otp.trim(), name, role })
       });
       const data = await safeJson(res);
       if (!res.ok) { setErr(httpErr(res, data)); return; }
       if (!data?.ok) { setErr(data?.error || 'Invalid code'); return; }
-      setPhase('onboarding');
+      setPhase('onboarding'); // session now active
     } catch (e: any) {
       setErr(e?.message || 'Network error while verifying OTP');
-    } finally { setLoading(false); }
+    } finally {
+      setLoading(false);
+    }
   }
 
   // EMAIL — magic link back to /join?onboarding=1
   async function sendEmailMagicLink() {
     resetAlerts();
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) { setErr('Enter a valid email.'); return; }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      setErr('Enter a valid email.');
+      return;
+    }
     setLoading(true);
     try {
       const origin = typeof window !== 'undefined' ? window.location.origin : '';
       const redirectTo = `${origin}/join?onboarding=1`;
       const { error } = await supabase.auth.signInWithOtp({
         email: email.trim(),
-        options: { shouldCreateUser: true, emailRedirectTo: redirectTo },
+        options: { shouldCreateUser: true, emailRedirectTo: redirectTo }
       });
       if (error) { setErr(error.message); return; }
-      setMsg('Check your inbox and tap the magic link to continue here.');
+      setMsg('Check your email and tap the magic link to continue onboarding here.');
     } catch (e: any) {
       setErr(e?.message || 'Network error while sending magic link');
-    } finally { setLoading(false); }
+    } finally {
+      setLoading(false);
+    }
   }
 
-  // Onboarding in-page
-  if (phase === 'onboarding') return <OnboardingFlow />;
+  // Onboarding
+  if (phase === 'onboarding') {
+    return <OnboardingFlow />;
+  }
 
   // ---------------- UI ----------------
   return (
     <main className="min-h-dvh bg-black text-white">
-      {/* Hero, aligned to homepage style */}
+      {/* Hero */}
       <header className="px-6 md:px-10 pt-10 pb-6">
         <span className="inline-block text-[10px] tracking-[0.2em] rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-sky-300/80">
           GATISHILNEPAL.ORG
@@ -161,24 +196,17 @@ function JoinPageInner() {
       {/* Card */}
       <section className="px-6 md:px-10 pb-16">
         <div className="max-w-xl mx-auto rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl p-6 shadow-[0_0_60px_-20px_rgba(255,255,255,0.3)]">
-          {/* Personalize (optional) — collapsed by default */}
-          <button
-            type="button"
-            onClick={() => setShowPersonalize(v => !v)}
-            className="w-full flex items-center justify-between rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm"
-            aria-expanded={showPersonalize ? 'true' : 'false'}
-          >
-            <span className="text-slate-200">✨ Personalize (optional)</span>
-            <span className="text-slate-400">{showPersonalize ? 'Hide' : 'Add'}</span>
-          </button>
-
-          {showPersonalize && (
-            <div className="grid grid-cols-1 gap-3 mt-3">
+          {/* Personalize (optional) */}
+          <details className="rounded-xl border border-white/10 bg-white/5">
+            <summary className="cursor-pointer list-none px-3 py-2 text-sm text-slate-200 rounded-xl">
+              ✨ Personalize (optional)
+            </summary>
+            <div className="grid grid-cols-1 gap-3 p-3 pt-0">
               <div>
                 <label className="block text-xs text-slate-300/70 mb-1">Name</label>
                 <input
                   value={name}
-                  onChange={(e)=>setName(e.target.value)}
+                  onChange={(e) => setName(e.target.value)}
                   placeholder="e.g., Sushila Tamang"
                   className="w-full rounded-xl bg-transparent border border-white/15 px-3 py-2 placeholder:text-slate-400"
                 />
@@ -187,7 +215,7 @@ function JoinPageInner() {
                 <label className="block text-xs text-slate-300/70 mb-1">How will you help? (Role)</label>
                 <input
                   value={role}
-                  onChange={(e)=>setRole(e.target.value)}
+                  onChange={(e) => setRole(e.target.value)}
                   placeholder="e.g., Organizer, Farmer, Volunteer"
                   className="w-full rounded-xl bg-transparent border border-white/15 px-3 py-2 placeholder:text-slate-400"
                 />
@@ -196,63 +224,56 @@ function JoinPageInner() {
                 This only shapes your welcome and recommendations. Skip anytime — you can set it later.
               </p>
             </div>
-          )}
+          </details>
 
           {/* Tabs */}
           <div className="mt-5 flex gap-2 text-sm">
             <button
-              onClick={()=>{ setChannel('phone'); resetAlerts(); setPhase('auth'); }}
-              className={'px-3 py-2 rounded-full border transition ' + (channel==='phone'?'bg-white text-black':'border-white/15 hover:bg-white/5')}
+              onClick={() => { setChannel('phone'); resetAlerts(); setPhase('auth'); }}
+              className={'px-3 py-2 rounded-full border transition ' + (channel === 'phone' ? 'bg-white text-black' : 'border-white/15 hover:bg-white/5')}
             >
-              Phone
+              📱 Phone
             </button>
             <button
-              onClick={()=>{ setChannel('email'); resetAlerts(); setPhase('auth'); }}
-              className={'px-3 py-2 rounded-full border transition ' + (channel==='email'?'bg-white text-black':'border-white/15 hover:bg-white/5')}
+              onClick={() => { setChannel('email'); resetAlerts(); setPhase('auth'); }}
+              className={'px-3 py-2 rounded-full border transition ' + (channel === 'email' ? 'bg-white text-black' : 'border-white/15 hover:bg-white/5')}
             >
-              E-mail
+              ✉️ Email
             </button>
           </div>
 
           {/* PHONE FLOW */}
-          {channel==='phone' && phase==='auth' && (
-            <form onSubmit={(e)=>{ e.preventDefault(); sendPhoneOtp(); }} className="mt-4 space-y-3">
+          {channel === 'phone' && phase === 'auth' && (
+            <form onSubmit={(e) => { e.preventDefault(); sendPhoneOtp(); }} className="mt-4 space-y-3">
               <div>
                 <label className="block text-xs text-slate-300/70 mb-1">Phone</label>
-               <div className="flex gap-2">
-  {/* Flag + dial button (opens modal) */}
-  <button
-    type="button"
-    onClick={() => setPickerOpen(true)}
-    className="min-w-[110px] flex items-center justify-between rounded-xl bg-transparent border border-white/15 px-3 py-2"
-    aria-haspopup="dialog"
-    aria-expanded={pickerOpen ? 'true' : 'false'}
-  >
-    <span className="flex items-center gap-2">
-      <span className="text-xl">{country.flag}</span>
-      <span className="text-slate-200">+{country.dial}</span>
-    </span>
-    <span className="opacity-60">▾</span>
-  </button>
-
-  <input
-    value={localNumber}
-    onChange={(e)=>setLocalNumber(e.target.value)}
-    placeholder="98XXXXXXXX"
-    inputMode="numeric"
-    className="flex-1 rounded-xl bg-transparent border border-white/15 px-3 py-2 placeholder:text-slate-400"
-  />
-</div>
-
-{/* Modal */}
-<CountryPicker
-  open={pickerOpen}
-  onClose={() => setPickerOpen(false)}
-  value={country}
-  onChange={(c) => setCountry(c)}
-/>
+                <div className="flex gap-2">
+                  <select
+                    value={country.dial}
+                    onChange={(e) => {
+                      const next = COUNTRIES.find(c => c.dial === e.target.value) || COUNTRIES[0];
+                      setCountry(next);
+                    }}
+                    className="rounded-xl bg-transparent border border-white/15 px-3 py-2"
+                    aria-label="Select country code"
+                  >
+                    {COUNTRIES.map((c, i) => (
+                      <option key={`${c.dial}-${i}`} value={c.dial} className="bg-slate-900">
+                        {c.flag} {c.name} (+{c.dial})
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    value={localNumber}
+                    onChange={(e) => setLocalNumber(e.target.value)}
+                    placeholder="98XXXXXXXX"
+                    inputMode="numeric"
+                    className="flex-1 rounded-xl bg-transparent border border-white/15 px-3 py-2 placeholder:text-slate-400"
+                  />
                 </div>
-                <div className="text-xs opacity-70 mt-1">Will send OTP to <code>{e164 || `+${country.dial}…`}</code></div>
+                <div className="text-xs opacity-70 mt-1">
+                  Will send OTP to <code>{e164 || `+${country.dial}…`}</code>
+                </div>
               </div>
 
               <button
@@ -268,13 +289,13 @@ function JoinPageInner() {
             </form>
           )}
 
-          {channel==='phone' && phase==='verify' && (
-            <form onSubmit={(e)=>{ e.preventDefault(); verifyPhoneOtp(); }} className="mt-4 space-y-3">
+          {channel === 'phone' && phase === 'verify' && (
+            <form onSubmit={(e) => { e.preventDefault(); verifyPhoneOtp(); }} className="mt-4 space-y-3">
               <div>
                 <label className="block text-xs text-slate-300/70 mb-1">Enter 6-digit code</label>
                 <input
                   value={otp}
-                  onChange={(e)=>setOtp(e.target.value)}
+                  onChange={(e) => setOtp(e.target.value)}
                   placeholder="••••••"
                   inputMode="numeric"
                   className="w-full rounded-xl bg-transparent border border-white/15 px-3 py-2 placeholder:text-slate-400"
@@ -291,13 +312,13 @@ function JoinPageInner() {
           )}
 
           {/* EMAIL FLOW */}
-          {channel==='email' && phase==='auth' && (
+          {channel === 'email' && phase === 'auth' && (
             <div className="mt-4 space-y-3">
               <div>
                 <label className="block text-xs text-slate-300/70 mb-1">Email</label>
                 <input
                   value={email}
-                  onChange={(e)=>setEmail(e.target.value)}
+                  onChange={(e) => setEmail(e.target.value)}
                   placeholder="you@example.com"
                   className="w-full rounded-xl bg-transparent border border-white/15 px-3 py-2 placeholder:text-slate-400"
                 />
