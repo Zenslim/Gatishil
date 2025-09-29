@@ -1,4 +1,4 @@
-// app/join/page.tsx — Join → OnboardingFlow (build-safe Country type)
+// app/join/page.tsx — Join → OnboardingFlow (canonical callback + hash cleanup)
 // Remote-only: Next.js App Router + Supabase + Vercel
 'use client';
 
@@ -19,6 +19,15 @@ const supabase = createClient(
 
 type Phase = 'auth' | 'verify' | 'onboarding';
 type Channel = 'phone' | 'email';
+
+/** Canonical domain + callback (overridable by env) */
+const SITE_URL =
+  (process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, '') ||
+    'https://www.gatishilnepal.org');
+const CALLBACK = `${SITE_URL}/join?onboarding=1`;
+
+/** Simple E.164 check (+97798… etc.) */
+const isE164 = (s: string) => /^\+\d{8,15}$/.test((s || '').trim());
 
 export default function JoinPage() {
   return (
@@ -75,6 +84,24 @@ function JoinPageInner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Hash catcher: if we ever land on any host with #access_token, force canonical;
+  // if already on canonical, strip the hash for a clean URL.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const { hash, origin, pathname } = window.location;
+    if (!hash || !hash.includes('access_token=')) return;
+
+    // Wrong host → hard redirect to canonical onboarding URL
+    if (!origin.startsWith(SITE_URL)) {
+      window.location.replace(CALLBACK);
+      return;
+    }
+
+    // On canonical host → strip hash, keep path (this page then reads session via Supabase)
+    const cleanUrl = `${window.location.origin}${pathname}?onboarding=1`;
+    window.history.replaceState({}, '', cleanUrl);
+  }, []);
+
   // Helpers
   async function safeJson(res: Response): Promise<any> {
     const ct = res.headers.get('content-type') || '';
@@ -85,10 +112,10 @@ function JoinPageInner() {
     return (data && (data.error || data.message || data.raw)) || `HTTP ${res.status}`;
   }
 
-  // PHONE OTP — send
+  // PHONE OTP — send (custom API using public.otps)
   async function sendPhoneOtp() {
     resetAlerts();
-    if (!/^\+\d{8,15}$/.test(e164)) { setErr('Please enter a valid phone number.'); return; }
+    if (!isE164(e164)) { setErr('Please enter a valid phone number.'); return; }
     setLoading(true);
     try {
       const res = await fetch('/api/otp/send', {
@@ -105,7 +132,7 @@ function JoinPageInner() {
     } finally { setLoading(false); }
   }
 
-  // PHONE OTP — verify
+  // PHONE OTP — verify (custom API)
   async function verifyPhoneOtp() {
     resetAlerts();
     if (!/^\d{6}$/.test(otp.trim())) { setErr('Enter the 6-digit code.'); return; }
@@ -118,26 +145,28 @@ function JoinPageInner() {
       const data = await safeJson(res);
       if (!res.ok) { setErr(httpErr(res, data)); return; }
       if (!data?.ok) { setErr(data?.error || 'Invalid code'); return; }
-      setPhase('onboarding'); // session now active
+      // Session now active; continue onboarding in place
+      setPhase('onboarding');
     } catch (e: any) {
       setErr(e?.message || 'Network error while verifying OTP');
     } finally { setLoading(false); }
   }
 
-  // EMAIL — magic link -> /join?onboarding=1
+  // EMAIL — magic link → always to canonical /join?onboarding=1
   async function sendEmailMagicLink() {
     resetAlerts();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) { setErr('Enter a valid email.'); return; }
     setLoading(true);
     try {
-      const origin = typeof window !== 'undefined' ? window.location.origin : '';
-      const redirectTo = `${origin}/join?onboarding=1`;
       const { error } = await supabase.auth.signInWithOtp({
         email: email.trim(),
-        options: { shouldCreateUser: true, emailRedirectTo: redirectTo },
+        options: {
+          shouldCreateUser: true,
+          emailRedirectTo: CALLBACK, // force canonical domain
+        },
       });
       if (error) { setErr(error.message); return; }
-      setMsg('Check your email and tap the magic link to continue onboarding here.');
+      setMsg('Check your email and tap the magic link. It opens on gatishilnepal.org.');
     } catch (e: any) {
       setErr(e?.message || 'Network error while sending magic link');
     } finally { setLoading(false); }
