@@ -1,6 +1,7 @@
 // app/data/countries.ts
-// Full list of countries with flag + dial code (E.164)
-// Default: Nepal first, then alphabetical order.
+// Full dataset of country dial codes with flags.
+// Nepal 🇳🇵 (+977) is pinned first, others alphabetical.
+// Provides both an array (for dropdowns) and a map (for quick lookups).
 
 export type CountryDial = {
   flag: string;
@@ -157,7 +158,6 @@ export const COUNTRIES: CountryDial[] = [
   { flag: '🇲🇲', dial: '95' },   // Myanmar
   { flag: '🇳🇦', dial: '264' },  // Namibia
   { flag: '🇳🇷', dial: '674' },  // Nauru
-  { flag: '🇳🇵', dial: '977' },  // Nepal (duplicate kept only first!)
   { flag: '🇳🇱', dial: '31' },   // Netherlands
   { flag: '🇳🇨', dial: '687' },  // New Caledonia
   { flag: '🇳🇿', dial: '64' },   // New Zealand
@@ -248,3 +248,12 @@ export const COUNTRIES: CountryDial[] = [
   { flag: '🇿🇲', dial: '260' },  // Zambia
   { flag: '🇿🇼', dial: '263' },  // Zimbabwe
 ];
+
+// Quick lookup map: dial -> flag
+export const COUNTRY_FLAG_BY_DIAL: Record<string, string> = COUNTRIES.reduce(
+  (acc, c) => {
+    acc[c.dial] = c.flag;
+    return acc;
+  },
+  {} as Record<string, string>
+);
