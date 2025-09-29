@@ -1,15 +1,15 @@
-// app/join/page.tsx — Join → OnboardingFlow (no /security)
+// app/join/page.tsx — Join → OnboardingFlow (Suspense fix for useSearchParams)
 // Stack: Next.js App Router + Supabase + Vercel
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { Suspense, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import OnboardingFlow from '@/components/OnboardingFlow';
-import { createClient } from '@supabase/supabase-js';
 import type { CountryDial } from '@/app/data/countries';
 import { COUNTRIES } from '@/app/data/countries';
+import { createClient } from '@supabase/supabase-js';
 
-// Supabase client (browser)
+// Browser Supabase client
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -18,11 +18,24 @@ const supabase = createClient(
 type Phase = 'auth' | 'verify' | 'onboarding';
 type Channel = 'phone' | 'email';
 
+// -------- Outer wrapper provides Suspense (required by useSearchParams) --------
 export default function JoinPage() {
+  return (
+    <Suspense fallback={
+      <main className="min-h-dvh grid place-items-center bg-black text-slate-300">
+        <div className="text-sm opacity-80">Loading…</div>
+      </main>
+    }>
+      <JoinPageInner />
+    </Suspense>
+  );
+}
+
+// ---------------------------- Actual page logic ----------------------------
+function JoinPageInner() {
   const router = useRouter();
   const params = useSearchParams();
 
-  // Phase & channel
   const [phase, setPhase] = useState<Phase>('auth');
   const [channel, setChannel] = useState<Channel>('phone');
 
@@ -34,10 +47,8 @@ export default function JoinPage() {
     return digits ? `+${country.dial}${digits}` : '';
   }, [country, localNumber]);
 
-  // OTP input
+  // OTP + Email
   const [otp, setOtp] = useState('');
-
-  // Email
   const [email, setEmail] = useState('');
 
   // Optional prefill for onboarding
@@ -50,10 +61,10 @@ export default function JoinPage() {
   const [err, setErr] = useState<string | null>(null);
   const resetAlerts = () => { setMsg(null); setErr(null); };
 
-  // Fast-path: session → /dashboard unless explicitly returning for onboarding
+  // Fast-path: if session exists and NOT returning for onboarding → /dashboard
   useEffect(() => {
     (async () => {
-      const { data: { session } } = await supabase.auth.getSession();
+      const { data: { session} } = await supabase.auth.getSession();
       const wantsOnboarding = params.get('onboarding') === '1';
       if (session && wantsOnboarding) { setPhase('onboarding'); return; }
       if (session && !wantsOnboarding) { router.replace('/dashboard'); return; }
@@ -62,14 +73,11 @@ export default function JoinPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  /** Safely parse JSON; falls back to text if not JSON. */
+  // Safe JSON helpers
   async function safeJson(res: Response): Promise<any> {
     const ct = res.headers.get('content-type') || '';
-    if (ct.includes('application/json')) {
-      try { return await res.json(); } catch { return {}; }
-    }
-    const txt = await res.text().catch(() => '');
-    try { return JSON.parse(txt); } catch { return { raw: txt }; }
+    if (ct.includes('application/json')) { try { return await res.json(); } catch { return {}; } }
+    const txt = await res.text().catch(() => ''); try { return JSON.parse(txt); } catch { return { raw: txt }; }
   }
   function httpErr(res: Response, data: any) {
     return (data && (data.error || data.message || data.raw)) || `HTTP ${res.status}`;
@@ -82,8 +90,7 @@ export default function JoinPage() {
     setLoading(true);
     try {
       const res = await fetch('/api/otp/send', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ phone: e164 }),
       });
       const data = await safeJson(res);
@@ -103,21 +110,19 @@ export default function JoinPage() {
     setLoading(true);
     try {
       const res = await fetch('/api/otp/verify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ phone: e164, code: otp.trim(), name, role }),
       });
       const data = await safeJson(res);
       if (!res.ok) { setErr(httpErr(res, data)); return; }
       if (!data?.ok) { setErr(data?.error || 'Invalid code'); return; }
-      // Session is now active → go straight to onboarding (same page)
-      setPhase('onboarding');
+      setPhase('onboarding'); // session active → open onboarding in-page
     } catch (e: any) {
       setErr(e?.message || 'Network error while verifying OTP');
     } finally { setLoading(false); }
   }
 
-  // EMAIL — magic link -> redirect back to /join?onboarding=1
+  // EMAIL — magic link → redirect back to /join?onboarding=1
   async function sendEmailMagicLink() {
     resetAlerts();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) { setErr('Enter a valid email.'); return; }
