@@ -1,21 +1,44 @@
 "use client";
 
 /**
- * Gatishil • ChautariLocationPicker
- * ELI15: One box to type "Kath…" or "Dubai", a toggle for "I live abroad".
- * It searches your Supabase function geo.search_locations and returns
- * either a Nepal Ward (with Local Level + District + Province label)
- * or a Diaspora City (City, State (Country)).
+ * ChautariLocationPicker.jsx
+ * Remote-only (GitHub + Vercel + Supabase).
  *
- * Plug-in:
- *   <ChautariLocationPicker
- *      value={value}
- *      onChange={(v) => setForm({ ...form, roots: v?.label, diaspora: v?.type === 'city' ? v?.label : '' })}
- *   />
+ * What you get:
+ * - Nepal cascade: Province → District → Palika (local_level) → Ward → Tole
+ * - Diaspora toggle: Country → City
+ * - Searchable selects with "Add if missing"
+ * - Emits a single normalized value via onChange():
+ *   - Nepal (ward path):
+ *     {
+ *       type: "ward",
+ *       id: <ward_id>,
+ *       ward_no,
+ *       local_level_id,
+ *       district_id,
+ *       province_id,
+ *       label: "Province / District / Palika / Ward <n> / Tole"
+ *     }
+ *   - Diaspora (city path):
+ *     {
+ *       type: "city",
+ *       id: <city_id>,
+ *       city_id: <city_id>,
+ *       country_code,
+ *       label: "Country / City"
+ *     }
  *
- * Env (Vercel → Settings → Environment Variables):
- *   NEXT_PUBLIC_SUPABASE_URL
- *   NEXT_PUBLIC_SUPABASE_ANON_KEY
+ * Supabase tables expected (public schema, camel/underscore ok):
+ *   provinces(id, name)
+ *   districts(id, province_id, name)
+ *   local_levels(id, district_id, name, kind)      -- kind: 'Nagar' | 'Gaun' | etc.
+ *   wards(id, local_level_id, ward_no)
+ *   toles(id, ward_id, name)
+ *   countries(code, name)                           -- ISO code in 'code'
+ *   cities(id, country_code, name)
+ *
+ * All reads are anon; inserts require RLS policies allowing authenticated users to insert.
+ * Make sure storage/env are already set (NEXT_PUBLIC_SUPABASE_URL/ANON_KEY).
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -26,182 +49,496 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 );
 
-export default function ChautariLocationPicker({ value = null, onChange }) {
-  const [query, setQuery] = useState("");
-  const [abroad, setAbroad] = useState(false);
-  const [results, setResults] = useState([]);
-  const [open, setOpen] = useState(false);
-  const [loading, setLoading] = useState(false);
+export default function ChautariLocationPicker({ value, onChange }) {
+  // Mode
+  const [abroad, setAbroad] = useState(
+    value?.type === "city" ? true : false
+  );
 
-  const boxRef = useRef(null);
-  const debouncedQ = useDebounce(query, 200);
+  // Nepal path selections
+  const [provinceId, setProvinceId] = useState(value?.province_id || "");
+  const [districtId, setDistrictId] = useState(value?.district_id || "");
+  const [localLevelId, setLocalLevelId] = useState(value?.local_level_id || "");
+  const [wardId, setWardId] = useState(value?.id && value?.type === "ward" ? value.id : "");
+  const [toleId, setToleId] = useState("");
 
-  // Close dropdown on outside click
+  // Nepal lists (filtered)
+  const [provinces, setProvinces] = useState([]);
+  const [districts, setDistricts] = useState([]);
+  const [locals, setLocals] = useState([]);
+  const [wards, setWards] = useState([]);
+  const [toles, setToles] = useState([]);
+
+  // Search terms
+  const [districtQuery, setDistrictQuery] = useState("");
+  const [localQuery, setLocalQuery] = useState("");
+  const [toleQuery, setToleQuery] = useState("");
+
+  // Diaspora selections + lists
+  const [countryCode, setCountryCode] = useState(
+    value?.country_code || ""
+  );
+  const [cityId, setCityId] = useState(
+    value?.type === "city" ? (value?.city_id || value?.id || "") : ""
+  );
+  const [countries, setCountries] = useState([]);
+  const [cities, setCities] = useState([]);
+  const [countryQuery, setCountryQuery] = useState("");
+  const [cityQuery, setCityQuery] = useState("");
+
+  const loadingRef = useRef({});
+
+  // ---------- Helpers ----------
+  function busy(key, v) {
+    loadingRef.current[key] = v;
+  }
+
+  function isBusy() {
+    return Object.values(loadingRef.current).some(Boolean);
+  }
+
+  function labelNepal(p, d, l, w, t) {
+    const parts = [p?.name, d?.name, l ? `${l.name}` : null, w ? `Ward ${w.ward_no}` : null, t?.name];
+    return parts.filter(Boolean).join(" / ");
+  }
+  function labelDiaspora(c, city) {
+    return [c?.name, city?.name].filter(Boolean).join(" / ");
+  }
+
+  // ---------- Loaders ----------
   useEffect(() => {
-    function handler(e) {
-      if (!boxRef.current) return;
-      if (!boxRef.current.contains(e.target)) setOpen(false);
-    }
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
+    (async () => {
+      busy("provinces", true);
+      const { data } = await supabase.from("provinces").select("id,name").order("name");
+      setProvinces(data || []);
+      busy("provinces", false);
+    })();
   }, []);
 
-  // Search Supabase RPC geo.search_locations(q, k)
   useEffect(() => {
-    let cancelled = false;
-    async function run() {
-      if (!debouncedQ || debouncedQ.trim().length < 2) {
-        setResults([]);
-        return;
-      }
-      setLoading(true);
-      try {
-        const { data, error } = await supabase.rpc("search_locations", {
-          q: debouncedQ,
-          k: 20,
-        });
-        if (error) throw error;
-
-        // filter by toggle
-        const filtered = (data || []).filter((r) =>
-          abroad ? r.type === "city" : r.type === "ward"
-        );
-        if (!cancelled) setResults(filtered);
-      } catch (e) {
-        console.error("search_locations error", e);
-        if (!cancelled) setResults([]);
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
+    if (!provinceId) {
+      setDistricts([]);
+      setDistrictId("");
+      return;
     }
-    run();
-    return () => {
-      cancelled = true;
-    };
-  }, [debouncedQ, abroad]);
+    (async () => {
+      busy("districts", true);
+      let q = supabase.from("districts").select("id,name").eq("province_id", provinceId);
+      if (districtQuery.trim()) q = q.ilike("name", `%${districtQuery.trim()}%`);
+      const { data } = await q.order("name");
+      setDistricts(data || []);
+      busy("districts", false);
+    })();
+  }, [provinceId, districtQuery]);
 
-  const placeholder = abroad
-    ? "Type your city (e.g., Dubai, Boston)…"
-    : "Type ward/local level (e.g., Ward 5 Kathmandu)…";
+  useEffect(() => {
+    if (!districtId) {
+      setLocals([]);
+      setLocalLevelId("");
+      return;
+    }
+    (async () => {
+      busy("locals", true);
+      let q = supabase.from("local_levels").select("id,name,kind").eq("district_id", districtId);
+      if (localQuery.trim()) q = q.ilike("name", `%${localQuery.trim()}%`);
+      const { data } = await q.order("name");
+      setLocals(data || []);
+      busy("locals", false);
+    })();
+  }, [districtId, localQuery]);
 
-  const selectedLabel = value?.label ?? "";
+  useEffect(() => {
+    if (!localLevelId) {
+      setWards([]);
+      setWardId("");
+      return;
+    }
+    (async () => {
+      busy("wards", true);
+      const { data } = await supabase
+        .from("wards")
+        .select("id,ward_no")
+        .eq("local_level_id", localLevelId)
+        .order("ward_no", { ascending: true });
+      setWards(data || []);
+      busy("wards", false);
+    })();
+  }, [localLevelId]);
 
+  useEffect(() => {
+    if (!wardId) {
+      setToles([]);
+      setToleId("");
+      return;
+    }
+    (async () => {
+      busy("toles", true);
+      let q = supabase.from("toles").select("id,name").eq("ward_id", wardId);
+      if (toleQuery.trim()) q = q.ilike("name", `%${toleQuery.trim()}%`);
+      const { data } = await q.order("name");
+      setToles(data || []);
+      busy("toles", false);
+    })();
+  }, [wardId, toleQuery]);
+
+  // Diaspora lists
+  useEffect(() => {
+    if (!abroad) return;
+    (async () => {
+      busy("countries", true);
+      let q = supabase.from("countries").select("code,name");
+      if (countryQuery.trim()) q = q.ilike("name", `%${countryQuery.trim()}%`);
+      const { data } = await q.order("name");
+      setCountries(data || []);
+      busy("countries", false);
+    })();
+  }, [abroad, countryQuery]);
+
+  useEffect(() => {
+    if (!abroad || !countryCode) {
+      setCities([]);
+      setCityId("");
+      return;
+    }
+    (async () => {
+      busy("cities", true);
+      let q = supabase.from("cities").select("id,name,country_code").eq("country_code", countryCode);
+      if (cityQuery.trim()) q = q.ilike("name", `%${cityQuery.trim()}%`);
+      const { data } = await q.order("name");
+      setCities(data || []);
+      busy("cities", false);
+    })();
+  }, [abroad, countryCode, cityQuery]);
+
+  // ---------- Emit normalized value ----------
+  const selectedProvince = useMemo(
+    () => provinces.find((p) => String(p.id) === String(provinceId)),
+    [provinces, provinceId]
+  );
+  const selectedDistrict = useMemo(
+    () => districts.find((d) => String(d.id) === String(districtId)),
+    [districts, districtId]
+  );
+  const selectedLocal = useMemo(
+    () => locals.find((l) => String(l.id) === String(localLevelId)),
+    [locals, localLevelId]
+  );
+  const selectedWard = useMemo(
+    () => wards.find((w) => String(w.id) === String(wardId)),
+    [wards, wardId]
+  );
+  const selectedTole = useMemo(
+    () => toles.find((t) => String(t.id) === String(toleId)),
+    [toles, toleId]
+  );
+
+  const selectedCountry = useMemo(
+    () => countries.find((c) => c.code === countryCode),
+    [countries, countryCode]
+  );
+  const selectedCity = useMemo(
+    () => cities.find((c) => String(c.id) === String(cityId)),
+    [cities, cityId]
+  );
+
+  useEffect(() => {
+    if (!onChange) return;
+    if (abroad) {
+      if (selectedCountry && selectedCity) {
+        onChange({
+          type: "city",
+          id: selectedCity.id,
+          city_id: selectedCity.id,
+          country_code: selectedCountry.code,
+          label: labelDiaspora(selectedCountry, selectedCity),
+        });
+      } else {
+        onChange(null);
+      }
+      return;
+    }
+    // Nepal path
+    if (selectedProvince && selectedDistrict && selectedLocal && selectedWard) {
+      const label = labelNepal(
+        selectedProvince,
+        selectedDistrict,
+        selectedLocal,
+        selectedWard,
+        selectedTole
+      );
+      onChange({
+        type: "ward",
+        id: selectedWard.id,
+        ward_no: selectedWard.ward_no,
+        local_level_id: selectedLocal.id,
+        district_id: selectedDistrict.id,
+        province_id: selectedProvince.id,
+        label,
+        ...(selectedTole ? { tole_id: selectedTole.id, tole_name: selectedTole.name } : {}),
+      });
+    } else {
+      onChange(null);
+    }
+  }, [
+    abroad,
+    selectedProvince,
+    selectedDistrict,
+    selectedLocal,
+    selectedWard,
+    selectedTole,
+    selectedCountry,
+    selectedCity,
+    onChange,
+  ]);
+
+  // ---------- Add-if-missing flows ----------
+  async function addToleIfMissing(name) {
+    if (!name?.trim() || !wardId) return;
+    const pretty = name.trim().replace(/\s+/g, " ");
+    const exists = toles.find((t) => t.name.toLowerCase() === pretty.toLowerCase());
+    if (exists) {
+      setToleId(exists.id);
+      return exists.id;
+    }
+    const { data, error } = await supabase
+      .from("toles")
+      .insert({ ward_id: wardId, name: pretty })
+      .select("id,name")
+      .single();
+    if (!error && data) {
+      setToles((prev) => [...prev, data].sort((a, b) => a.name.localeCompare(b.name)));
+      setToleId(data.id);
+      return data.id;
+    }
+    alert(error?.message || "Could not add Tole");
+  }
+
+  async function addCityIfMissing(name) {
+    if (!name?.trim() || !countryCode) return;
+    const pretty = name.trim().replace(/\s+/g, " ");
+    const exists = cities.find((c) => c.name.toLowerCase() === pretty.toLowerCase());
+    if (exists) {
+      setCityId(exists.id);
+      return exists.id;
+    }
+    const { data, error } = await supabase
+      .from("cities")
+      .insert({ country_code: countryCode, name: pretty })
+      .select("id,name,country_code")
+      .single();
+    if (!error && data) {
+      setCities((prev) => [...prev, data].sort((a, b) => a.name.localeCompare(b.name)));
+      setCityId(data.id);
+      return data.id;
+    }
+    alert(error?.message || "Could not add City");
+  }
+
+  // ---------- UI ----------
   return (
-    <div ref={boxRef} className="w-full">
-      {/* Toggle */}
-      <div className="mb-2 flex items-center justify-between">
-        <label className="text-sm text-slate-300">I live abroad</label>
-        <button
-          type="button"
-          onClick={() => {
-            setAbroad((v) => !v);
-            setQuery("");
-            setResults([]);
-            setOpen(false);
-            // clear selection when switching mode
-            onChange?.(null);
-          }}
-          className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${
-            abroad ? "bg-amber-400" : "bg-white/10"
-          }`}
-          aria-pressed={abroad}
-        >
-          <span
-            className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-              abroad ? "translate-x-5" : "translate-x-0"
-            }`}
+    <div className="space-y-4">
+      <div className="flex items-center justify-between rounded-lg border border-white/15 bg-white/5 p-3">
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={abroad}
+            onChange={(e) => {
+              setAbroad(e.target.checked);
+              // Reset both trees when toggling
+              setProvinceId(""); setDistrictId(""); setLocalLevelId(""); setWardId(""); setToleId(""); setToleQuery("");
+              setCountryCode(""); setCityId(""); setCountryQuery(""); setCityQuery("");
+            }}
           />
-        </button>
+          I live abroad
+        </label>
+        {isBusy() ? <span className="text-xs text-amber-300">Loading…</span> : null}
       </div>
 
-      {/* Input */}
-      <div className="relative">
-        <input
-          type="text"
-          value={open ? query : selectedLabel || query}
-          onChange={(e) => {
-            setQuery(e.target.value);
-            setOpen(true);
-          }}
-          onFocus={() => setOpen(true)}
-          placeholder={placeholder}
-          className="w-full rounded-lg border border-white/20 bg-black/30 p-3 text-white placeholder-slate-400 focus:outline-none"
-          aria-autocomplete="list"
-          aria-expanded={open}
-        />
+      {!abroad ? (
+        <div className="space-y-3">
+          {/* Province */}
+          <div className="grid gap-1">
+            <label className="text-sm text-slate-300">Province</label>
+            <select
+              className="rounded-lg border border-white/20 bg-black/30 p-2"
+              value={provinceId}
+              onChange={(e) => {
+                setProvinceId(e.target.value);
+                setDistrictId("");
+                setLocalLevelId("");
+                setWardId("");
+                setToleId("");
+              }}
+            >
+              <option value="">Select Province…</option>
+              {provinces.map((p) => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </select>
+          </div>
 
-        {/* Spinner */}
-        {loading && (
-          <div className="pointer-events-none absolute right-3 top-3.5 h-5 w-5 animate-spin rounded-full border-2 border-white/30 border-t-transparent" />
-        )}
+          {/* District */}
+          <div className="grid gap-1">
+            <label className="text-sm text-slate-300">District</label>
+            <input
+              className="rounded-lg border border-white/20 bg-black/30 p-2"
+              placeholder="Search district…"
+              value={districtQuery}
+              onChange={(e) => setDistrictQuery(e.target.value)}
+            />
+            <select
+              className="rounded-lg border border-white/20 bg-black/30 p-2"
+              value={districtId}
+              onChange={(e) => {
+                setDistrictId(e.target.value);
+                setLocalLevelId("");
+                setWardId("");
+                setToleId("");
+              }}
+            >
+              <option value="">Select District…</option>
+              {districts.map((d) => (
+                <option key={d.id} value={d.id}>{d.name}</option>
+              ))}
+            </select>
+          </div>
 
-        {/* Dropdown */}
-        {open && (results.length > 0 || (debouncedQ && !loading)) && (
-          <ul className="absolute z-20 mt-1 max-h-64 w-full overflow-auto rounded-lg border border-white/10 bg-black/90 p-1 shadow-xl backdrop-blur">
-            {results.length === 0 && (
-              <li className="px-3 py-2 text-sm text-slate-400">
-                No matches yet. Try another spelling.
-              </li>
-            )}
-            {results.map((r) => (
-              <li key={`${r.type}-${r.id}`}>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setOpen(false);
-                    setQuery("");
-                    const payload = normalizeSelection(r);
-                    onChange?.(payload);
-                  }}
-                  className="block w-full rounded-md px-3 py-2 text-left text-sm text-white hover:bg-white/10"
-                >
-                  {r.label}
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
+          {/* Palika */}
+          <div className="grid gap-1">
+            <label className="text-sm text-slate-300">Palika (Nagar/Gaun)</label>
+            <input
+              className="rounded-lg border border-white/20 bg-black/30 p-2"
+              placeholder="Search palika…"
+              value={localQuery}
+              onChange={(e) => setLocalQuery(e.target.value)}
+            />
+            <select
+              className="rounded-lg border border-white/20 bg-black/30 p-2"
+              value={localLevelId}
+              onChange={(e) => {
+                setLocalLevelId(e.target.value);
+                setWardId("");
+                setToleId("");
+              }}
+            >
+              <option value="">Select Palika…</option>
+              {locals.map((l) => (
+                <option key={l.id} value={l.id}>
+                  {l.name}{l.kind ? ` (${l.kind})` : ""}
+                </option>
+              ))}
+            </select>
+          </div>
 
-      {/* Helper text */}
-      <p className="mt-2 text-xs text-slate-400">
-        {abroad
-          ? "Search your city and country. Example: 'Sydney', 'Dubai'."
-          : "Search by ‘Ward X’, local level, or district. Example: 'Ward 5 Kathmandu'."}
-      </p>
+          {/* Ward */}
+          <div className="grid gap-1">
+            <label className="text-sm text-slate-300">Ward</label>
+            <select
+              className="rounded-lg border border-white/20 bg-black/30 p-2"
+              value={wardId}
+              onChange={(e) => {
+                setWardId(e.target.value);
+                setToleId("");
+              }}
+            >
+              <option value="">Select Ward…</option>
+              {wards.map((w) => (
+                <option key={w.id} value={w.id}>Ward {w.ward_no}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Tole */}
+          <div className="grid gap-1">
+            <label className="text-sm text-slate-300">Tole (add if missing)</label>
+            <input
+              className="rounded-lg border border-white/20 bg-black/30 p-2"
+              placeholder="Search or type to add…"
+              value={toleQuery}
+              onChange={(e) => setToleQuery(e.target.value)}
+              disabled={!wardId}
+            />
+            <select
+              className="rounded-lg border border-white/20 bg-black/30 p-2"
+              value={toleId}
+              onChange={(e) => setToleId(e.target.value)}
+              disabled={!wardId}
+            >
+              <option value="">{wardId ? "Select Tole… (optional)" : "Select Ward first"}</option>
+              {toles.map((t) => (
+                <option key={t.id} value={t.id}>{t.name}</option>
+              ))}
+            </select>
+            {!!toleQuery.trim() && wardId ? (
+              <button
+                type="button"
+                onClick={() => addToleIfMissing(toleQuery)}
+                className="justify-self-start rounded-lg border border-white/20 bg-white/10 px-3 py-1 text-sm"
+              >
+                ➕ Add “{toleQuery.trim()}”
+              </button>
+            ) : null}
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {/* Country */}
+          <div className="grid gap-1">
+            <label className="text-sm text-slate-300">Country</label>
+            <input
+              className="rounded-lg border border-white/20 bg-black/30 p-2"
+              placeholder="Search country…"
+              value={countryQuery}
+              onChange={(e) => setCountryQuery(e.target.value)}
+            />
+            <select
+              className="rounded-lg border border-white/20 bg-black/30 p-2"
+              value={countryCode}
+              onChange={(e) => {
+                setCountryCode(e.target.value);
+                setCityId("");
+              }}
+            >
+              <option value="">Select Country…</option>
+              {countries.map((c) => (
+                <option key={c.code} value={c.code}>{c.name}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* City */}
+          <div className="grid gap-1">
+            <label className="text-sm text-slate-300">City (add if missing)</label>
+            <input
+              className="rounded-lg border border-white/20 bg-black/30 p-2"
+              placeholder="Search or type to add…"
+              value={cityQuery}
+              onChange={(e) => setCityQuery(e.target.value)}
+              disabled={!countryCode}
+            />
+            <select
+              className="rounded-lg border border-white/20 bg-black/30 p-2"
+              value={cityId}
+              onChange={(e) => setCityId(e.target.value)}
+              disabled={!countryCode}
+            >
+              <option value="">{countryCode ? "Select City…" : "Select Country first"}</option>
+              {cities.map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+            {!!cityQuery.trim() && countryCode ? (
+              <button
+                type="button"
+                onClick={() => addCityIfMissing(cityQuery)}
+                className="justify-self-start rounded-lg border border-white/20 bg-white/10 px-3 py-1 text-sm"
+              >
+                ➕ Add “{cityQuery.trim()}”
+              </button>
+            ) : null}
+          </div>
+        </div>
+      )}
     </div>
   );
-}
-
-function normalizeSelection(r) {
-  if (r.type === "ward") {
-    // Keep enough info for saving to profile
-    return {
-      type: "ward",
-      id: r.id, // ward_id
-      label: r.label, // "Ward 5 — Kathmandu Metropolitan City, Kathmandu, Bagmati"
-      province_id: r.province_id,
-      district_id: r.district_id,
-      local_level_id: r.local_level_id,
-      ward_no: r.ward_no,
-    };
-  }
-  // city
-  return {
-    type: "city",
-    id: r.id, // city_id
-    label: r.label, // "City, State (Country)"
-    country_code: r.country_code,
-    city_id: r.city_id,
-  };
-}
-
-/** Debounce hook */
-function useDebounce(value, delay = 200) {
-  const [debounced, setDebounced] = useState(value);
-  useEffect(() => {
-    const id = setTimeout(() => setDebounced(value), delay);
-    return () => clearTimeout(id);
-  }, [value, delay]);
-  return debounced;
 }
