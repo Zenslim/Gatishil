@@ -4,11 +4,10 @@
  * Gatishil — Digital Chauṭarī Onboarding (Roots JSON integration)
  * Remote-only stack: Next.js + Supabase + Vercel
  *
- * What’s new:
- * - Roots step uses <ChautariLocationPicker/>
- * - Saves full ward/city object into profiles.roots_json / diaspora_json (JSONB)
- * - Keeps legacy text columns (roots/diaspora) for human-readable labels
- * - Photo is mandatory with circle crop → uploads to Supabase Storage
+ * Update: Added separate Surname field per wireframe.
+ * - UI now asks for [Name] and [Surname] on the "Name & Face" step.
+ * - We DO NOT require schema changes. We store `${name} ${surname}` in profiles.name.
+ * - Everything else (photo crop/upload, roots JSON, etc.) unchanged.
  *
  * Requires:
  *   npm i @supabase/supabase-js react-easy-crop
@@ -44,7 +43,9 @@ export default function OnboardingFlow() {
   const [userId, setUserId] = useState(null);
 
   const [form, setForm] = useState({
-    name: "",
+    // Updated: split name into given name + surname for UI; we’ll combine when saving.
+    givenName: "",
+    surname: "",
     photoUrlFinal: "",
     // roots now stores the normalized selection object from the picker
     roots: null,        // { type:'ward'|'city', id, label, ... }
@@ -124,6 +125,12 @@ export default function OnboardingFlow() {
 
   const next = (s) => setStep(s);
 
+  function buildDisplayName() {
+    const g = (form.givenName || "").trim();
+    const s = (form.surname || "").trim();
+    return [g, s].filter(Boolean).join(" ");
+  }
+
   async function uploadPhotoAndSaveProfile() {
     if (!userId) {
       alert("Authentication required. Please rejoin/login.");
@@ -131,6 +138,12 @@ export default function OnboardingFlow() {
     }
     if (!croppedPreview) {
       alert("Please upload and crop your photo.");
+      return;
+    }
+    // Validate names
+    if (!form.givenName.trim() || !form.surname.trim()) {
+      alert("Please enter both your Name and Surname.");
+      setStep("name_photo");
       return;
     }
     // Validate roots selection
@@ -181,18 +194,19 @@ export default function OnboardingFlow() {
             }
           : null;
 
-      // optional: separate diaspora_json if you want to keep local vs abroad distinct
+      // optional: separate diaspora_json if abroad
       const diasporaJson = rootsJson?.type === "city" ? rootsJson : null;
 
       const payload = {
-       user_id: userId,
-name: form.name || null,
-photo_url: publicUrl,
-// legacy text labels for quick reads
-roots: rootsJson?.type === "ward" ? rootsJson.label : null,
-diaspora: rootsJson?.type === "city" ? rootsJson.label : null,
-// jsonb columns for querying
-roots_json: rootsJson || null,
+        user_id: userId,
+        // Combine given + surname into existing 'name' column, no schema change required
+        name: buildDisplayName() || null,
+        photo_url: publicUrl,
+        // legacy text labels for quick reads
+        roots: rootsJson?.type === "ward" ? rootsJson.label : null,
+        diaspora: rootsJson?.type === "city" ? rootsJson.label : null,
+        // jsonb columns for querying
+        roots_json: rootsJson || null,
         diaspora_json: diasporaJson,
         livelihood: form.livelihood || null,
         skills: form.skills?.length ? form.skills : null,
@@ -225,8 +239,8 @@ roots_json: rootsJson || null,
   }
 
   const canProceedNamePhoto = useMemo(() => {
-    return Boolean(form.name?.trim()) && Boolean(croppedPreview);
-  }, [form.name, croppedPreview]);
+    return Boolean(form.givenName?.trim()) && Boolean(form.surname?.trim()) && Boolean(croppedPreview);
+  }, [form.givenName, form.surname, croppedPreview]);
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-black text-white p-6">
@@ -247,17 +261,27 @@ roots_json: rootsJson || null,
           </div>
         )}
 
-        {/* Name + Photo (mandatory) */}
+        {/* Name + Surname + Photo (mandatory) */}
         {step === "name_photo" && (
           <div className="space-y-4">
             <h2 className="text-xl font-semibold">What should we call you in the circle?</h2>
-            <input
-              type="text"
-              placeholder="Your Name"
-              value={form.name}
-              onChange={(e) => setForm({ ...form, name: e.target.value })}
-              className="w-full rounded-lg border border-white/20 bg-black/30 p-2"
-            />
+
+            <div className="grid grid-cols-1 gap-3">
+              <input
+                type="text"
+                placeholder="Your Name"
+                value={form.givenName}
+                onChange={(e) => setForm({ ...form, givenName: e.target.value })}
+                className="w-full rounded-lg border border-white/20 bg-black/30 p-2"
+              />
+              <input
+                type="text"
+                placeholder="Surname"
+                value={form.surname}
+                onChange={(e) => setForm({ ...form, surname: e.target.value })}
+                className="w-full rounded-lg border border-white/20 bg-black/30 p-2"
+              />
+            </div>
 
             <div className="space-y-2">
               <p className="text-slate-300">Add your photo (no mask in the chauṭarī)</p>
@@ -275,7 +299,7 @@ roots_json: rootsJson || null,
                   }}
                   className="block w-full text-sm text-slate-400
                     file:mr-4 file:rounded-lg file:border-0
-                    file:bg-amber-400 file:px-4 file:py-2
+                    file:bg-amber-400 file:px_4 file:py-2
                     file:text-sm file:font-semibold file:text-black
                     hover:file:bg-amber-500"
                 />
@@ -348,7 +372,7 @@ roots_json: rootsJson || null,
               onClick={() => next("roots")}
               disabled={!canProceedNamePhoto}
               className="w-full rounded-lg bg-amber-400 px-4 py-2 font-semibold text-black disabled:opacity-60"
-              title={!canProceedNamePhoto ? "Add name and photo to continue" : ""}
+              title={!canProceedNamePhoto ? "Add name, surname, and photo to continue" : ""}
             >
               Continue
             </button>
