@@ -1,4 +1,4 @@
-// app/join/page.tsx — Join → OnboardingFlow (Suspense fix for useSearchParams)
+// app/join/page.tsx — Join → OnboardingFlow (polished to match homepage)
 // Stack: Next.js App Router + Supabase + Vercel
 'use client';
 
@@ -9,7 +9,6 @@ import type { CountryDial } from '@/app/data/countries';
 import { COUNTRIES } from '@/app/data/countries';
 import { createClient } from '@supabase/supabase-js';
 
-// Browser Supabase client
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -18,7 +17,6 @@ const supabase = createClient(
 type Phase = 'auth' | 'verify' | 'onboarding';
 type Channel = 'phone' | 'email';
 
-// -------- Outer wrapper provides Suspense (required by useSearchParams) --------
 export default function JoinPage() {
   return (
     <Suspense fallback={
@@ -31,7 +29,6 @@ export default function JoinPage() {
   );
 }
 
-// ---------------------------- Actual page logic ----------------------------
 function JoinPageInner() {
   const router = useRouter();
   const params = useSearchParams();
@@ -40,7 +37,7 @@ function JoinPageInner() {
   const [channel, setChannel] = useState<Channel>('phone');
 
   // Country + phone
-  const [country, setCountry] = useState<CountryDial>(COUNTRIES[0]); // 🇳🇵 default
+  const [country, setCountry] = useState<CountryDial>(COUNTRIES[0]);
   const [localNumber, setLocalNumber] = useState('');
   const e164 = useMemo(() => {
     const digits = (localNumber || '').replace(/\D/g, '');
@@ -51,9 +48,10 @@ function JoinPageInner() {
   const [otp, setOtp] = useState('');
   const [email, setEmail] = useState('');
 
-  // Optional prefill for onboarding
+  // Prefill (optional)
   const [name, setName] = useState('');
   const [role, setRole] = useState('');
+  const [showPersonalize, setShowPersonalize] = useState(false);
 
   // UI
   const [loading, setLoading] = useState(false);
@@ -61,19 +59,18 @@ function JoinPageInner() {
   const [err, setErr] = useState<string | null>(null);
   const resetAlerts = () => { setMsg(null); setErr(null); };
 
-  // Fast-path: if session exists and NOT returning for onboarding → /dashboard
+  // Fast-path
   useEffect(() => {
     (async () => {
-      const { data: { session} } = await supabase.auth.getSession();
+      const { data: { session } } = await supabase.auth.getSession();
       const wantsOnboarding = params.get('onboarding') === '1';
       if (session && wantsOnboarding) { setPhase('onboarding'); return; }
       if (session && !wantsOnboarding) { router.replace('/dashboard'); return; }
-      // else stay in auth
     })();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Safe JSON helpers
+  // Helpers
   async function safeJson(res: Response): Promise<any> {
     const ct = res.headers.get('content-type') || '';
     if (ct.includes('application/json')) { try { return await res.json(); } catch { return {}; } }
@@ -83,10 +80,10 @@ function JoinPageInner() {
     return (data && (data.error || data.message || data.raw)) || `HTTP ${res.status}`;
   }
 
-  // PHONE OTP — send
+  // PHONE OTP — send/verify
   async function sendPhoneOtp() {
     resetAlerts();
-    if (!/^\+\d{8,15}$/.test(e164)) { setErr('Enter a valid phone number.'); return; }
+    if (!/^\+\d{8,15}$/.test(e164)) { setErr('Please enter a valid phone number.'); return; }
     setLoading(true);
     try {
       const res = await fetch('/api/otp/send', {
@@ -103,7 +100,6 @@ function JoinPageInner() {
     } finally { setLoading(false); }
   }
 
-  // PHONE OTP — verify
   async function verifyPhoneOtp() {
     resetAlerts();
     if (!/^\d{6}$/.test(otp.trim())) { setErr('Enter the 6-digit code.'); return; }
@@ -116,13 +112,13 @@ function JoinPageInner() {
       const data = await safeJson(res);
       if (!res.ok) { setErr(httpErr(res, data)); return; }
       if (!data?.ok) { setErr(data?.error || 'Invalid code'); return; }
-      setPhase('onboarding'); // session active → open onboarding in-page
+      setPhase('onboarding');
     } catch (e: any) {
       setErr(e?.message || 'Network error while verifying OTP');
     } finally { setLoading(false); }
   }
 
-  // EMAIL — magic link → redirect back to /join?onboarding=1
+  // EMAIL — magic link back to /join?onboarding=1
   async function sendEmailMagicLink() {
     resetAlerts();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) { setErr('Enter a valid email.'); return; }
@@ -135,146 +131,183 @@ function JoinPageInner() {
         options: { shouldCreateUser: true, emailRedirectTo: redirectTo },
       });
       if (error) { setErr(error.message); return; }
-      setMsg('Check your email and tap the magic link to continue onboarding here.');
+      setMsg('Check your inbox and tap the magic link to continue here.');
     } catch (e: any) {
       setErr(e?.message || 'Network error while sending magic link');
     } finally { setLoading(false); }
   }
 
-  // ONBOARDING PHASE
-  if (phase === 'onboarding') {
-    return <OnboardingFlow />;
-  }
+  // Onboarding in-page
+  if (phase === 'onboarding') return <OnboardingFlow />;
 
-  // AUTH PHASE (Phone / Email)
+  // ---------------- UI ----------------
   return (
-    <main className="min-h-dvh p-6 md:p-10 text-white bg-gradient-to-b from-slate-900 to-black">
-      <section className="max-w-xl mx-auto rounded-2xl border border-white/10 bg-white/5 p-6 backdrop-blur-xl">
-        <p className="text-xs uppercase tracking-widest text-sky-300/80">GatishilNepal.org</p>
-        <h1 className="text-2xl md:text-4xl font-bold mt-2">Join in</h1>
-        <p className="text-slate-300/90 mt-2">
+    <main className="min-h-dvh bg-black text-white">
+      {/* Hero, aligned to homepage style */}
+      <header className="px-6 md:px-10 pt-10 pb-6">
+        <span className="inline-block text-[10px] tracking-[0.2em] rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-sky-300/80">
+          GATISHILNEPAL.ORG
+        </span>
+        <h1 className="mt-3 text-4xl md:text-5xl font-extrabold leading-tight">
+          Join the <span className="bg-clip-text text-transparent bg-gradient-to-r from-amber-300 to-rose-300">DAO Party</span><br className="hidden md:block" />
+          of the Powerless.
+        </h1>
+        <p className="mt-3 text-slate-300/90 max-w-2xl">
           Two simple ways: <b>Phone OTP</b> or <b>Email Magic Link</b>. After verification, onboarding opens right here.
         </p>
+      </header>
 
-        {/* Optional prefill */}
-        <div className="grid grid-cols-1 gap-3 mt-5">
-          <div>
-            <label className="block text-xs text-slate-300/70 mb-1">Name (optional)</label>
-            <input
-              value={name}
-              onChange={(e)=>setName(e.target.value)}
-              placeholder="e.g., Sushila Tamang"
-              className="w-full rounded-xl bg-transparent border border-white/15 px-3 py-2 placeholder:text-slate-400"
-            />
-          </div>
-          <div>
-            <label className="block text-xs text-slate-300/70 mb-1">Role (optional)</label>
-            <input
-              value={role}
-              onChange={(e)=>setRole(e.target.value)}
-              placeholder="e.g., Organizer, Farmer, Volunteer"
-              className="w-full rounded-xl bg-transparent border border-white/15 px-3 py-2 placeholder:text-slate-400"
-            />
-          </div>
-        </div>
-
-        {/* Channel tabs */}
-        <div className="mt-5 flex gap-2 text-sm">
+      {/* Card */}
+      <section className="px-6 md:px-10 pb-16">
+        <div className="max-w-xl mx-auto rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl p-6 shadow-[0_0_60px_-20px_rgba(255,255,255,0.3)]">
+          {/* Personalize (optional) — collapsed by default */}
           <button
-            onClick={()=>{ setChannel('phone'); resetAlerts(); setPhase('auth'); }}
-            className={'px-3 py-2 rounded-xl border ' + (channel==='phone'?'bg-white text-black':'border-white/15')}
+            type="button"
+            onClick={() => setShowPersonalize(v => !v)}
+            className="w-full flex items-center justify-between rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm"
+            aria-expanded={showPersonalize ? 'true' : 'false'}
           >
-            📱 Phone
+            <span className="text-slate-200">✨ Personalize (optional)</span>
+            <span className="text-slate-400">{showPersonalize ? 'Hide' : 'Add'}</span>
           </button>
-          <button
-            onClick={()=>{ setChannel('email'); resetAlerts(); setPhase('auth'); }}
-            className={'px-3 py-2 rounded-xl border ' + (channel==='email'?'bg-white text-black':'border-white/15')}
-          >
-            ✉️ Email
-          </button>
-        </div>
 
-        {/* PHONE FLOW */}
-        {channel==='phone' && phase==='auth' && (
-          <form onSubmit={(e)=>{ e.preventDefault(); sendPhoneOtp(); }} className="mt-4 space-y-3">
-            <div>
-              <label className="block text-xs text-slate-300/70 mb-1">Phone</label>
-              <div className="flex gap-2">
-                <select
-                  value={country.dial}
-                  onChange={(e) => {
-                    const next = COUNTRIES.find(c => c.dial === e.target.value) || COUNTRIES[0];
-                    setCountry(next);
-                  }}
-                  className="rounded-xl bg-transparent border border-white/15 px-3 py-2"
-                >
-                  {COUNTRIES.map((c, i) => (
-                    <option key={`${c.dial}-${i}`} value={c.dial} className="bg-slate-900">
-                      {c.flag} +{c.dial}
-                    </option>
-                  ))}
-                </select>
+          {showPersonalize && (
+            <div className="grid grid-cols-1 gap-3 mt-3">
+              <div>
+                <label className="block text-xs text-slate-300/70 mb-1">Name</label>
                 <input
-                  value={localNumber}
-                  onChange={(e)=>setLocalNumber(e.target.value)}
-                  placeholder="98XXXXXXXX"
-                  inputMode="numeric"
-                  className="flex-1 rounded-xl bg-transparent border border-white/15 px-3 py-2 placeholder:text-slate-400"
+                  value={name}
+                  onChange={(e)=>setName(e.target.value)}
+                  placeholder="e.g., Sushila Tamang"
+                  className="w-full rounded-xl bg-transparent border border-white/15 px-3 py-2 placeholder:text-slate-400"
                 />
               </div>
-              <div className="text-xs opacity-70 mt-1">Will send OTP to <code>{e164 || `+${country.dial}…`}</code></div>
+              <div>
+                <label className="block text-xs text-slate-300/70 mb-1">How will you help? (Role)</label>
+                <input
+                  value={role}
+                  onChange={(e)=>setRole(e.target.value)}
+                  placeholder="e.g., Organizer, Farmer, Volunteer"
+                  className="w-full rounded-xl bg-transparent border border-white/15 px-3 py-2 placeholder:text-slate-400"
+                />
+              </div>
+              <p className="text-[11px] text-slate-400">
+                This only shapes your welcome and recommendations. Skip anytime — you can set it later.
+              </p>
             </div>
+          )}
 
-            <button type="submit" disabled={loading}
-              className="w-full px-4 py-2 rounded-xl bg-white text-black font-semibold disabled:opacity-60">
-              {loading ? 'Sending…' : 'Send OTP'}
+          {/* Tabs */}
+          <div className="mt-5 flex gap-2 text-sm">
+            <button
+              onClick={()=>{ setChannel('phone'); resetAlerts(); setPhase('auth'); }}
+              className={'px-3 py-2 rounded-full border transition ' + (channel==='phone'?'bg-white text-black':'border-white/15 hover:bg-white/5')}
+            >
+              📱 Phone
             </button>
-          </form>
-        )}
-
-        {channel==='phone' && phase==='verify' && (
-          <form onSubmit={(e)=>{ e.preventDefault(); verifyPhoneOtp(); }} className="mt-4 space-y-3">
-            <div>
-              <label className="block text-xs text-slate-300/70 mb-1">Enter 6-digit code</label>
-              <input
-                value={otp}
-                onChange={(e)=>setOtp(e.target.value)}
-                placeholder="••••••"
-                inputMode="numeric"
-                className="w-full rounded-xl bg-transparent border border-white/15 px-3 py-2 placeholder:text-slate-400"
-              />
-            </div>
-            <button type="submit" disabled={loading}
-              className="w-full px-4 py-2 rounded-xl bg-white text-black font-semibold disabled:opacity-60">
-              {loading ? 'Verifying…' : 'Verify & Start Onboarding'}
+            <button
+              onClick={()=>{ setChannel('email'); resetAlerts(); setPhase('auth'); }}
+              className={'px-3 py-2 rounded-full border transition ' + (channel==='email'?'bg-white text-black':'border-white/15 hover:bg-white/5')}
+            >
+              🇺🇸 Email
             </button>
-          </form>
-        )}
-
-        {/* EMAIL FLOW */}
-        {channel==='email' && phase==='auth' && (
-          <div className="mt-4 space-y-3">
-            <div>
-              <label className="block text-xs text-slate-300/70 mb-1">Email</label>
-              <input
-                value={email}
-                onChange={(e)=>setEmail(e.target.value)}
-                placeholder="you@example.com"
-                className="w-full rounded-xl bg-transparent border border-white/15 px-3 py-2 placeholder:text-slate-400"
-              />
-            </div>
-            <button onClick={sendEmailMagicLink} disabled={loading}
-              className="w-full px-4 py-2 rounded-xl bg-white text-black font-semibold disabled:opacity-60">
-              {loading ? 'Sending…' : 'Send Magic Link'}
-            </button>
-            <p className="text-xs text-slate-400">
-              After tapping the link, you’ll return here and onboarding opens automatically.
-            </p>
           </div>
-        )}
 
-        {!!msg && <p className="mt-4 text-xs text-emerald-300">{msg}</p>}
-        {!!err && <p className="mt-2 text-xs text-rose-300">{err}</p>}
+          {/* PHONE FLOW */}
+          {channel==='phone' && phase==='auth' && (
+            <form onSubmit={(e)=>{ e.preventDefault(); sendPhoneOtp(); }} className="mt-4 space-y-3">
+              <div>
+                <label className="block text-xs text-slate-300/70 mb-1">Phone</label>
+                <div className="flex gap-2">
+                  <select
+                    value={country.dial}
+                    onChange={(e) => {
+                      const next = COUNTRIES.find(c => c.dial === e.target.value) || COUNTRIES[0];
+                      setCountry(next);
+                    }}
+                    className="rounded-xl bg-transparent border border-white/15 px-3 py-2"
+                    aria-label="Select country code"
+                  >
+                    {COUNTRIES.map((c, i) => (
+                      <option key={`${c.dial}-${i}`} value={c.dial} className="bg-slate-900">
+                        {c.flag} +{c.dial}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    value={localNumber}
+                    onChange={(e)=>setLocalNumber(e.target.value)}
+                    placeholder="98XXXXXXXX"
+                    inputMode="numeric"
+                    className="flex-1 rounded-xl bg-transparent border border-white/15 px-3 py-2 placeholder:text-slate-400"
+                  />
+                </div>
+                <div className="text-xs opacity-70 mt-1">Will send OTP to <code>{e164 || `+${country.dial}…`}</code></div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full px-4 py-3 rounded-2xl bg-amber-400 text-black font-semibold disabled:opacity-60"
+              >
+                {loading ? 'Sending…' : 'Send OTP'}
+              </button>
+              <p className="text-[11px] text-slate-400 text-center">
+                Message & data rates may apply. By continuing, you agree to tamper-proof decisions.
+              </p>
+            </form>
+          )}
+
+          {channel==='phone' && phase==='verify' && (
+            <form onSubmit={(e)=>{ e.preventDefault(); verifyPhoneOtp(); }} className="mt-4 space-y-3">
+              <div>
+                <label className="block text-xs text-slate-300/70 mb-1">Enter 6-digit code</label>
+                <input
+                  value={otp}
+                  onChange={(e)=>setOtp(e.target.value)}
+                  placeholder="••••••"
+                  inputMode="numeric"
+                  className="w-full rounded-xl bg-transparent border border-white/15 px-3 py-2 placeholder:text-slate-400"
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full px-4 py-3 rounded-2xl bg-amber-400 text-black font-semibold disabled:opacity-60"
+              >
+                {loading ? 'Verifying…' : 'Verify & Start Onboarding'}
+              </button>
+            </form>
+          )}
+
+          {/* EMAIL FLOW */}
+          {channel==='email' && phase==='auth' && (
+            <div className="mt-4 space-y-3">
+              <div>
+                <label className="block text-xs text-slate-300/70 mb-1">Email</label>
+                <input
+                  value={email}
+                  onChange={(e)=>setEmail(e.target.value)}
+                  placeholder="you@example.com"
+                  className="w-full rounded-xl bg-transparent border border-white/15 px-3 py-2 placeholder:text-slate-400"
+                />
+              </div>
+              <button
+                onClick={sendEmailMagicLink}
+                disabled={loading}
+                className="w-full px-4 py-3 rounded-2xl bg-amber-400 text-black font-semibold disabled:opacity-60"
+              >
+                {loading ? 'Sending…' : 'Send Magic Link'}
+              </button>
+              <p className="text-[11px] text-slate-400 text-center">
+                After you tap the link, you’ll return here and onboarding opens automatically.
+              </p>
+            </div>
+          )}
+
+          {!!msg && <p className="mt-4 text-xs text-emerald-300">{msg}</p>}
+          {!!err && <p className="mt-2 text-xs text-rose-300">{err}</p>}
+        </div>
       </section>
     </main>
   );
