@@ -1,5 +1,5 @@
-// app/join/page.tsx — Join → OnboardingFlow (canonical callback + hash cleanup)
-// Remote-only: Next.js App Router + Supabase + Vercel
+// app/join/page.tsx — Join → OnboardingFlow (session-aware magic-link cleanup)
+// Next.js App Router + Supabase + Vercel
 'use client';
 
 import { Suspense, useEffect, useMemo, useState } from 'react';
@@ -8,8 +8,7 @@ import OnboardingFlow from '@/components/OnboardingFlow';
 import { COUNTRIES } from '@/app/data/countries';
 import { createClient } from '@supabase/supabase-js';
 
-// Define the exact shape we need here (flag + dial + name),
-// regardless of how the external type was declared.
+// Define the exact shape we need here (flag + dial + name)
 type Country = { flag: string; dial: string; name: string };
 
 const supabase = createClient(
@@ -76,7 +75,7 @@ function JoinPageInner() {
   // Fast-path for existing session
   useEffect(() => {
     (async () => {
-      const { data: { session } } = await supabase.auth.getSession();
+      const { data: { session} } = await supabase.auth.getSession();
       const wantsOnboarding = params.get('onboarding') === '1';
       if (session && wantsOnboarding) { setPhase('onboarding'); return; }
       if (session && !wantsOnboarding) { router.replace('/dashboard'); return; }
@@ -84,33 +83,73 @@ function JoinPageInner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Hash catcher: if we ever land on any host with #access_token, force canonical;
-  // if already on canonical, strip the hash for a clean URL.
+  // Magic-link flow: WAIT for session before stripping hash; normalize to canonical
   useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const { hash, origin, pathname } = window.location;
-    if (!hash || !hash.includes('access_token=')) return;
+    let alive = true;
 
-    // Wrong host → hard redirect to canonical onboarding URL
-    if (!origin.startsWith(SITE_URL)) {
-      window.location.replace(CALLBACK);
-      return;
+    async function waitForSession(maxTries = 40, delayMs = 100) {
+      for (let i = 0; i < maxTries; i++) {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!alive) return null;
+        if (session) return session;
+        await new Promise((r) => setTimeout(r, delayMs));
+      }
+      return null;
     }
 
-    // On canonical host → strip hash, keep path (this page then reads session via Supabase)
-    const cleanUrl = `${window.location.origin}${pathname}?onboarding=1`;
-    window.history.replaceState({}, '', cleanUrl);
-  }, []);
+    (async () => {
+      if (typeof window === 'undefined') return;
 
-  // Helpers
-  async function safeJson(res: Response): Promise<any> {
-    const ct = res.headers.get('content-type') || '';
-    if (ct.includes('application/json')) { try { return await res.json(); } catch { return {}; } }
-    const txt = await res.text().catch(() => ''); try { return JSON.parse(txt); } catch { return { raw: txt }; }
-  }
-  function httpErr(res: Response, data: any) {
-    return (data && (data.error || data.message || data.raw)) || `HTTP ${res.status}`;
-  }
+      const { hash, origin, pathname, search } = window.location;
+      const wantsOnboarding =
+        new URLSearchParams(search).get('onboarding') === '1';
+      const hasAccessToken = hash && hash.includes('access_token=');
+
+      // Arrived via magic-link
+      if (hasAccessToken) {
+        // If on wrong host, go to canonical callback first
+        if (!origin.startsWith(SITE_URL)) {
+          window.location.replace(CALLBACK);
+          return;
+        }
+
+        // On canonical host: WAIT for Supabase to hydrate the session…
+        const session = await waitForSession();
+
+        // …then clean URL (strip hash, enforce onboarding=1)
+        const clean = new URL(`${origin}${pathname}`);
+        clean.searchParams.set('onboarding', '1');
+        window.history.replaceState({}, '', clean.toString());
+
+        // Enter onboarding once session exists
+        if (session && wantsOnboarding) {
+          setPhase('onboarding');
+          return;
+        }
+      } else {
+        // No hash; if already authenticated + onboarding requested, go in
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session && wantsOnboarding) { setPhase('onboarding'); return; }
+        if (session && !wantsOnboarding) { router.replace('/dashboard'); return; }
+      }
+    })();
+
+    return () => { alive = false; };
+  }, [router]);
+
+  // Safety net: react to late hydration or provider callbacks
+  useEffect(() => {
+    const { data: sub } = supabase.auth.onAuthStateChange((_evt, session) => {
+      const wantsOnboarding =
+        new URLSearchParams(window.location.search).get('onboarding') === '1';
+      if (session && wantsOnboarding) {
+        setPhase('onboarding');
+      } else if (session && !wantsOnboarding) {
+        router.replace('/dashboard');
+      }
+    });
+    return () => { sub.subscription?.unsubscribe?.(); };
+  }, [router]);
 
   // PHONE OTP — send (custom API using public.otps)
   async function sendPhoneOtp() {
@@ -315,7 +354,7 @@ function JoinPageInner() {
             <div className="mt-4 space-y-3">
               <div>
                 <label className="block text-xs text-slate-300/70 mb-1">Email</label>
-                <input
+              <input
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="you@example.com"
@@ -341,4 +380,14 @@ function JoinPageInner() {
       </section>
     </main>
   );
+}
+
+/* ---------------- Utilities ---------------- */
+async function safeJson(res: Response): Promise<any> {
+  const ct = res.headers.get('content-type') || '';
+  if (ct.includes('application/json')) { try { return await res.json(); } catch { return {}; } }
+  const txt = await res.text().catch(() => ''); try { return JSON.parse(txt); } catch { return { raw: txt }; }
+}
+function httpErr(res: Response, data: any) {
+  return (data && (data.error || data.message || data.raw)) || `HTTP ${res.status}`;
 }
