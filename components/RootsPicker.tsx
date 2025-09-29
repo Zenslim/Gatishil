@@ -50,9 +50,11 @@ const supabase = createClient(
   { auth: { persistSession: false } }
 );
 
+// ELI15: The only change needed to fix the build was removing the generic from `.from<Node>(...)`.
+// We now call `.from('geo_nodes')` (no generic) and cast the result.
 async function fetchChildrenByLevel(level: Node['level'], parentId: string | null) {
   const q = supabase
-    .from<Node>('geo_nodes')
+    .from('geo_nodes')
     .select('id,name_en,name_local,level,parent_id')
     .eq('level', level)
     .order('name_en', { ascending: true });
@@ -62,13 +64,13 @@ async function fetchChildrenByLevel(level: Node['level'], parentId: string | nul
     : await q.is('parent_id', null);
 
   if (error) throw error;
-  return data || [];
+  return (data || []) as Node[];
 }
 
 async function fetchPalikas(parentDistrictId: string) {
   // Both 'city' and 'municipality' count as Palika (Nagar/Gaun)
   const { data, error } = await supabase
-    .from<Node>('geo_nodes')
+    .from('geo_nodes')
     .select('id,name_en,name_local,level,parent_id')
     .in('level', ['city', 'municipality'])
     .eq('parent_id', parentDistrictId)
@@ -76,7 +78,7 @@ async function fetchPalikas(parentDistrictId: string) {
     .order('name_en', { ascending: true });
 
   if (error) throw error;
-  return data || [];
+  return (data || []) as Node[];
 }
 
 async function fetchToles(wardId: string): Promise<Tole[]> {
@@ -236,7 +238,10 @@ export default function RootsPicker({
       district: district || undefined,
       palika: palika || undefined,
       ward: ward || undefined,
-      tole: tole || (toleMode === 'new' && toleNew.trim() ? { name: toleNew.trim() } : undefined) || undefined,
+      tole:
+        tole ||
+        (toleMode === 'new' && toleNew.trim() ? { name: toleNew.trim() } : undefined) ||
+        undefined,
     });
   }, [province, district, palika, ward, tole, toleMode, toleNew, onComplete]);
 
