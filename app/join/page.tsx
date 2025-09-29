@@ -1,13 +1,16 @@
-// app/join/page.tsx — Join → OnboardingFlow (clean build-safe)
-// Stack: Next.js App Router + Supabase + Vercel
+// app/join/page.tsx — Join → OnboardingFlow (build-safe Country type)
+// Remote-only: Next.js App Router + Supabase + Vercel
 'use client';
 
 import { Suspense, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import OnboardingFlow from '@/components/OnboardingFlow';
-import type { CountryDial } from '@/app/data/countries';
 import { COUNTRIES } from '@/app/data/countries';
 import { createClient } from '@supabase/supabase-js';
+
+// Define the exact shape we need here (flag + dial + name),
+// regardless of how the external type was declared.
+type Country = { flag: string; dial: string; name: string };
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -17,7 +20,6 @@ const supabase = createClient(
 type Phase = 'auth' | 'verify' | 'onboarding';
 type Channel = 'phone' | 'email';
 
-// Outer wrapper to satisfy App Router requirement for useSearchParams
 export default function JoinPage() {
   return (
     <Suspense
@@ -41,7 +43,7 @@ function JoinPageInner() {
   const [channel, setChannel] = useState<Channel>('phone');
 
   // Country + phone
-  const [country, setCountry] = useState<CountryDial>(COUNTRIES[0]); // 🇳🇵 default
+  const [country, setCountry] = useState<Country>(COUNTRIES[0] as Country); // 🇳🇵 default
   const [localNumber, setLocalNumber] = useState('');
   const e164 = useMemo(() => {
     const digits = (localNumber || '').replace(/\D/g, '');
@@ -60,25 +62,15 @@ function JoinPageInner() {
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  const resetAlerts = () => {
-    setMsg(null);
-    setErr(null);
-  };
+  const resetAlerts = () => { setMsg(null); setErr(null); };
 
-  // Fast-path: if already signed in
+  // Fast-path for existing session
   useEffect(() => {
     (async () => {
       const { data: { session } } = await supabase.auth.getSession();
       const wantsOnboarding = params.get('onboarding') === '1';
-      if (session && wantsOnboarding) {
-        setPhase('onboarding');
-        return;
-      }
-      if (session && !wantsOnboarding) {
-        router.replace('/dashboard');
-        return;
-      }
-      // else stay on auth
+      if (session && wantsOnboarding) { setPhase('onboarding'); return; }
+      if (session && !wantsOnboarding) { router.replace('/dashboard'); return; }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -86,11 +78,8 @@ function JoinPageInner() {
   // Helpers
   async function safeJson(res: Response): Promise<any> {
     const ct = res.headers.get('content-type') || '';
-    if (ct.includes('application/json')) {
-      try { return await res.json(); } catch { return {}; }
-    }
-    const txt = await res.text().catch(() => '');
-    try { return JSON.parse(txt); } catch { return { raw: txt }; }
+    if (ct.includes('application/json')) { try { return await res.json(); } catch { return {}; } }
+    const txt = await res.text().catch(() => ''); try { return JSON.parse(txt); } catch { return { raw: txt }; }
   }
   function httpErr(res: Response, data: any) {
     return (data && (data.error || data.message || data.raw)) || `HTTP ${res.status}`;
@@ -99,16 +88,12 @@ function JoinPageInner() {
   // PHONE OTP — send
   async function sendPhoneOtp() {
     resetAlerts();
-    if (!/^\+\d{8,15}$/.test(e164)) {
-      setErr('Please enter a valid phone number.');
-      return;
-    }
+    if (!/^\+\d{8,15}$/.test(e164)) { setErr('Please enter a valid phone number.'); return; }
     setLoading(true);
     try {
       const res = await fetch('/api/otp/send', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: e164 })
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: e164 }),
       });
       const data = await safeJson(res);
       if (!res.ok) { setErr(httpErr(res, data)); return; }
@@ -117,24 +102,18 @@ function JoinPageInner() {
       setPhase('verify');
     } catch (e: any) {
       setErr(e?.message || 'Network error while sending OTP');
-    } finally {
-      setLoading(false);
-    }
+    } finally { setLoading(false); }
   }
 
   // PHONE OTP — verify
   async function verifyPhoneOtp() {
     resetAlerts();
-    if (!/^\d{6}$/.test(otp.trim())) {
-      setErr('Enter the 6-digit code.');
-      return;
-    }
+    if (!/^\d{6}$/.test(otp.trim())) { setErr('Enter the 6-digit code.'); return; }
     setLoading(true);
     try {
       const res = await fetch('/api/otp/verify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: e164, code: otp.trim(), name, role })
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: e164, code: otp.trim(), name, role }),
       });
       const data = await safeJson(res);
       if (!res.ok) { setErr(httpErr(res, data)); return; }
@@ -142,39 +121,30 @@ function JoinPageInner() {
       setPhase('onboarding'); // session now active
     } catch (e: any) {
       setErr(e?.message || 'Network error while verifying OTP');
-    } finally {
-      setLoading(false);
-    }
+    } finally { setLoading(false); }
   }
 
-  // EMAIL — magic link back to /join?onboarding=1
+  // EMAIL — magic link -> /join?onboarding=1
   async function sendEmailMagicLink() {
     resetAlerts();
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
-      setErr('Enter a valid email.');
-      return;
-    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) { setErr('Enter a valid email.'); return; }
     setLoading(true);
     try {
       const origin = typeof window !== 'undefined' ? window.location.origin : '';
       const redirectTo = `${origin}/join?onboarding=1`;
       const { error } = await supabase.auth.signInWithOtp({
         email: email.trim(),
-        options: { shouldCreateUser: true, emailRedirectTo: redirectTo }
+        options: { shouldCreateUser: true, emailRedirectTo: redirectTo },
       });
       if (error) { setErr(error.message); return; }
       setMsg('Check your email and tap the magic link to continue onboarding here.');
     } catch (e: any) {
       setErr(e?.message || 'Network error while sending magic link');
-    } finally {
-      setLoading(false);
-    }
+    } finally { setLoading(false); }
   }
 
   // Onboarding
-  if (phase === 'onboarding') {
-    return <OnboardingFlow />;
-  }
+  if (phase === 'onboarding') return <OnboardingFlow />;
 
   // ---------------- UI ----------------
   return (
@@ -251,13 +221,13 @@ function JoinPageInner() {
                   <select
                     value={country.dial}
                     onChange={(e) => {
-                      const next = COUNTRIES.find(c => c.dial === e.target.value) || COUNTRIES[0];
+                      const next = (COUNTRIES as Country[]).find(c => c.dial === e.target.value) || (COUNTRIES[0] as Country);
                       setCountry(next);
                     }}
                     className="rounded-xl bg-transparent border border-white/15 px-3 py-2"
                     aria-label="Select country code"
                   >
-                    {COUNTRIES.map((c, i) => (
+                    {(COUNTRIES as Country[]).map((c, i) => (
                       <option key={`${c.dial}-${i}`} value={c.dial} className="bg-slate-900">
                         {c.flag} {c.name} (+{c.dial})
                       </option>
