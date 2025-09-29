@@ -2,6 +2,7 @@
 // Stack: Next.js App Router + Supabase + Vercel
 'use client';
 
+import CountryPicker from '@/app/components/CountryPicker';
 import { Suspense, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import OnboardingFlow from '@/components/OnboardingFlow';
@@ -203,13 +204,13 @@ function JoinPageInner() {
               onClick={()=>{ setChannel('phone'); resetAlerts(); setPhase('auth'); }}
               className={'px-3 py-2 rounded-full border transition ' + (channel==='phone'?'bg-white text-black':'border-white/15 hover:bg-white/5')}
             >
-              📱 Phone
+              Phone
             </button>
             <button
               onClick={()=>{ setChannel('email'); resetAlerts(); setPhase('auth'); }}
               className={'px-3 py-2 rounded-full border transition ' + (channel==='email'?'bg-white text-black':'border-white/15 hover:bg-white/5')}
             >
-              🇺🇸 Email
+              E-mail
             </button>
           </div>
 
@@ -218,29 +219,38 @@ function JoinPageInner() {
             <form onSubmit={(e)=>{ e.preventDefault(); sendPhoneOtp(); }} className="mt-4 space-y-3">
               <div>
                 <label className="block text-xs text-slate-300/70 mb-1">Phone</label>
-                <div className="flex gap-2">
-                  <select
-                    value={country.dial}
-                    onChange={(e) => {
-                      const next = COUNTRIES.find(c => c.dial === e.target.value) || COUNTRIES[0];
-                      setCountry(next);
-                    }}
-                    className="rounded-xl bg-transparent border border-white/15 px-3 py-2"
-                    aria-label="Select country code"
-                  >
-                    {COUNTRIES.map((c, i) => (
-                      <option key={`${c.dial}-${i}`} value={c.dial} className="bg-slate-900">
-                        {c.flag} +{c.dial}
-                      </option>
-                    ))}
-                  </select>
-                  <input
-                    value={localNumber}
-                    onChange={(e)=>setLocalNumber(e.target.value)}
-                    placeholder="98XXXXXXXX"
-                    inputMode="numeric"
-                    className="flex-1 rounded-xl bg-transparent border border-white/15 px-3 py-2 placeholder:text-slate-400"
-                  />
+               <div className="flex gap-2">
+  {/* Flag + dial button (opens modal) */}
+  <button
+    type="button"
+    onClick={() => setPickerOpen(true)}
+    className="min-w-[110px] flex items-center justify-between rounded-xl bg-transparent border border-white/15 px-3 py-2"
+    aria-haspopup="dialog"
+    aria-expanded={pickerOpen ? 'true' : 'false'}
+  >
+    <span className="flex items-center gap-2">
+      <span className="text-xl">{country.flag}</span>
+      <span className="text-slate-200">+{country.dial}</span>
+    </span>
+    <span className="opacity-60">▾</span>
+  </button>
+
+  <input
+    value={localNumber}
+    onChange={(e)=>setLocalNumber(e.target.value)}
+    placeholder="98XXXXXXXX"
+    inputMode="numeric"
+    className="flex-1 rounded-xl bg-transparent border border-white/15 px-3 py-2 placeholder:text-slate-400"
+  />
+</div>
+
+{/* Modal */}
+<CountryPicker
+  open={pickerOpen}
+  onClose={() => setPickerOpen(false)}
+  value={country}
+  onChange={(c) => setCountry(c)}
+/>
                 </div>
                 <div className="text-xs opacity-70 mt-1">Will send OTP to <code>{e164 || `+${country.dial}…`}</code></div>
               </div>
