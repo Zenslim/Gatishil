@@ -2,25 +2,16 @@
 
 /**
  * Gatishil — Digital Chauṭarī Onboarding (Only up to Screen 3)
- * Fixes "TypeError: n is not a function" by reverting to a STATIC import of ChautariLocationPicker.
- * Adds Surname (required) on Screen 1 and integrates Ikigai into Screen 3.
- * Remote-only: Next.js + Supabase + Vercel. No local steps.
- *
- * Notes:
- * - Uses inline Supabase client (matches your original file style).
- * - Writes ONLY columns that exist in your ikigai schema, plus `surname` (you added it).
- * - Storage path respects your RLS: profiles/<auth.uid()>.jpg (image/jpeg).
+ * Fixes both issues:
+ *  - Removes inline createClient() → uses the shared singleton from ../lib/supabaseClient
+ *  - Static import for ChautariLocationPicker (no dynamic import surprises)
+ * Schema: writes `surname` (you added it) + other existing columns only.
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Cropper from "react-easy-crop";
-import { createClient } from "@supabase/supabase-js";
-import ChautariLocationPicker from "./ChautariLocationPicker"; // ← static import (no dynamic())
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-);
+import { supabase } from "../lib/supabaseClient"; // 👈 use ONE shared instance
+import ChautariLocationPicker from "./ChautariLocationPicker"; // 👈 static import
 
 const STEP = {
   ENTRY: "entry",
@@ -43,7 +34,6 @@ const dedupePush = (list, value, max) => {
 };
 
 async function upsertProfileSafe(payload) {
-  // allow only known columns
   const allowed = [
     "user_id",
     "name",
@@ -60,10 +50,10 @@ async function upsertProfileSafe(payload) {
     "updated_at",
   ];
   const clean = Object.fromEntries(Object.entries(payload).filter(([k]) => allowed.includes(k)));
-  const { data, error } = await supabase.from("profiles").upsert(clean, {
-    onConflict: "user_id",
-    ignoreDuplicates: false,
-  }).select();
+  const { data, error } = await supabase
+    .from("profiles")
+    .upsert(clean, { onConflict: "user_id", ignoreDuplicates: false })
+    .select();
   if (error) throw error;
   return Array.isArray(data) ? data[0] : data;
 }
@@ -82,7 +72,6 @@ export default function OnboardingFlow() {
   const [crop, setCrop] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
   const [croppedAreaPixels, setCroppedAreaPixels] = useState(null);
-  const [cropping, setCropping] = useState(false);
   const [croppedPreview, setCroppedPreview] = useState("");
 
   // Screen 2 — Roots
@@ -97,23 +86,33 @@ export default function OnboardingFlow() {
   const [viability, setViability] = useState(""); // 'paid','part_time','learning','exploring'
   const [transitionTarget, setTransitionTarget] = useState("");
 
-  // auth
+  // --- Auth: use ONE client; correct subscribe/unsubscribe shape for supabase-js v2
   useEffect(() => {
-    (async () => {
-      const { data } = await supabase.auth.getUser();
-      if (data?.user?.id) setUserId(data.user.id);
-    })();
-    const sub = supabase.auth.onAuthStateChange?.((_e, session) => setUserId(session?.user?.id || null));
-    return () => sub?.data?.subscription?.unsubscribe?.();
+    let mounted = true;
+
+    supabase.auth.getUser().then(({ data }) => {
+      if (mounted) setUserId(data?.user?.id ?? null);
+    });
+
+    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (mounted) setUserId(session?.user?.id ?? null);
+    });
+
+    return () => {
+      mounted = false;
+      authListener?.subscription?.unsubscribe(); // v2 shape
+    };
   }, []);
 
-  // prefill (array-safe; no .single/.maybeSingle)
+  // Prefill existing profile (array-safe; no .single/.maybeSingle)
   useEffect(() => {
     (async () => {
       if (!userId) return;
       const { data, error } = await supabase
         .from("profiles")
-        .select("name, surname, photo_url, roots_json, diaspora_json, livelihood, skills, passions, needs, viability, transition_target")
+        .select(
+          "name, surname, photo_url, roots_json, diaspora_json, livelihood, skills, passions, needs, viability, transition_target"
+        )
         .eq("user_id", userId);
       if (!error && Array.isArray(data) && data.length) {
         const row = data[0];
@@ -136,7 +135,7 @@ export default function OnboardingFlow() {
     setTimeout(() => setToast(null), 1600);
   };
 
-  // ---- Photo crop helpers (same UX as your old file, but saving to RLS-compliant path)
+  // --- Photo helpers
   const fileToDataURL = (file) =>
     new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -154,6 +153,8 @@ export default function OnboardingFlow() {
       img.src = src;
     });
 
+  const onCropComplete = (_area, pixels) => setCroppedAreaPixels(pixels);
+
   async function getCroppedCanvasBlob(imageSrc, cropPixels, outputSize = 512) {
     const image = await loadImage(imageSrc);
     const canvas = document.createElement("canvas");
@@ -166,22 +167,14 @@ export default function OnboardingFlow() {
     return await new Promise((resolve) => canvas.toBlob((blob) => resolve(blob), "image/jpeg", 0.92));
   }
 
-  const onCropComplete = useCallback((_, areaPixels) => setCroppedAreaPixels(areaPixels), []);
-
-  const confirmCrop = useCallback(async () => {
+  const confirmCropPreview = useCallback(async () => {
     if (!rawPhotoSrc || !croppedAreaPixels) return;
-    try {
-      setCropping(true);
-      const blob = await getCroppedCanvasBlob(rawPhotoSrc, croppedAreaPixels, 512);
-      const previewUrl = URL.createObjectURL(blob);
-      setCroppedPreview(previewUrl);
-    } finally {
-      setCropping(false);
-    }
+    const blob = await getCroppedCanvasBlob(rawPhotoSrc, croppedAreaPixels, 512);
+    const url = URL.createObjectURL(blob);
+    setCroppedPreview(url);
   }, [rawPhotoSrc, croppedAreaPixels]);
 
-  // ---- Saves (each step)
-
+  // --- Saves
   const saveNameSurname = useCallback(async () => {
     if (!userId) return;
     try {
@@ -204,9 +197,11 @@ export default function OnboardingFlow() {
     try {
       const resp = await fetch(croppedPreview);
       const blob = await resp.blob();
-      const path = `profiles/${userId}.jpg`; // matches your storage RLS policy
+      const path = `profiles/${userId}.jpg`; // matches your storage RLS
+
       await supabase.storage.from("profiles").remove([path]).catch(() => {});
-      const { error: upErr } = await supabase.storage
+      const { error: upErr } = await supabase
+        .storage
         .from("profiles")
         .upload(path, blob, { upsert: true, contentType: "image/jpeg", cacheControl: "3600" });
       if (upErr) throw upErr;
@@ -233,41 +228,31 @@ export default function OnboardingFlow() {
     }
   }, [userId, croppedPreview, name, surname]);
 
-  const saveRoots = useCallback(async (rootsObj) => {
-    if (!userId) return;
-    const payload = { user_id: userId, updated_at: new Date().toISOString() };
-    if (rootsObj?.type === "ward") {
-      payload.roots_json = {
-        type: "ward",
-        ward_id: rootsObj.id,
-        ward_no: rootsObj.ward_no ?? null,
-        local_level_id: rootsObj.local_level_id ?? null,
-        district_id: rootsObj.district_id ?? null,
-        province_id: rootsObj.province_id ?? null,
-        label: rootsObj.label,
-      };
-      payload.diaspora_json = null;
-    } else if (rootsObj?.type === "city") {
-      payload.roots_json = null;
-      payload.diaspora_json = {
-        type: "city",
-        city_id: rootsObj.city_id ?? rootsObj.id,
-        country_code: rootsObj.country_code ?? null,
-        label: rootsObj.label,
-      };
-    } else {
-      payload.roots_json = null;
-      payload.diaspora_json = null;
-    }
-    try {
-      await upsertProfileSafe(payload);
-      setRoots(rootsObj);
-      showToast("Location saved.");
-    } catch (e) {
-      console.error(e);
-      showToast("Could not save location.");
-    }
-  }, [userId]);
+  const saveRoots = useCallback(
+    async (rootsObj) => {
+      if (!userId) return;
+      const payload = { user_id: userId, updated_at: new Date().toISOString() };
+      if (rootsObj?.type === "ward") {
+        payload.roots_json = rootsObj;
+        payload.diaspora_json = null;
+      } else if (rootsObj?.type === "city") {
+        payload.diaspora_json = rootsObj;
+        payload.roots_json = null;
+      } else {
+        payload.roots_json = null;
+        payload.diaspora_json = null;
+      }
+      try {
+        await upsertProfileSafe(payload);
+        setRoots(rootsObj);
+        showToast("Location saved.");
+      } catch (e) {
+        console.error(e);
+        showToast("Could not save location.");
+      }
+    },
+    [userId]
+  );
 
   const saveIkigai = useCallback(async () => {
     if (!userId) return;
@@ -289,19 +274,13 @@ export default function OnboardingFlow() {
     }
   }, [userId, livelihood, skills, passions, needs, viability, transitionTarget]);
 
-  // ---- Guards
-
-  const nameOk = name.trim().length > 0;
-  const surnameOk = surname.trim().length > 0;
-  const photoOk = !!photoUrl || !!croppedPreview;
-  const screen1Ready = nameOk && surnameOk && photoOk;
-
+  // --- Guards
+  const screen1Ready = name.trim() && surname.trim() && (photoUrl || croppedPreview);
   const ikigaiReady =
     !!viability &&
     ((livelihood?.trim().length ?? 0) > 0 || skills.length > 0 || passions.length > 0 || needs.length > 0);
 
-  // ---- UI
-
+  // --- UI
   return (
     <div className="flex min-h-screen items-center justify-center bg-black text-white p-6">
       <div className="w-full max-w-md rounded-2xl bg-white/5 p-6 backdrop-blur-xl space-y-6 border border-white/10">
@@ -320,7 +299,7 @@ export default function OnboardingFlow() {
           </div>
         )}
 
-        {/* Screen 1 — Name & Face (Name + Surname + Photo all required) */}
+        {/* Screen 1 — Name & Face */}
         {step === STEP.NAME_PHOTO && (
           <div className="space-y-5">
             <h2 className="text-xl font-semibold">Name & Face</h2>
@@ -397,11 +376,10 @@ export default function OnboardingFlow() {
                   />
                   <div className="flex gap-2">
                     <button
-                      onClick={confirmCrop}
-                      disabled={cropping}
-                      className="flex-1 rounded-lg bg-amber-400 px-4 py-2 font-semibold text-black disabled:opacity-60"
+                      onClick={confirmCropPreview}
+                      className="flex-1 rounded-lg bg-amber-400 px-4 py-2 font-semibold text-black"
                     >
-                      {cropping ? "Cropping…" : "Save crop preview"}
+                      Save crop preview
                     </button>
                     <button
                       onClick={() => {
@@ -471,145 +449,185 @@ export default function OnboardingFlow() {
           </div>
         )}
 
-        {/* Screen 3 — Livelihood & Ikigai (tabs) */}
+        {/* Screen 3 — Livelihood & Ikigai */}
         {step === STEP.LIVELIHOOD_IKIGAI && (
-          <div className="space-y-6">
-            <h2 className="text-xl font-semibold">Let’s understand your work & gifts.</h2>
-
-            <div className="flex gap-2 flex-wrap">
-              {["Livelihood", "Good At", "Love", "World Needs", "Sustainability"].map((t) => (
-                <button
-                  key={t}
-                  type="button"
-                  onClick={() => setIkigaiTab(t)}
-                  className={`px-3 py-1.5 rounded-full text-sm border transition ${
-                    ikigaiTab === t ? "bg-amber-400 text-black border-amber-400" : "border-white/20 hover:border-amber-400"
-                  }`}
-                >
-                  {t}
-                </button>
-              ))}
-            </div>
-
-            {ikigaiTab === "Livelihood" && (
-              <div className="space-y-3">
-                <label className="block text-sm opacity-80">What work do your hands and mind do?</label>
-                <input
-                  className="w-full rounded-lg border border-white/20 bg-black/30 p-2"
-                  placeholder="Farmer, Teacher, Software Developer…"
-                  value={livelihood}
-                  onChange={(e) => setLivelihood(titleCase(e.target.value))}
-                />
-                <div className="flex gap-2 flex-wrap text-xs opacity-80">
-                  {["Farmer","Teacher","Software Developer","Driver","Tailor","Nurse","Shopkeeper","Carpenter"].map((s) => (
-                    <button
-                      key={s}
-                      type="button"
-                      className="px-2 py-1 rounded-full bg-white/10 border border-white/15 hover:border-amber-400"
-                      onClick={() => setLivelihood(s)}
-                    >
-                      {s}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {ikigaiTab === "Good At" && (
-              <ChipsInput
-                id="skills"
-                label="What are you reliably good at?"
-                items={skills}
-                setItems={(v) => setSkills(v.slice(0, ringLimit.skills))}
-                placeholder="Add a skill… (Enter)"
-                max={ringLimit.skills}
-              />
-            )}
-
-            {ikigaiTab === "Love" && (
-              <ChipsInput
-                id="passions"
-                label="What makes you feel alive lately?"
-                items={passions}
-                setItems={(v) => setPassions(v.slice(0, ringLimit.passions))}
-                placeholder="Add a passion… (Enter)"
-                max={ringLimit.passions}
-              />
-            )}
-
-            {ikigaiTab === "World Needs" && (
-              <ChipsInput
-                id="needs"
-                label="What needs around you pull your heart?"
-                items={needs}
-                setItems={(v) => setNeeds(v.slice(0, ringLimit.needs))}
-                placeholder="Add a community need… (Enter)"
-                max={ringLimit.needs}
-              />
-            )}
-
-            {ikigaiTab === "Sustainability" && (
-              <div className="space-y-3">
-                <label className="block text-sm opacity-80">Is this sustaining you right now? (required)</label>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {[
-                    { key: "paid", label: "Paid & stable" },
-                    { key: "part_time", label: "Part-time / side" },
-                    { key: "learning", label: "Learning / intern / volunteer" },
-                    { key: "exploring", label: "Exploring a shift" },
-                  ].map((o) => (
-                    <button
-                      key={o.key}
-                      type="button"
-                      className={`px-3 py-2 rounded-lg border ${
-                        viability === o.key ? "bg-amber-400 text-black border-amber-400" : "bg-white/5 border-white/15 hover:border-amber-400"
-                      }`}
-                      onClick={() => setViability(o.key)}
-                    >
-                      {o.label}
-                    </button>
-                  ))}
-                </div>
-
-                {(viability === "learning" || viability === "exploring") && (
-                  <div className="space-y-2">
-                    <label className="block text-sm opacity-80">Transition toward… (optional)</label>
-                    <input
-                      className="w-full rounded-lg border border-white/20 bg-black/30 p-2"
-                      placeholder="Type a target livelihood"
-                      value={transitionTarget}
-                      onChange={(e) => setTransitionTarget(titleCase(e.target.value))}
-                    />
-                  </div>
-                )}
-              </div>
-            )}
-
-            <div className="flex gap-2 pt-2">
-              <button
-                className={`px-4 py-2 rounded-lg ${
-                  ikigaiReady ? "bg-amber-400 text-black hover:bg-amber-500" : "bg-white/10 text-white/60 cursor-not-allowed"
-                }`}
-                disabled={!ikigaiReady || busy}
-                onClick={saveIkigai}
-              >
-                Save
-              </button>
-              <span className="self-center text-xs opacity-70">Screens 4–9 coming later.</span>
-            </div>
-          </div>
+          <IkigaiScreen
+            ikigaiTab={ikigaiTab}
+            setIkigaiTab={setIkigaiTab}
+            livelihood={livelihood}
+            setLivelihood={setLivelihood}
+            skills={skills}
+            setSkills={setSkills}
+            passions={passions}
+            setPassions={setPassions}
+            needs={needs}
+            setNeeds={setNeeds}
+            viability={viability}
+            setViability={setViability}
+            transitionTarget={transitionTarget}
+            setTransitionTarget={setTransitionTarget}
+            ready={ikigaiReady}
+            busy={busy}
+            onSave={saveIkigai}
+          />
         )}
 
         {/* Toast */}
-        {toast && (
-          <div className="text-center text-sm text-slate-200">{toast}</div>
-        )}
+        {toast && <div className="text-center text-sm text-slate-200">{toast}</div>}
       </div>
     </div>
   );
 }
 
-/* Small chips input helper (no external libs) */
+function IkigaiScreen({
+  ikigaiTab,
+  setIkigaiTab,
+  livelihood,
+  setLivelihood,
+  skills,
+  setSkills,
+  passions,
+  setPassions,
+  needs,
+  setNeeds,
+  viability,
+  setViability,
+  transitionTarget,
+  setTransitionTarget,
+  ready,
+  busy,
+  onSave,
+}) {
+  return (
+    <div className="space-y-6">
+      <h2 className="text-xl font-semibold">Let’s understand your work & gifts.</h2>
+
+      <div className="flex gap-2 flex-wrap">
+        {["Livelihood", "Good At", "Love", "World Needs", "Sustainability"].map((t) => (
+          <button
+            key={t}
+            type="button"
+            onClick={() => setIkigaiTab(t)}
+            className={`px-3 py-1.5 rounded-full text-sm border transition ${
+              ikigaiTab === t ? "bg-amber-400 text-black border-amber-400" : "border-white/20 hover:border-amber-400"
+            }`}
+          >
+            {t}
+          </button>
+        ))}
+      </div>
+
+      {ikigaiTab === "Livelihood" && (
+        <div className="space-y-3">
+          <label className="block text-sm opacity-80">What work do your hands and mind do?</label>
+          <input
+            className="w-full rounded-lg border border-white/20 bg-black/30 p-2"
+            placeholder="Farmer, Teacher, Software Developer…"
+            value={livelihood}
+            onChange={(e) => setLivelihood(titleCase(e.target.value))}
+          />
+          <div className="flex gap-2 flex-wrap text-xs opacity-80">
+            {["Farmer","Teacher","Software Developer","Driver","Tailor","Nurse","Shopkeeper","Carpenter"].map((s) => (
+              <button
+                key={s}
+                type="button"
+                className="px-2 py-1 rounded-full bg-white/10 border border-white/15 hover:border-amber-400"
+                onClick={() => setLivelihood(s)}
+              >
+                {s}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {ikigaiTab === "Good At" && (
+        <ChipsInput
+          id="skills"
+          label="What are you reliably good at?"
+          items={skills}
+          setItems={(v) => setSkills(v.slice(0, ringLimit.skills))}
+          placeholder="Add a skill… (Enter)"
+          max={ringLimit.skills}
+        />
+      )}
+
+      {ikigaiTab === "Love" && (
+        <ChipsInput
+          id="passions"
+          label="What makes you feel alive lately?"
+          items={passions}
+          setItems={(v) => setPassions(v.slice(0, ringLimit.passions))}
+          placeholder="Add a passion… (Enter)"
+          max={ringLimit.passions}
+        />
+      )}
+
+      {ikigaiTab === "World Needs" && (
+        <ChipsInput
+          id="needs"
+          label="What needs around you pull your heart?"
+          items={needs}
+          setItems={(v) => setNeeds(v.slice(0, ringLimit.needs))}
+          placeholder="Add a community need… (Enter)"
+          max={ringLimit.needs}
+        />
+      )}
+
+      {ikigaiTab === "Sustainability" && (
+        <div className="space-y-3">
+          <label className="block text-sm opacity-80">Is this sustaining you right now? (required)</label>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {[
+              { key: "paid", label: "Paid & stable" },
+              { key: "part_time", label: "Part-time / side" },
+              { key: "learning", label: "Learning / intern / volunteer" },
+              { key: "exploring", label: "Exploring a shift" },
+            ].map((o) => (
+              <button
+                key={o.key}
+                type="button"
+                className={`px-3 py-2 rounded-lg border ${
+                  viability === o.key ? "bg-amber-400 text-black border-amber-400" : "bg-white/5 border-white/15 hover:border-amber-400"
+                }`}
+                onClick={() => setViability(o.key)}
+              >
+                {o.label}
+              </button>
+            ))}
+          </div>
+
+          {(viability === "learning" || viability === "exploring") && (
+            <div className="space-y-2">
+              <label className="block text-sm opacity-80">Transition toward… (optional)</label>
+              <input
+                className="w-full rounded-lg border border-white/20 bg-black/30 p-2"
+                placeholder="Type a target livelihood"
+                value={transitionTarget}
+                onChange={(e) => setTransitionTarget(titleCase(e.target.value))}
+              />
+            </div>
+          )}
+        </div>
+      )}
+
+      <div className="flex gap-2 pt-2">
+        <button
+          className={`px-4 py-2 rounded-lg ${
+            ready ? "bg-amber-400 text-black hover:bg-amber-500" : "bg-white/10 text-white/60 cursor-not-allowed"
+          }`}
+          disabled={!ready || busy}
+          onClick={onSave}
+        >
+          Save
+        </button>
+        <span className="self-center text-xs opacity-70">Screens 4–9 later.</span>
+      </div>
+    </div>
+  );
+}
+
+/* Chips input helper */
 function ChipsInput({ id, label, items, setItems, placeholder, max = 8 }) {
   const [value, setValue] = useState("");
   return (
