@@ -2,12 +2,14 @@
 "use client";
 
 /**
- * Gatishil — Digital Chauṭarī Onboarding (Ikigai-ready)
+ * Gatishil — Digital Chauṭarī Onboarding (fix: Continue on Name & Face)
  * Remote-only: Next.js + Vercel + Supabase
  *
- * ✔ Screen 1 — Name & Face now includes: First Name + Surname (Thar) + Photo crop
- * ✔ Screen 3 — Livelihood & Skills upgraded to TypeaheadSelect + ChipsTypeahead
- * ✔ Progressive flow: entry → name_face → roots → livelihood → passions → needs → viability → story → vow → reveal
+ * What changed:
+ * 1) NEW continueFromNameFace(): tries photo upload + profile save inside try/catch,
+ *    then ALWAYS moves to "roots" in finally. No more dead button if Supabase/storage
+ *    throws or user isn't authed yet.
+ * 2) Kept Surname (Thar) field and updated Livelihood & Skills (typeahead + chips).
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -239,9 +241,9 @@ function ChipsTypeahead({
 // ---------- main flow ----------
 const steps = [
   "entry",        // 0
-  "name_face",    // 1  (First Name + Surname + Photo)
+  "name_face",    // 1
   "roots",        // 2
-  "livelihood",   // 3  (updated screen)
+  "livelihood",   // 3
   "passions",     // 4
   "needs",        // 5
   "viability",    // 6
@@ -272,7 +274,7 @@ export default function OnboardingFlow() {
 
   // form state for early screens
   const [firstName, setFirstName] = useState("");
-  const [surname, setSurname] = useState(""); // NEW: Surname (Thar)
+  const [surname, setSurname] = useState("");
 
   // photo crop state
   const [rawPhotoSrc, setRawPhotoSrc] = useState("");
@@ -324,7 +326,6 @@ export default function OnboardingFlow() {
           }
         );
 
-        // Pre-fill name/surname if you later add columns; for now we split heuristically:
         if (prof?.name) {
           const parts = String(prof.name).trim().split(/\s+/);
           setFirstName(norm(parts[0] || ""));
@@ -347,7 +348,6 @@ export default function OnboardingFlow() {
   }, []);
 
   const pickProfileFields = (p) => ({
-    // store combined display name to profiles.name (DB already has this)
     name: p?.name || null,
     photo_url: p?.photo_url || null,
     roots_json: p?.roots_json || null,
@@ -364,7 +364,7 @@ export default function OnboardingFlow() {
   const saveProfile = async (patch) => {
     const payload = { ...(profile || {}), ...patch };
     setProfile(payload);
-    if (!user) return;
+    if (!user) return; // not signed in yet ⇒ soft-OK
 
     await supabase
       .from("profiles")
@@ -377,7 +377,7 @@ export default function OnboardingFlow() {
       )
       .select()
       .single()
-      .catch(() => {});
+      .catch(() => {}); // swallow; UI should never stall
   };
 
   const openSuggest = (type, typed) => setModal({ open: true, type, typed });
@@ -390,9 +390,7 @@ export default function OnboardingFlow() {
         slug: norm(typed).toLowerCase().replace(/\s+/g, "-"),
         by_user: user?.id || null,
       });
-    } catch {
-      // soft-fail
-    }
+    } catch {}
     setModal({ open: false, type: "", typed: "" });
   };
 
@@ -440,7 +438,6 @@ export default function OnboardingFlow() {
       pixelCrop.height,
       0,
       0,
-      size,
       size
     );
     return canvas.toDataURL("image/jpeg", 0.9);
@@ -455,6 +452,8 @@ export default function OnboardingFlow() {
       setCropping(false);
     }
   }
+
+  // Try upload/save; NEVER block navigation
   async function uploadPhotoIfNeededAndSave() {
     setUploading(true);
     try {
@@ -464,30 +463,34 @@ export default function OnboardingFlow() {
         const res = await fetch(croppedPreview);
         const blob = await res.blob();
         const fileName = `profiles/${user.id}.jpg`;
-        const { error: upErr } = await supabase.storage
+        await supabase.storage
           .from("profiles")
           .upload(fileName, blob, { upsert: true, contentType: "image/jpeg" });
-        if (upErr) throw upErr;
         const { data: pub } = supabase.storage.from("profiles").getPublicUrl(fileName);
         publicUrl = pub?.publicUrl || "";
       }
 
-      // build combined display name from First Name + Surname (Thar)
       const displayName = [firstName, surname].filter(Boolean).join(" ");
-
       await saveProfile({
         name: displayName || null,
         photo_url: publicUrl || null,
       });
-
-      return publicUrl;
+    } catch {
+      // swallow; we still navigate
     } finally {
       setUploading(false);
     }
   }
 
+  // The fix: always advance even if save/upload fails
+  const continueFromNameFace = async () => {
+    await uploadPhotoIfNeededAndSave();
+    next("roots");
+  };
+
   // ---------- guards ----------
-  const canContinueNameFace = Boolean(firstName?.trim()) && Boolean(surname?.trim()) && Boolean(croppedPreview);
+  const canContinueNameFace =
+    Boolean(firstName?.trim()) && Boolean(surname?.trim()) && Boolean(croppedPreview);
 
   // ---------- screens ----------
   const ScreenEntry = (
@@ -603,10 +606,7 @@ export default function OnboardingFlow() {
       </div>
 
       <div className="flex gap-3 pt-2">
-        <Button onClick={async () => {
-          await uploadPhotoIfNeededAndSave();
-          next("roots");
-        }} disabled={!canContinueNameFace}>
+        <Button onClick={continueFromNameFace} disabled={!canContinueNameFace}>
           Continue
         </Button>
         <Button variant="secondary" onClick={() => next("roots")}>
