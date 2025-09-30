@@ -2,41 +2,255 @@
 "use client";
 
 /**
- * Gatishil — Digital Chauṭarī Onboarding (deterministic start)
- * Remote-only: Next.js + Supabase + Vercel
+ * Gatishil — Digital Chauṭarī Onboarding (Ikigai-ready)
+ * Remote-only: Next.js + Vercel + Supabase
  *
- * What changed (tiny, surgical):
- * - Deterministic initial step: "entry" unless URL has ?step=...
- * - Fixed a few setForm typos
- * - Everything else follows your original flow (0,1,2 then 3)
+ * ✔ Screen 1 — Name & Face now includes: First Name + Surname (Thar) + Photo crop
+ * ✔ Screen 3 — Livelihood & Skills upgraded to TypeaheadSelect + ChipsTypeahead
+ * ✔ Progressive flow: entry → name_face → roots → livelihood → passions → needs → viability → story → vow → reveal
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Cropper from "react-easy-crop";
-import { createClient } from "@supabase/supabase-js";
 import ChautariLocationPicker from "./ChautariLocationPicker";
+import { supabase } from "@/lib/supabaseClient";
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-);
+// ---------- text utils ----------
+const titleCase = (s) =>
+  (s || "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/(^|\s|-|\/)\S/g, (t) => t.toUpperCase());
+const norm = (s) => titleCase(String(s || "").slice(0, 48));
+const dedupe = (arr) =>
+  Array.from(new Set((arr || []).map((x) => norm(x)))).filter(Boolean);
+const byPrefixRank = (q) => (a, b) => {
+  const qa = a.label.toLowerCase();
+  const qb = b.label.toLowerCase();
+  const ql = (q || "").toLowerCase();
+  const pa = q ? (qa.startsWith(ql) ? 0 : qa.includes(ql) ? 1 : 2) : 0;
+  const pb = q ? (qb.startsWith(ql) ? 0 : qb.includes(ql) ? 1 : 2) : 0;
+  if (pa !== pb) return pa - pb;
+  return (b.popularity || 0) - (a.popularity || 0);
+};
 
-// Canonical step order (Screen 0..9) — entry → name_photo → roots → livelihood → ...
+// ---------- tiny UI ----------
+function Button({ children, onClick, variant = "primary", disabled = false }) {
+  const base =
+    "px-4 py-2 rounded-2xl text-sm font-semibold transition shadow-sm focus:outline-none focus:ring";
+  const styles =
+    variant === "secondary"
+      ? "bg-zinc-700 hover:bg-zinc-600 text-white"
+      : "bg-amber-500 hover:bg-amber-400 text-black";
+  const dis = disabled ? "opacity-50 pointer-events-none" : "";
+  return (
+    <button className={`${base} ${styles} ${dis}`} onClick={onClick} disabled={disabled}>
+      {children}
+    </button>
+  );
+}
+function Chip({ label, onRemove }) {
+  return (
+    <span className="inline-flex items-center gap-2 bg-zinc-800 border border-zinc-700 px-3 py-1 rounded-full text-sm">
+      {label}
+      <button
+        aria-label="remove"
+        className="text-zinc-400 hover:text-zinc-200"
+        onClick={onRemove}
+      >
+        ✕
+      </button>
+    </span>
+  );
+}
+function SuggestModal({ open, typed, type, onCancel, onSubmit }) {
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-black/60">
+      <div className="w-[92vw] max-w-md rounded-2xl bg-zinc-900 border border-zinc-800 p-5">
+        <h3 className="text-lg font-semibold mb-2">Add new option?</h3>
+        <p className="text-sm text-zinc-300 mb-5">
+          Suggest “<span className="font-semibold">{typed}</span>” as a new {type}.
+          <br />
+          A moderator will review to keep lists tidy.
+        </p>
+        <div className="flex justify-end gap-3">
+          <Button variant="secondary" onClick={onCancel}>Cancel</Button>
+          <Button onClick={onSubmit}>Submit</Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------- Typeahead (single-select) ----------
+function TypeaheadSelect({
+  label,
+  value,
+  onChange,
+  options,
+  placeholder = "Type to search…",
+  starters = [],
+  onSuggest,
+}) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState("");
+  const filtered = useMemo(() => {
+    const list = (options || []).filter((o) => o.active !== false);
+    if (!q) return list.slice(0, 10);
+    return list.sort(byPrefixRank(q)).slice(0, 10);
+  }, [options, q]);
+
+  return (
+    <div className="w-full">
+      <label className="block text-sm text-zinc-300 mb-2">{label}</label>
+      <div className="relative">
+        <input
+          className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-3 outline-none focus:ring focus:ring-amber-500/30"
+          placeholder={placeholder}
+          value={value || q}
+          onFocus={() => {
+            setOpen(true);
+            setQ("");
+          }}
+          onChange={(e) => {
+            setQ(e.target.value);
+            onChange(null); // clear when typing
+          }}
+          onKeyDown={(e) => e.key === "Escape" && setOpen(false)}
+        />
+        {open && (
+          <div className="absolute z-20 mt-2 w-full rounded-xl border border-zinc-800 bg-zinc-950 max-h-64 overflow-auto">
+            {!q && starters?.length > 0 && (
+              <div className="p-2 border-b border-zinc-800 flex flex-wrap gap-2">
+                {starters.map((s) => (
+                  <button
+                    key={s}
+                    className="px-3 py-1 rounded-full bg-zinc-800 hover:bg-zinc-700 text-sm"
+                    onMouseDown={() => {
+                      onChange(norm(s));
+                      setOpen(false);
+                    }}
+                  >
+                    {s}
+                  </button>
+                ))}
+              </div>
+            )}
+            {filtered.map((o) => (
+              <button
+                key={o.id || o.label}
+                className="w-full text-left px-3 py-2 hover:bg-zinc-800"
+                onMouseDown={() => {
+                  onChange(o.label);
+                  setOpen(false);
+                }}
+              >
+                {o.label}
+              </button>
+            ))}
+            {q && filtered.length === 0 && (
+              <div className="px-3 py-2 text-sm text-zinc-400">No matches.</div>
+            )}
+            {q && (
+              <button
+                className="w-full text-left px-3 py-2 border-t border-zinc-800 hover:bg-zinc-800 text-amber-400"
+                onMouseDown={() => onSuggest(q)}
+              >
+                + Suggest “{q}”
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ---------- Chips Typeahead (multi-select) ----------
+function ChipsTypeahead({
+  label,
+  values,
+  setValues,
+  options,
+  placeholder = "Add…",
+  starters = [],
+  max = 8,
+  onSuggest,
+}) {
+  const [q, setQ] = useState("");
+  const filtered = useMemo(() => {
+    if (!q) return options.slice(0, 12);
+    return options.sort(byPrefixRank(q)).slice(0, 12);
+  }, [options, q]);
+
+  const add = (txt) => {
+    const next = dedupe([...(values || []), norm(txt)]);
+    if (next.length > max) return;
+    setValues(next);
+    setQ("");
+  };
+
+  return (
+    <div className="w-full">
+      <label className="block text-sm text-zinc-300 mb-2">{label}</label>
+      <div className="flex flex-wrap gap-2 mb-2">
+        {(values || []).map((s) => (
+          <Chip key={s} label={s} onRemove={() => setValues(values.filter((x) => x !== s))} />
+        ))}
+      </div>
+      <input
+        className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-3 outline-none focus:ring focus:ring-amber-500/30"
+        placeholder={placeholder}
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && q.trim()) add(q);
+          if (e.key === "Backspace" && !q && values?.length) {
+            setValues(values.slice(0, -1));
+          }
+        }}
+      />
+      <div className="mt-2 flex flex-wrap gap-2">
+        {(q ? filtered.map((o) => o.label) : starters).slice(0, 12).map((s) => (
+          <button
+            key={s}
+            className="px-3 py-1 rounded-full bg-zinc-800 hover:bg-zinc-700 text-sm"
+            onClick={() => add(s)}
+          >
+            {s}
+          </button>
+        ))}
+        {q && (
+          <button
+            className="px-3 py-1 rounded-full bg-zinc-900 border border-zinc-800 text-amber-400 hover:bg-zinc-800 text-sm"
+            onClick={() => onSuggest(q)}
+          >
+            + Suggest “{q}”
+          </button>
+        )}
+      </div>
+      <p className="text-xs text-zinc-400 mt-2">{values?.length || 0} / {max}</p>
+    </div>
+  );
+}
+
+// ---------- main flow ----------
 const steps = [
-  "entry",
-  "name_photo",
-  "roots",
-  "livelihood",
-  "circles",
-  "family",
-  "solidarity",
-  "story",
-  "vow",
-  "reveal",
+  "entry",        // 0
+  "name_face",    // 1  (First Name + Surname + Photo)
+  "roots",        // 2
+  "livelihood",   // 3  (updated screen)
+  "passions",     // 4
+  "needs",        // 5
+  "viability",    // 6
+  "story",        // 7
+  "vow",          // 8
+  "reveal",       // 9
 ];
 
 export default function OnboardingFlow() {
-  // 1) Deterministic initial step: honor ?step=... (for QA), else "entry"
   const urlStep =
     typeof window !== "undefined"
       ? new URLSearchParams(window.location.search).get("step")
@@ -44,26 +258,23 @@ export default function OnboardingFlow() {
   const initialStep = steps.includes(urlStep || "") ? urlStep : "entry";
 
   const [step, setStep] = useState(initialStep);
-  const [userId, setUserId] = useState(null);
+  const [user, setUser] = useState(null);
+  const [profile, setProfile] = useState(null);
 
-  const [form, setForm] = useState({
-    name: "",
-    photoUrlFinal: "",
-    // roots now stores the normalized selection object from the picker
-    roots: null, // { type:'ward'|'city', id, label, ... }
-    diaspora_obj: null, // reserved if you want a separate diaspora-only flow
-    diaspora_text: "", // human label if abroad
-    livelihood: "",
-    skills: [],
-    circles: [],
-    family: "",
-    offer: [],
-    needs: [],
-    story: "",
-    vow: "",
-  });
+  // option lists
+  const [livelihoods, setLivelihoods] = useState([]);
+  const [skills, setSkills] = useState([]);
+  const [passions, setPassions] = useState([]);
+  const [needs, setNeeds] = useState([]);
 
-  // Photo state
+  // suggest modal
+  const [modal, setModal] = useState({ open: false, type: "", typed: "" });
+
+  // form state for early screens
+  const [firstName, setFirstName] = useState("");
+  const [surname, setSurname] = useState(""); // NEW: Surname (Thar)
+
+  // photo crop state
   const [rawPhotoSrc, setRawPhotoSrc] = useState("");
   const [crop, setCrop] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
@@ -72,17 +283,129 @@ export default function OnboardingFlow() {
   const [cropping, setCropping] = useState(false);
   const [uploading, setUploading] = useState(false);
 
+  // starters
+  const starterLivelihoods = [
+    "Farmer","Teacher","Software Developer","Driver","Tailor","Nurse","Shopkeeper","Carpenter",
+  ];
+  const starterSkills = [
+    "Public Speaking","Carpentry","Data Analysis","Excel/Sheets","Sewing","Customer Support","Project Management","Photography",
+  ];
+  const starterPassions = [
+    "Teaching","Making","Healing","Performing","Coding","Nature Care","Storytelling","Research",
+  ];
+  const starterNeeds = [
+    "Youth Mentoring","Elder Care","Local Food","Mental Health Support","Street Safety","Job Pathways","Clean Water","Arts for Kids",
+  ];
+
+  // fetch auth + profile + option lists
   useEffect(() => {
     (async () => {
-      const { data } = await supabase.auth.getUser();
-      if (data?.user?.id) setUserId(data.user.id);
+      const { data: u } = await supabase.auth.getUser();
+      const authUser = u?.user;
+      setUser(authUser || null);
+
+      if (authUser) {
+        const { data: prof } = await supabase
+          .from("profiles")
+          .select("*")
+          .eq("user_id", authUser.id)
+          .maybeSingle();
+        setProfile(
+          prof || {
+            user_id: authUser.id,
+            roots_json: null,
+            diaspora_json: null,
+            livelihood: null,
+            skills: [],
+            passions: [],
+            needs: [],
+            viability: null,
+            transition_target: null,
+          }
+        );
+
+        // Pre-fill name/surname if you later add columns; for now we split heuristically:
+        if (prof?.name) {
+          const parts = String(prof.name).trim().split(/\s+/);
+          setFirstName(norm(parts[0] || ""));
+          setSurname(norm(parts.slice(1).join(" ")));
+        }
+      }
+
+      const readList = async (table) =>
+        (await supabase
+          .from(table)
+          .select("id,label,popularity,active")
+          .order("popularity", { ascending: false })
+        ).data || [];
+
+      setLivelihoods(await readList("livelihoods"));
+      setSkills(await readList("skills"));
+      setPassions(await readList("passions"));
+      setNeeds(await readList("needs"));
     })();
   }, []);
 
+  const pickProfileFields = (p) => ({
+    // store combined display name to profiles.name (DB already has this)
+    name: p?.name || null,
+    photo_url: p?.photo_url || null,
+    roots_json: p?.roots_json || null,
+    diaspora_json: p?.diaspora_json || null,
+    livelihood: p?.livelihood || null,
+    skills: p?.skills ? dedupe(p.skills) : [],
+    passions: p?.passions ? dedupe(p.passions) : [],
+    needs: p?.needs ? dedupe(p.needs) : [],
+    viability: p?.viability || null,
+    transition_target: p?.transition_target || null,
+    updated_at: new Date().toISOString(),
+  });
+
+  const saveProfile = async (patch) => {
+    const payload = { ...(profile || {}), ...patch };
+    setProfile(payload);
+    if (!user) return;
+
+    await supabase
+      .from("profiles")
+      .upsert(
+        {
+          user_id: user.id,
+          ...pickProfileFields(payload),
+        },
+        { onConflict: "user_id" }
+      )
+      .select()
+      .single()
+      .catch(() => {});
+  };
+
+  const openSuggest = (type, typed) => setModal({ open: true, type, typed });
+  const submitSuggest = async () => {
+    const { type, typed } = modal;
+    try {
+      await supabase.from("suggested_terms").insert({
+        type,
+        label: norm(typed),
+        slug: norm(typed).toLowerCase().replace(/\s+/g, "-"),
+        by_user: user?.id || null,
+      });
+    } catch {
+      // soft-fail
+    }
+    setModal({ open: false, type: "", typed: "" });
+  };
+
+  const next = (to) => setStep(to);
+  const back = () => {
+    const i = Math.max(0, steps.indexOf(step) - 1);
+    setStep(steps[i]);
+  };
+
+  // ---------- photo helpers ----------
   const onCropComplete = useCallback((_, areaPixels) => {
     setCroppedAreaPixels(areaPixels);
   }, []);
-
   const fileToDataURL = (file) =>
     new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -90,7 +413,6 @@ export default function OnboardingFlow() {
       reader.onload = () => resolve(reader.result);
       reader.readAsDataURL(file);
     });
-
   const loadImage = (src) =>
     new Promise((resolve, reject) => {
       const img = new Image();
@@ -99,21 +421,17 @@ export default function OnboardingFlow() {
       img.onerror = reject;
       img.src = src;
     });
-
   async function getCroppedImg(imageSrc, pixelCrop) {
     const image = await loadImage(imageSrc);
     const canvas = document.createElement("canvas");
     const ctx = canvas.getContext("2d");
-
     const size = Math.max(pixelCrop.width, pixelCrop.height);
     canvas.width = size;
     canvas.height = size;
-
     ctx.beginPath();
     ctx.arc(size / 2, size / 2, size / 2, 0, 2 * Math.PI);
     ctx.closePath();
     ctx.clip();
-
     ctx.drawImage(
       image,
       pixelCrop.x,
@@ -125,10 +443,8 @@ export default function OnboardingFlow() {
       size,
       size
     );
-
     return canvas.toDataURL("image/jpeg", 0.9);
   }
-
   async function confirmCrop() {
     if (!rawPhotoSrc || !croppedAreaPixels) return;
     setCropping(true);
@@ -139,437 +455,439 @@ export default function OnboardingFlow() {
       setCropping(false);
     }
   }
-
-  async function uploadPhotoAndSaveProfile() {
+  async function uploadPhotoIfNeededAndSave() {
     setUploading(true);
     try {
-      let publicUrl = form.photoUrlFinal || "";
+      let publicUrl = profile?.photo_url || "";
 
-      // upload photo if not uploaded yet
-      if (!publicUrl && croppedPreview && userId) {
-        // convert dataURL to Blob
+      if (!publicUrl && croppedPreview && user) {
         const res = await fetch(croppedPreview);
         const blob = await res.blob();
-        const fileName = `profiles/${userId}.jpg`;
-
+        const fileName = `profiles/${user.id}.jpg`;
         const { error: upErr } = await supabase.storage
           .from("profiles")
           .upload(fileName, blob, { upsert: true, contentType: "image/jpeg" });
         if (upErr) throw upErr;
-
         const { data: pub } = supabase.storage.from("profiles").getPublicUrl(fileName);
         publicUrl = pub?.publicUrl || "";
       }
 
-      // build roots json
-      const rootsJson =
-        form.roots?.type === "ward"
-          ? {
-              type: "ward",
-              ward_id: form.roots.id,
-              ward_no: form.roots.ward_no ?? null,
-              local_level_id: form.roots.local_level_id ?? null,
-              district_id: form.roots.district_id ?? null,
-              province_id: form.roots.province_id ?? null,
-              label: form.roots.label,
-            }
-          : form.roots?.type === "city"
-          ? {
-              type: "city",
-              city_id: form.roots.city_id ?? form.roots.id,
-              country_code: form.roots.country_code ?? null,
-              label: form.roots.label,
-            }
-          : null;
+      // build combined display name from First Name + Surname (Thar)
+      const displayName = [firstName, surname].filter(Boolean).join(" ");
 
-      // optional: separate diaspora_json if you want to keep local vs abroad distinct
-      const diasporaJson = rootsJson?.type === "city" ? rootsJson : null;
-
-      const payload = {
-        user_id: userId,
-        name: form.name || null,
-        photo_url: publicUrl,
-        // legacy text labels for quick reads
-        roots: rootsJson?.type === "ward" ? rootsJson.label : null,
-        diaspora: rootsJson?.type === "city" ? rootsJson.label : null,
-        // jsonb columns for querying
-        roots_json: rootsJson || null,
-        diaspora_json: diasporaJson,
-        livelihood: form.livelihood || null,
-        skills: form.skills?.length ? form.skills : null,
-        circles: form.circles?.length ? form.circles : null,
-        family: form.family || null,
-        offer: form.offer?.length ? form.offer : null,
-        needs: form.needs?.length ? form.needs : null,
-        story: form.story || null,
-        vow: form.vow || null,
-        updated_at: new Date().toISOString(),
-      };
-
-      // upsert
-      const { error: dbErr } = await supabase.from("profiles").upsert(payload, {
-        onConflict: "user_id",
+      await saveProfile({
+        name: displayName || null,
+        photo_url: publicUrl || null,
       });
-      if (dbErr) throw dbErr;
 
-      setForm((f) => ({ ...f, photoUrlFinal: publicUrl }));
       return publicUrl;
     } finally {
       setUploading(false);
     }
   }
 
-  async function finishAndReveal() {
-    const url = await uploadPhotoAndSaveProfile();
-    if (!url) return;
-    next("reveal");
-  }
+  // ---------- guards ----------
+  const canContinueNameFace = Boolean(firstName?.trim()) && Boolean(surname?.trim()) && Boolean(croppedPreview);
 
-  const canProceedNamePhoto = useMemo(() => {
-    return Boolean(form.name?.trim()) && Boolean(croppedPreview);
-  }, [form.name, croppedPreview]);
+  // ---------- screens ----------
+  const ScreenEntry = (
+    <div className="space-y-4 text-center">
+      <h1 className="text-2xl font-bold">🌳 Welcome to the Chauṭarī</h1>
+      <p className="text-slate-300">Others are already sitting under the tree. Let’s introduce you.</p>
+      <Button onClick={() => next("name_face")}>Begin my circle</Button>
+    </div>
+  );
 
-  // tiny navigator to advance
-  const next = (to) => setStep(to);
+  const ScreenNameFace = (
+    <div className="space-y-5">
+      <h2 className="text-xl font-semibold">Screen 1 — Name & Face</h2>
+      <div className="grid grid-cols-1 gap-3">
+        <div>
+          <label className="block text-sm text-zinc-300 mb-1">First Name</label>
+          <input
+            type="text"
+            placeholder="e.g., Nabin"
+            value={firstName}
+            onChange={(e) => setFirstName(norm(e.target.value))}
+            className="w-full rounded-lg border border-white/20 bg-black/30 p-3"
+          />
+        </div>
+        <div>
+          <label className="block text-sm text-zinc-300 mb-1">Surname (Thar)</label>
+          <input
+            type="text"
+            placeholder="e.g., Pradhan"
+            value={surname}
+            onChange={(e) => setSurname(norm(e.target.value))}
+            className="w-full rounded-lg border border-white/20 bg-black/30 p-3"
+          />
+          <p className="text-xs text-zinc-400 mt-1">
+            Use your family surname (Thar). This helps with cultural onboarding.
+          </p>
+        </div>
+      </div>
 
-  return (
-    <div className="flex min-h-screen items-center justify-center bg-black text-white p-6">
-      <div className="w-full max-w-md rounded-2xl bg-white/5 p-6 backdrop-blur-xl space-y-6 border border-white/10">
-        {/* Entry (Screen 0) */}
-        {step === "entry" && (
-          <div className="space-y-4 text-center">
-            <h1 className="text-2xl font-bold">🌳 Welcome to the Chauṭarī</h1>
-            <p className="text-slate-300">
-              Others are already sitting under the tree. Let’s introduce yourself.
-            </p>
-            <button
-              onClick={() => next("name_photo")}
-              className="w-full rounded-lg bg-amber-400 px-4 py-2 font-semibold text-black"
-            >
-              Begin my circle
-            </button>
-          </div>
+      <div className="space-y-2">
+        <p className="text-slate-300">Add your photo (no mask in the chauṭarī)</p>
+
+        {!rawPhotoSrc && !croppedPreview && (
+          <input
+            type="file"
+            accept="image/*"
+            onChange={async (e) => {
+              const file = e.target.files?.[0];
+              if (!file) return;
+              const durl = await fileToDataURL(file);
+              setRawPhotoSrc(durl);
+              setCroppedPreview("");
+            }}
+            className="block w-full text-sm text-slate-400
+              file:mr-4 file:rounded-lg file:border-0
+              file:bg-amber-400 file:px-4 file:py-2
+              file:text-sm file:font-semibold file:text-black
+              hover:file:bg-amber-500"
+          />
         )}
 
-        {/* Name + Photo (Screen 1, mandatory) */}
-        {step === "name_photo" && (
-          <div className="space-y-4">
-            <h2 className="text-xl font-semibold">What should we call you in the circle?</h2>
-            <input
-              type="text"
-              placeholder="Your Name"
-              value={form.name}
-              onChange={(e) => setForm({ ...form, name: e.target.value })}
-              className="w-full rounded-lg border border-white/20 bg-black/30 p-2"
-            />
-
-            <div className="space-y-2">
-              <p className="text-slate-300">Add your photo (no mask in the chauṭarī)</p>
-
-              {!rawPhotoSrc && !croppedPreview && (
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={async (e) => {
-                    const file = e.target.files?.[0];
-                    if (!file) return;
-                    const durl = await fileToDataURL(file);
-                    setRawPhotoSrc(durl);
-                    setCroppedPreview("");
-                  }}
-                  className="block w-full text-sm text-slate-400
-                    file:mr-4 file:rounded-lg file:border-0
-                    file:bg-amber-400 file:px-4 file:py-2
-                    file:text-sm file:font-semibold file:text-black
-                    hover:file:bg-amber-500"
-                />
-              )}
-
-              {rawPhotoSrc && !croppedPreview && (
-                <div className="space-y-3">
-                  <div className="relative h-64 w-full overflow-hidden rounded-xl border border-white/10">
-                    <Cropper
-                      image={rawPhotoSrc}
-                      crop={crop}
-                      zoom={zoom}
-                      aspect={1}
-                      cropShape="round"
-                      showGrid={false}
-                      onCropChange={setCrop}
-                      onZoomChange={setZoom}
-                      onCropComplete={onCropComplete}
-                    />
-                  </div>
-                  <input
-                    type="range"
-                    min={1}
-                    max={3}
-                    step={0.01}
-                    value={zoom}
-                    onChange={(e) => setZoom(Number(e.target.value))}
-                    className="w-full"
-                    aria-label="Zoom"
-                  />
-                  <div className="flex gap-2">
-                    <button
-                      onClick={confirmCrop}
-                      disabled={cropping}
-                      className="flex-1 rounded-lg bg-amber-400 px-4 py-2 font-semibold text-black disabled:opacity-60"
-                    >
-                      {cropping ? "Cropping…" : "Save crop"}
-                    </button>
-                    <button
-                      onClick={() => {
-                        setRawPhotoSrc("");
-                        setCroppedPreview("");
-                      }}
-                      className="rounded-lg border border-white/20 px-4 py-2"
-                    >
-                      Choose another
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {croppedPreview && (
-                <div className="text-center space-y-2">
-                  <img
-                    src={croppedPreview}
-                    alt="Cropped preview"
-                    className="mx-auto h-24 w-24 rounded-full object-cover"
-                  />
-                  <button
-                    onClick={() => setCroppedPreview("")}
-                    className="text-xs text-slate-300 underline"
-                  >
-                    Re-crop
-                  </button>
-                </div>
-              )}
-            </div>
-
-            <button
-              onClick={() => next("roots")}
-              disabled={!canProceedNamePhoto}
-              className="w-full rounded-lg bg-amber-400 px-4 py-2 font-semibold text-black disabled:opacity-60"
-              title={!canProceedNamePhoto ? "Add name and photo to continue" : ""}
-            >
-              Continue
-            </button>
-          </div>
-        )}
-
-        {/* Roots (Screen 2) */}
-        {step === "roots" && (
-          <div className="space-y-4">
-            <h2 className="text-xl font-semibold">Where do your roots touch the earth?</h2>
-
-            <ChautariLocationPicker
-              value={form.roots}
-              onChange={(v) => setForm({ ...form, roots: v })}
-            />
-
-            {form.roots?.label && (
-              <p className="text-sm text-slate-300">Selected: {form.roots.label}</p>
-            )}
-
-            <button
-              onClick={() => next("livelihood")}
-              className="w-full rounded-lg bg-amber-400 px-4 py-2 font-semibold text-black"
-            >
-              Continue
-            </button>
-          </div>
-        )}
-
-        {/* Livelihood (Screen 3) */}
-        {step === "livelihood" && (
-          <div className="space-y-4">
-            <h2 className="text-xl font-semibold">What work do your hands and mind do?</h2>
-            <input
-              type="text"
-              placeholder="Work / Livelihood"
-              value={form.livelihood}
-              onChange={(e) => setForm({ ...form, livelihood: e.target.value })}
-              className="w-full rounded-lg border border-white/20 bg-black/30 p-2"
-            />
-            <input
-              type="text"
-              placeholder="Skills (comma-separated)"
-              onChange={(e) =>
-                setForm({
-                  ...form,
-                  skills: e.target.value.split(",").map((s) => s.trim()).filter(Boolean),
-                })
-              }
-              className="w-full rounded-lg border border-white/20 bg-black/30 p-2"
-            />
-            <button
-              onClick={() => next("circles")}
-              className="w-full rounded-lg bg-amber-400 px-4 py-2 font-semibold text-black"
-            >
-              Continue
-            </button>
-          </div>
-        )}
-
-        {/* Circles (Screen 4) */}
-        {step === "circles" && (
-          <div className="space-y-4">
-            <h2 className="text-xl font-semibold">Which circles or groups do you walk with?</h2>
-            <input
-              type="text"
-              placeholder="Affiliations (comma-separated)"
-              onChange={(e) =>
-                setForm({
-                  ...form,
-                  circles: e.target.value.split(",").map((s) => s.trim()).filter(Boolean),
-                })
-              }
-              className="w-full rounded-lg border border-white/20 bg-black/30 p-2"
-            />
-            <button
-              onClick={() => next("family")}
-              className="w-full rounded-lg bg-amber-400 px-4 py-2 font-semibold text-black"
-            >
-              Continue
-            </button>
-          </div>
-        )}
-
-        {/* Family (Screen 5, optional) */}
-        {step === "family" && (
-          <div className="space-y-4">
-            <h2 className="text-xl font-semibold">Who walks beside you at home? (optional)</h2>
-            <input
-              type="text"
-              placeholder="Family / Kinship"
-              value={form.family}
-              onChange={(e) => setForm({ ...form, family: e.target.value })}
-              className="w-full rounded-lg border border-white/20 bg-black/30 p-2"
-            />
-            <button
-              onClick={() => next("solidarity")}
-              className="w-full rounded-lg bg-amber-400 px-4 py-2 font-semibold text-black"
-            >
-              Continue
-            </button>
-          </div>
-        )}
-
-        {/* Solidarity (Screen 6) */}
-        {step === "solidarity" && (
+        {rawPhotoSrc && !croppedPreview && (
           <div className="space-y-3">
-            <h2 className="text-xl font-semibold">Solidarity Exchange</h2>
-            <textarea
-              placeholder="What can you offer? (comma-separated: time, skills, resources)"
-              onChange={(e) =>
-                setForm({
-                  ...form,
-                  offer: e.target.value.split(",").map((s) => s.trim()).filter(Boolean),
-                })
-              }
-              className="w-full rounded-lg border border-white/20 bg-black/30 p-2"
-            />
-            <textarea
-              placeholder="What do you need? (comma-separated: knowledge, help, connection)"
-              onChange={(e) =>
-                setForm({
-                  ...form,
-                  needs: e.target.value.split(",").map((s) => s.trim()).filter(Boolean),
-                })
-              }
-              className="w-full rounded-lg border border-white/20 bg-black/30 p-2"
-            />
-            <button
-              onClick={() => next("story")}
-              className="w-full rounded-lg bg-amber-400 px-4 py-2 font-semibold text-black"
-            >
-              Continue
-            </button>
-          </div>
-        )}
-
-        {/* Story (Screen 7) */}
-        {step === "story" && (
-          <div className="space-y-4">
-            <h2 className="text-xl font-semibold">What’s your story?</h2>
-            <textarea
-              placeholder="Share your journey, struggles, or hopes… (max ~300 words)"
-              value={form.story}
-              onChange={(e) => setForm({ ...form, story: e.target.value })}
-              className="w-full rounded-lg border border-white/20 bg-black/30 p-2 min-h-28"
-            />
-            <button
-              onClick={() => next("vow")}
-              className="w-full rounded-lg bg-amber-400 px-4 py-2 font-semibold text-black"
-            >
-              Continue
-            </button>
-          </div>
-        )}
-
-        {/* Vow (Screen 8) */}
-        {step === "vow" && (
-          <div className="space-y-4">
-            <h2 className="text-xl font-semibold">Which vow speaks to you most?</h2>
-            <div className="grid grid-cols-2 gap-2">
-              {[
-                "Courage",
-                "Livelihood",
-                "Justice",
-                "Transparency",
-                "Solidarity",
-                "Servitude",
-                "Culture",
-                "Freedom",
-              ].map((v) => (
-                <button
-                  key={v}
-                  onClick={() => setForm({ ...form, vow: v })}
-                  className={`rounded-lg px-4 py-2 ${
-                    form.vow === v
-                      ? "bg-amber-400 text-black font-bold"
-                      : "bg-white/10 text-slate-200"
-                  }`}
-                >
-                  {v}
-                </button>
-              ))}
-            </div>
-            <button
-              onClick={finishAndReveal}
-              disabled={uploading || !form.vow}
-              className="w-full rounded-lg bg-amber-400 px-4 py-2 font-semibold text-black disabled:opacity-60"
-            >
-              {uploading ? "Saving…" : "Finish my profile"}
-            </button>
-          </div>
-        )}
-
-        {/* Reveal (Screen 9) */}
-        {step === "reveal" && (
-          <div className="space-y-4 text-center">
-            <h2 className="text-xl font-bold">✨ Your circle is alive</h2>
-            {form.photoUrlFinal && (
-              <img
-                src={form.photoUrlFinal}
-                alt="Profile"
-                className="mx-auto h-24 w-24 rounded-full object-cover"
+            <div className="relative h-64 w-full overflow-hidden rounded-xl border border-white/10">
+              <Cropper
+                image={rawPhotoSrc}
+                crop={crop}
+                zoom={zoom}
+                aspect={1}
+                cropShape="round"
+                showGrid={false}
+                onCropChange={setCrop}
+                onZoomChange={setZoom}
+                onCropComplete={onCropComplete}
               />
-            )}
-            <p className="text-slate-300">
-              Others can now sit closer, see your story, and walk with you.
-            </p>
-            <a
-              href="/members"
-              className="block w-full rounded-lg bg-amber-400 px-4 py-2 font-semibold text-black"
+            </div>
+            <input
+              type="range"
+              min={1}
+              max={3}
+              step={0.01}
+              value={zoom}
+              onChange={(e) => setZoom(Number(e.target.value))}
+              className="w-full"
+              aria-label="Zoom"
+            />
+            <div className="flex gap-2">
+              <Button onClick={confirmCrop} disabled={cropping}>
+                {cropping ? "Cropping…" : "Save crop"}
+              </Button>
+              <Button variant="secondary" onClick={() => { setRawPhotoSrc(""); setCroppedPreview(""); }}>
+                Choose another
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {croppedPreview && (
+          <div className="text-center space-y-2">
+            <img
+              src={croppedPreview}
+              alt="Cropped preview"
+              className="mx-auto h-24 w-24 rounded-full object-cover"
+            />
+            <button
+              onClick={() => setCroppedPreview("")}
+              className="text-xs text-slate-300 underline"
             >
-              Enter the Chauṭarī
-            </a>
+              Re-crop
+            </button>
           </div>
         )}
       </div>
+
+      <div className="flex gap-3 pt-2">
+        <Button onClick={async () => {
+          await uploadPhotoIfNeededAndSave();
+          next("roots");
+        }} disabled={!canContinueNameFace}>
+          Continue
+        </Button>
+        <Button variant="secondary" onClick={() => next("roots")}>
+          Skip for now
+        </Button>
+      </div>
+    </div>
+  );
+
+  const ScreenRoots = (
+    <div className="space-y-4">
+      <h2 className="text-xl font-semibold">Screen 2 — Roots</h2>
+      <p className="text-sm text-zinc-400">Where do your roots touch the earth?</p>
+      <ChautariLocationPicker
+        value={profile?.roots_json || null}
+        onChange={async (v) => {
+          await saveProfile({
+            roots_json: v?.type === "ward" ? v : null,
+            diaspora_json: v?.type === "city" ? v : null,
+          });
+        }}
+      />
+      {(profile?.roots_json?.label || profile?.diaspora_json?.label) && (
+        <p className="text-sm text-slate-300">
+          Selected: {profile?.roots_json?.label || profile?.diaspora_json?.label}
+        </p>
+      )}
+      <div className="flex gap-3 pt-2">
+        <Button onClick={() => next("livelihood")}>Continue</Button>
+        <Button variant="secondary" onClick={() => back()}>Back</Button>
+      </div>
+    </div>
+  );
+
+  // ---------- UPDATED Screen 3 — Livelihood & Skills ----------
+  const ScreenLivelihood = (
+    <div className="space-y-6">
+      <h2 className="text-xl md:text-2xl font-bold">Screen 3 — Livelihood & Skills</h2>
+      <p className="text-sm text-zinc-400">What work do your hands and mind do?</p>
+
+      <TypeaheadSelect
+        label="Livelihood"
+        value={profile?.livelihood || ""}
+        onChange={(v) => saveProfile({ livelihood: v })}
+        options={livelihoods}
+        starters={starterLivelihoods}
+        onSuggest={(q) => openSuggest("livelihood", q)}
+        placeholder="Type a livelihood…"
+      />
+
+      <ChipsTypeahead
+        label="Skills (add up to 8)"
+        values={profile?.skills || []}
+        setValues={(vals) => saveProfile({ skills: vals })}
+        options={skills}
+        starters={starterSkills}
+        max={8}
+        onSuggest={(q) => openSuggest("skill", q)}
+        placeholder="Type a skill and press Enter…"
+      />
+
+      <div className="flex gap-3 pt-2">
+        <Button onClick={() => next("passions")} disabled={!profile?.livelihood}>Continue</Button>
+        <Button variant="secondary" onClick={() => next("passions")}>Not sure yet</Button>
+      </div>
+    </div>
+  );
+
+  const ScreenPassions = (
+    <div className="space-y-6">
+      <h2 className="text-xl md:text-2xl font-bold">Screen 4 — What you love (Passions)</h2>
+      <p className="text-sm text-zinc-400">Pick a few you’d happily do for hours.</p>
+
+      <ChipsTypeahead
+        label="Passions"
+        values={profile?.passions || []}
+        setValues={(vals) => saveProfile({ passions: vals })}
+        options={passions}
+        starters={starterPassions}
+        max={6}
+        onSuggest={(q) => openSuggest("passion", q)}
+        placeholder="Type a passion and press Enter…"
+      />
+
+      <div className="flex gap-3 pt-2">
+        <Button onClick={() => next("needs")}>Continue</Button>
+        <Button variant="secondary" onClick={() => next("needs")}>Skip</Button>
+      </div>
+    </div>
+  );
+
+  const ScreenNeeds = (
+    <div className="space-y-6">
+      <h2 className="text-xl md:text-2xl font-bold">Screen 5 — What the world needs (Service)</h2>
+      <p className="text-sm text-zinc-400">These guide future invitations.</p>
+
+      <ChipsTypeahead
+        label="Community Needs"
+        values={profile?.needs || []}
+        setValues={(vals) => saveProfile({ needs: vals })}
+        options={needs}
+        starters={starterNeeds}
+        max={6}
+        onSuggest={(q) => openSuggest("need", q)}
+        placeholder="Type a need and press Enter…"
+      />
+
+      <div className="flex gap-3 pt-2">
+        <Button onClick={() => next("viability")}>Continue</Button>
+        <Button variant="secondary" onClick={() => next("viability")}>Skip</Button>
+      </div>
+    </div>
+  );
+
+  const ScreenViability = (
+    <div className="space-y-6">
+      <h2 className="text-xl md:text-2xl font-bold">Screen 6 — Is this sustaining you?</h2>
+      <p className="text-sm text-zinc-400">Be honest; this guides future opportunities.</p>
+
+      <div className="grid gap-3">
+        {[
+          { key: "paid", label: "Paid & stable" },
+          { key: "part_time", label: "Part-time / side" },
+          { key: "learning", label: "Learning / intern / volunteer" },
+          { key: "exploring", label: "Exploring a shift" },
+        ].map((opt) => (
+          <label
+            key={opt.key}
+            className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer ${
+              profile?.viability === opt.key
+                ? "border-amber-500 bg-amber-500/10"
+                : "border-zinc-800 hover:border-zinc-700"
+            }`}
+          >
+            <input
+              type="radio"
+              className="accent-amber-500"
+              name="viability"
+              checked={profile?.viability === opt.key}
+              onChange={() => saveProfile({ viability: opt.key })}
+            />
+            <span>{opt.label}</span>
+          </label>
+        ))}
+      </div>
+
+      {(profile?.viability === "learning" || profile?.viability === "exploring") && (
+        <TypeaheadSelect
+          label="Transition toward…"
+          value={profile?.transition_target || ""}
+          onChange={(v) => saveProfile({ transition_target: v })}
+          options={livelihoods}
+          starters={starterLivelihoods}
+          onSuggest={(q) => openSuggest("livelihood", q)}
+          placeholder="Type a livelihood…"
+        />
+      )}
+
+      <div className="flex gap-3 pt-2">
+        <Button onClick={() => next("story")} disabled={!profile?.viability}>Save & Continue</Button>
+        <Button variant="secondary" onClick={() => next("story")}>Not sure yet</Button>
+      </div>
+    </div>
+  );
+
+  const ScreenStory = (
+    <div className="space-y-4">
+      <h2 className="text-xl font-semibold">Screen 7 — Your story</h2>
+      <textarea
+        placeholder="Share your journey, struggles, or hopes… (optional)"
+        value={profile?.story || ""}
+        onChange={(e) => saveProfile({ story: e.target.value })}
+        className="w-full rounded-lg border border-white/20 bg-black/30 p-3 min-h-28"
+      />
+      <div className="flex gap-3 pt-2">
+        <Button onClick={() => next("vow")}>Continue</Button>
+        <Button variant="secondary" onClick={() => next("vow")}>Skip</Button>
+      </div>
+    </div>
+  );
+
+  const ScreenVow = (
+    <div className="space-y-4">
+      <h2 className="text-xl font-semibold">Screen 8 — Vow</h2>
+      <div className="grid grid-cols-2 gap-2">
+        {[
+          "Courage","Livelihood","Justice","Transparency","Solidarity","Servitude","Culture","Freedom",
+        ].map((v) => (
+          <button
+            key={v}
+            onClick={() => saveProfile({ vow: v })}
+            className={`rounded-lg px-4 py-2 ${
+              profile?.vow === v ? "bg-amber-400 text-black font-bold" : "bg-white/10 text-slate-200"
+            }`}
+          >
+            {v}
+          </button>
+        ))}
+      </div>
+      <div className="flex gap-3 pt-2">
+        <Button onClick={() => next("reveal")} disabled={!profile?.vow}>Finish my profile</Button>
+        <Button variant="secondary" onClick={() => next("reveal")}>Skip</Button>
+      </div>
+    </div>
+  );
+
+  const ScreenReveal = (
+    <div className="space-y-4 text-center">
+      <h2 className="text-xl font-bold">✨ Your circle is alive</h2>
+      {profile?.photo_url && (
+        <img
+          src={profile.photo_url}
+          alt="Profile"
+          className="mx-auto h-24 w-24 rounded-full object-cover"
+        />
+      )}
+      <p className="text-slate-300">
+        Others can now sit closer, see your story, and walk with you.
+      </p>
+      <a
+        href="/members"
+        className="inline-block rounded-lg bg-amber-400 px-4 py-2 font-semibold text-black"
+      >
+        Enter the Chauṭarī
+      </a>
+    </div>
+  );
+
+  const screens = {
+    entry: ScreenEntry,
+    name_face: ScreenNameFace,
+    roots: ScreenRoots,
+    livelihood: ScreenLivelihood,
+    passions: ScreenPassions,
+    needs: ScreenNeeds,
+    viability: ScreenViability,
+    story: ScreenStory,
+    vow: ScreenVow,
+    reveal: ScreenReveal,
+  };
+
+  return (
+    <div className="min-h-[70vh] w-full px-5 py-8 md:py-10 bg-gradient-to-b from-zinc-950 to-black text-zinc-100">
+      <div className="max-w-2xl mx-auto">
+        <div className="flex items-center justify-between mb-6">
+          <button
+            onClick={back}
+            className="text-sm text-zinc-400 hover:text-zinc-200"
+            aria-label="Back"
+          >
+            ← Back
+          </button>
+          <div className="text-xs text-zinc-400">
+            Step {Math.max(0, steps.indexOf(step)) + 1} of {steps.length}
+          </div>
+        </div>
+
+        {screens[step]}
+
+        <div className="mt-10 flex items-center justify-between text-xs text-zinc-500">
+          <div>Choices autosave. If offline, they’ll sync later.</div>
+          <div className="flex gap-2">
+            {steps.map((s, i) => (
+              <span
+                key={s}
+                className={`inline-block h-2 w-2 rounded-full ${
+                  i <= steps.indexOf(step) ? "bg-amber-500" : "bg-zinc-700"
+                }`}
+              />
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <SuggestModal
+        open={modal.open}
+        typed={modal.typed}
+        type={modal.type}
+        onCancel={() => setModal({ open: false, type: "", typed: "" })}
+        onSubmit={submitSuggest}
+      />
     </div>
   );
 }
