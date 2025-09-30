@@ -2,35 +2,15 @@
 
 /**
  * Gatishil — Digital Chauṭarī Onboarding (Screens 0–3)
- * ELI15: We DO NOT create a Supabase client here. We only use the ONE your app already made.
- * - Pass it as a prop: <OnboardingFlow supabase={supabase} />
- *   OR wrap the app with @supabase/auth-helpers and we'll read it via useSupabaseClient().
- * This removes "Multiple GoTrueClient instances..." and the minified "n is not a function" cascade.
- * Schema: reads/writes ONLY existing columns incl. `surname`.
+ * ELI15: Uses your ONE shared Supabase client from ../lib/supabaseClient (we do NOT create a new one),
+ * static-imports ChautariLocationPicker, and keeps Surname + Ikigai on Screen 3.
+ * This avoids the “Multiple GoTrueClient instances…” warning and the minified “n is not a function”.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Cropper from "react-easy-crop";
-import ChautariLocationPicker from "./ChautariLocationPicker"; // static import; it worked before
-
-// try to read client from auth-helpers context if available (optional dependency)
-let useSupabaseClientHook = null;
-try {
-  // will succeed only if @supabase/auth-helpers-react is installed AND Provider is in tree
-  // we do NOT import supabase-js or createClient here
-  // eslint-disable-next-line import/no-extraneous-dependencies, global-require
-  useSupabaseClientHook = require("@supabase/auth-helpers-react").useSupabaseClient;
-} catch (_) {
-  /* not installed — that's fine, we'll use the prop */
-}
-
-function useSupabaseFromApp(propClient) {
-  // strict: prefer prop; else context; else hard fail (we do not create a new one)
-  const ctxClient = useSupabaseClientHook ? useSupabaseClientHook() : null;
-  return useMemo(() => {
-    return propClient || ctxClient || null;
-  }, [propClient, ctxClient]);
-}
+import { supabase } from "../lib/supabaseClient"; // ✅ use existing singleton only
+import ChautariLocationPicker from "./ChautariLocationPicker"; // ✅ static import (worked before)
 
 const STEP = {
   ENTRY: "entry",
@@ -52,7 +32,8 @@ const dedupePush = (list, value, max) => {
   return max ? next.slice(0, max) : next;
 };
 
-async function upsertProfileSafe(supabase, payload) {
+// ——— DB helper: only allow columns that exist in your schema (incl. surname you added)
+async function upsertProfileSafe(payload) {
   const allowed = [
     "user_id",
     "name",
@@ -77,8 +58,7 @@ async function upsertProfileSafe(supabase, payload) {
   return Array.isArray(data) ? data[0] : data;
 }
 
-export default function OnboardingFlow({ supabase }) {
-  const sb = useSupabaseFromApp(supabase); // must be non-null
+export default function OnboardingFlow() {
   const [step, setStep] = useState(STEP.ENTRY);
   const [userId, setUserId] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -87,7 +67,7 @@ export default function OnboardingFlow({ supabase }) {
   // Screen 1 — Name, Surname, Photo
   const [name, setName] = useState("");
   const [surname, setSurname] = useState("");
-  const [photoUrl, setPhotoUrl] = useState(""); // saved public URL
+  const [photoUrl, setPhotoUrl] = useState("");
   const [rawPhotoSrc, setRawPhotoSrc] = useState("");
   const [crop, setCrop] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
@@ -95,7 +75,7 @@ export default function OnboardingFlow({ supabase }) {
   const [croppedPreview, setCroppedPreview] = useState("");
 
   // Screen 2 — Roots
-  const [roots, setRoots] = useState(null); // { type:'ward'|'city', label, ... }
+  const [roots, setRoots] = useState(null);
 
   // Screen 3 — Ikigai
   const [ikigaiTab, setIkigaiTab] = useState("Livelihood");
@@ -103,30 +83,18 @@ export default function OnboardingFlow({ supabase }) {
   const [skills, setSkills] = useState([]);
   const [passions, setPassions] = useState([]);
   const [needs, setNeeds] = useState([]);
-  const [viability, setViability] = useState(""); // 'paid','part_time','learning','exploring'
+  const [viability, setViability] = useState("");
   const [transitionTarget, setTransitionTarget] = useState("");
 
-  // hard guard: we need a client from the app
-  if (typeof window !== "undefined" && !sb) {
-    // render a friendly message instead of creating another client and causing the warning
-    return (
-      <div className="p-4 text-sm text-red-200 bg-red-900/20 rounded-xl border border-red-800">
-        Onboarding needs the app’s Supabase client. Pass it as <code>supabase</code> prop or wrap your app with{" "}
-        <code>@supabase/auth-helpers-react</code> and provider.
-      </div>
-    );
-  }
-
-  // --- Auth: subscribe using the provided singleton client
+  // --- Auth (ONE client): subscribe/unsubscribe using supabase-js v2 shape
   useEffect(() => {
-    if (!sb) return;
     let mounted = true;
 
-    sb.auth.getUser().then(({ data }) => {
+    supabase.auth.getUser().then(({ data }) => {
       if (mounted) setUserId(data?.user?.id ?? null);
     });
 
-    const { data: authListener } = sb.auth.onAuthStateChange((_event, session) => {
+    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
       if (mounted) setUserId(session?.user?.id ?? null);
     });
 
@@ -134,13 +102,13 @@ export default function OnboardingFlow({ supabase }) {
       mounted = false;
       authListener?.subscription?.unsubscribe?.();
     };
-  }, [sb]);
+  }, []);
 
-  // Prefill profile
+  // Prefill existing profile (array-safe; no .single/.maybeSingle)
   useEffect(() => {
     (async () => {
-      if (!sb || !userId) return;
-      const { data, error } = await sb
+      if (!userId) return;
+      const { data, error } = await supabase
         .from("profiles")
         .select(
           "name, surname, photo_url, roots_json, diaspora_json, livelihood, skills, passions, needs, viability, transition_target"
@@ -160,7 +128,7 @@ export default function OnboardingFlow({ supabase }) {
         setTransitionTarget(row.transition_target || "");
       }
     })();
-  }, [sb, userId]);
+  }, [userId]);
 
   const showToast = (msg) => {
     setToast(msg);
@@ -206,11 +174,11 @@ export default function OnboardingFlow({ supabase }) {
     setCroppedPreview(url);
   }, [rawPhotoSrc, croppedAreaPixels]);
 
-  // --- Saves (use provided sb)
+  // --- Saves
   const saveNameSurname = useCallback(async () => {
-    if (!sb || !userId) return;
+    if (!userId) return;
     try {
-      await upsertProfileSafe(sb, {
+      await upsertProfileSafe({
         user_id: userId,
         name: name.trim() || null,
         surname: surname.trim() || null,
@@ -221,27 +189,28 @@ export default function OnboardingFlow({ supabase }) {
       console.error(e);
       showToast("Save failed.");
     }
-  }, [sb, userId, name, surname]);
+  }, [userId, name, surname]);
 
   const saveCroppedPhoto = useCallback(async () => {
-    if (!sb || !userId || !croppedPreview) return;
+    if (!userId || !croppedPreview) return;
     setBusy(true);
     try {
       const resp = await fetch(croppedPreview);
       const blob = await resp.blob();
-      const path = `profiles/${userId}.jpg`; // matches your RLS
+      const path = `profiles/${userId}.jpg`; // matches your storage RLS
 
-      await sb.storage.from("profiles").remove([path]).catch(() => {});
-      const { error: upErr } = await sb.storage
+      await supabase.storage.from("profiles").remove([path]).catch(() => {});
+      const { error: upErr } = await supabase
+        .storage
         .from("profiles")
         .upload(path, blob, { upsert: true, contentType: "image/jpeg", cacheControl: "3600" });
       if (upErr) throw upErr;
 
-      const { data: pub } = sb.storage.from("profiles").getPublicUrl(path);
+      const { data: pub } = supabase.storage.from("profiles").getPublicUrl(path);
       const url = pub?.publicUrl;
       if (!url) throw new Error("No public URL");
 
-      await upsertProfileSafe(sb, {
+      await upsertProfileSafe({
         user_id: userId,
         name: name.trim() || null,
         surname: surname.trim() || null,
@@ -257,11 +226,11 @@ export default function OnboardingFlow({ supabase }) {
     } finally {
       setBusy(false);
     }
-  }, [sb, userId, croppedPreview, name, surname]);
+  }, [userId, croppedPreview, name, surname]);
 
   const saveRoots = useCallback(
     async (rootsObj) => {
-      if (!sb || !userId) return;
+      if (!userId) return;
       const payload = { user_id: userId, updated_at: new Date().toISOString() };
       if (rootsObj?.type === "ward") {
         payload.roots_json = rootsObj;
@@ -274,7 +243,7 @@ export default function OnboardingFlow({ supabase }) {
         payload.diaspora_json = null;
       }
       try {
-        await upsertProfileSafe(sb, payload);
+        await upsertProfileSafe(payload);
         setRoots(rootsObj);
         showToast("Location saved.");
       } catch (e) {
@@ -282,13 +251,13 @@ export default function OnboardingFlow({ supabase }) {
         showToast("Could not save location.");
       }
     },
-    [sb, userId]
+    [userId]
   );
 
   const saveIkigai = useCallback(async () => {
-    if (!sb || !userId) return;
+    if (!userId) return;
     try {
-      await upsertProfileSafe(sb, {
+      await upsertProfileSafe({
         user_id: userId,
         livelihood: livelihood?.trim() || null,
         skills,
@@ -303,7 +272,7 @@ export default function OnboardingFlow({ supabase }) {
       console.error(e);
       showToast("Save failed.");
     }
-  }, [sb, userId, livelihood, skills, passions, needs, viability, transitionTarget]);
+  }, [userId, livelihood, skills, passions, needs, viability, transitionTarget]);
 
   // --- Guards
   const screen1Ready = name.trim() && surname.trim() && (photoUrl || croppedPreview);
@@ -628,16 +597,18 @@ function IkigaiScreen({
             ))}
           </div>
 
-          {(viability === "learning" || viability === "exploring") && (
-            <div className="space-y-2">
-              <label className="block text-sm opacity-80">Transition toward… (optional)</label>
-              <input
-                className="w-full rounded-lg border border-white/20 bg-black/30 p-2"
-                placeholder="Type a target livelihood"
-                value={transitionTarget}
-                onChange={(e) => setTransitionTarget(titleCase(e.target.value))}
-              />
-            </div>
+          {(viability === "learning" || viability === "exploring") => (
+            (viability === "learning" || viability === "exploring") && (
+              <div className="space-y-2">
+                <label className="block text-sm opacity-80">Transition toward… (optional)</label>
+                <input
+                  className="w-full rounded-lg border border-white/20 bg-black/30 p-2"
+                  placeholder="Type a target livelihood"
+                  value={transitionTarget}
+                  onChange={(e) => setTransitionTarget(titleCase(e.target.value))}
+                />
+              </div>
+            )
           )}
         </div>
       )}
@@ -658,7 +629,6 @@ function IkigaiScreen({
   );
 }
 
-/* Chips input helper */
 function ChipsInput({ id, label, items, setItems, placeholder, max = 8 }) {
   const [value, setValue] = useState("");
   return (
