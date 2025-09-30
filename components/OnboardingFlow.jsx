@@ -1,19 +1,30 @@
 // components/OnboardingFlow.jsx
 // Gatishil — Digital Chauṭarī Onboarding (ONLY up to Screen 3)
-// Robust dynamic import fallback to fix "TypeError: n is not a function".
-// No schema changes; DOES NOT write "surname".
+// • Uses robust dynamic import that supports default OR named export for ChautariLocationPicker.
+// • Safe for your schema; now includes `surname` writes (you added the column above).
+// • No other schema changes.
 
 import React, { useCallback, useEffect, useState } from 'react';
 import dynamic from 'next/dynamic';
 import Cropper from 'react-easy-crop';
 import { supabase } from '../lib/supabaseClient';
 
-// ✅ Robust dynamic() that always returns a component (never a non-function)
+/** Robust dynamic import:
+ * - If default export exists -> use it
+ * - Else if named export ChautariLocationPicker exists -> use it
+ * - Else use a real fallback component
+ */
 const ChautariLocationPicker = dynamic(
   async () => {
     try {
       const mod = await import('./ChautariLocationPicker');
-      return mod.default || mod;
+      return mod.default ?? mod.ChautariLocationPicker ?? function FallbackPicker() {
+        return (
+          <div className="text-sm opacity-80">
+            Location picker not found. (Add <code>components/ChautariLocationPicker.jsx</code> later.)
+          </div>
+        );
+      };
     } catch {
       return function FallbackPicker() {
         return (
@@ -37,12 +48,7 @@ const STEP = {
 const ringLimit = { skills: 8, passions: 6, needs: 6 };
 
 const titleCase = (s) =>
-  s
-    ?.toString()
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, ' ')
-    .replace(/(^|\s)\S/g, (t) => t.toUpperCase()) || '';
+  s?.toString().trim().toLowerCase().replace(/\s+/g, ' ').replace(/(^|\s)\S/g, (t) => t.toUpperCase()) || '';
 
 const dedupePush = (list, value, max) => {
   const v = titleCase(value);
@@ -56,21 +62,19 @@ function useAuthUser() {
   const [user, setUser] = useState(null);
   useEffect(() => {
     let mounted = true;
-    supabase.auth.getUser().then(({ data }) => {
-      if (mounted) setUser(data?.user ?? null);
-    });
-    const sub = supabase.auth.onAuthStateChange?.((_e, session) => {
-      setUser(session?.user ?? null);
-    });
+    supabase.auth.getUser().then(({ data }) => mounted && setUser(data?.user ?? null));
+    const sub = supabase.auth.onAuthStateChange?.((_e, session) => setUser(session?.user ?? null));
     return () => sub?.data?.subscription?.unsubscribe?.();
   }, []);
   return user;
 }
 
 async function upsertProfileSafe(payload) {
+  // Allow only known columns
   const allowed = [
     'user_id',
     'name',
+    'surname',
     'photo_url',
     'roots_json',
     'diaspora_json',
@@ -146,19 +150,12 @@ function ChipsInput({ id, label, items, setItems, placeholder, max = 8 }) {
   const [value, setValue] = useState('');
   return (
     <div className="space-y-2">
-      <label className="block text-sm opacity-80" htmlFor={id}>
-        {label}
-      </label>
+      <label className="block text-sm opacity-80" htmlFor={id}>{label}</label>
       <div className="flex gap-2 flex-wrap">
         {items.map((it) => (
           <span key={it} className="px-2 py-1 rounded-full text-xs bg-white/10 border border-white/15">
             {it}{' '}
-            <button
-              type="button"
-              onClick={() => setItems(items.filter((x) => x !== it))}
-              className="opacity-70 hover:opacity-100 ml-1"
-              aria-label={`Remove ${it}`}
-            >
+            <button type="button" onClick={() => setItems(items.filter((x) => x !== it))} className="opacity-70 hover:opacity-100 ml-1" aria-label={`Remove ${it}`}>
               ✕
             </button>
           </span>
@@ -171,19 +168,11 @@ function ChipsInput({ id, label, items, setItems, placeholder, max = 8 }) {
         value={value}
         onChange={(e) => setValue(e.target.value)}
         onKeyDown={(e) => {
-          if (e.key === 'Enter') {
-            e.preventDefault();
-            if (!value.trim()) return;
-            setItems(dedupePush(items, value, max));
-            setValue('');
-          } else if (e.key === 'Backspace' && !value && items.length) {
-            setItems(items.slice(0, -1));
-          }
+          if (e.key === 'Enter') { e.preventDefault(); if (!value.trim()) return; setItems(dedupePush(items, value, max)); setValue(''); }
+          else if (e.key === 'Backspace' && !value && items.length) { setItems(items.slice(0, -1)); }
         }}
       />
-      <div className="text-xs opacity-60">
-        {items.length}/{max} • Press Enter to add
-      </div>
+      <div className="text-xs opacity-60">{items.length}/{max} • Press Enter to add</div>
     </div>
   );
 }
@@ -198,45 +187,27 @@ function Typeahead({ id, label, value, setValue, rpcName, placeholder }) {
       if (!rpcName) return;
       const { data, error } = await supabase.rpc(rpcName, { q });
       if (!alive) return;
-      if (!error && Array.isArray(data)) setOpts(data);
-      else setOpts([]);
+      if (!error && Array.isArray(data)) setOpts(data); else setOpts([]);
     };
     const t = setTimeout(run, 160);
-    return () => {
-      alive = false;
-      clearTimeout(t);
-    };
+    return () => { alive = false; clearTimeout(t); };
   }, [q, rpcName]);
 
   return (
     <div className="space-y-2">
-      <label className="block text-sm opacity-80" htmlFor={id}>
-        {label}
-      </label>
+      <label className="block text-sm opacity-80" htmlFor={id}>{label}</label>
       <input
         id={id}
         className="w-full bg-white/5 border border-white/15 rounded-md px-3 py-2 outline-none focus:border-amber-400"
         value={value}
         placeholder={placeholder}
-        onChange={(e) => {
-          const v = e.target.value;
-          setValue(titleCase(v));
-          setQ(v);
-        }}
+        onChange={(e) => { const v = e.target.value; setValue(titleCase(v)); setQ(v); }}
       />
       {opts?.length > 0 && (
         <div className="mt-1 border border-white/15 rounded-md bg-black/60 max-h-44 overflow-auto">
           {opts.map((o) => (
-            <button
-              type="button"
-              key={o.id}
-              className="w-full text-left px-3 py-2 hover:bg-white/5"
-              onClick={() => {
-                setValue(o.label);
-                setQ(o.label);
-                setOpts([]);
-              }}
-            >
+            <button key={o.id} type="button" className="w-full text-left px-3 py-2 hover:bg-white/5"
+              onClick={() => { setValue(o.label); setQ(o.label); setOpts([]); }}>
               {o.label}
             </button>
           ))}
@@ -252,9 +223,9 @@ export default function OnboardingFlow() {
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState(null);
 
-  // Screen 1 — Name, Surname (client-only), Photo
+  // Screen 1 — Name, Surname, Photo
   const [name, setName] = useState('');
-  const [surname, setSurname] = useState(''); // client-only; not persisted
+  const [surname, setSurname] = useState('');
   const [photoUrl, setPhotoUrl] = useState('');
   const [rawImage, setRawImage] = useState('');
   const [crop, setCrop] = useState({ x: 0, y: 0 });
@@ -272,19 +243,18 @@ export default function OnboardingFlow() {
   const [viability, setViability] = useState('');
   const [transitionTarget, setTransitionTarget] = useState('');
 
-  // Prefill existing data (array-safe; no maybeSingle(); no .single())
+  // Prefill (array-safe; no maybeSingle/single)
   useEffect(() => {
     const load = async () => {
       if (!user) return;
       const { data, error } = await supabase
         .from('profiles')
-        .select(
-          'name, photo_url, roots_json, diaspora_json, livelihood, skills, passions, needs, viability, transition_target'
-        )
+        .select('name, surname, photo_url, roots_json, diaspora_json, livelihood, skills, passions, needs, viability, transition_target')
         .eq('user_id', user.id);
       if (!error && Array.isArray(data) && data.length) {
         const row = data[0];
         setName(row.name || '');
+        setSurname(row.surname || '');
         setPhotoUrl(row.photo_url || '');
         setRoots(row.roots_json || row.diaspora_json || null);
         setLivelihood(row.livelihood || '');
@@ -298,21 +268,16 @@ export default function OnboardingFlow() {
     load();
   }, [user]);
 
-  const showToast = (msg) => {
-    setToast(msg);
-    setTimeout(() => setToast(null), 1600);
-  };
+  const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(null), 1600); };
 
   const nameOk = name.trim().length > 0;
-  const surnameOk = surname.trim().length > 0; // required in UI, not persisted yet
+  const surnameOk = surname.trim().length > 0;
   const photoOk = !!photoUrl || !!rawImage;
   const screen1Ready = nameOk && surnameOk && photoOk;
 
-  const ikigaiReady =
-    !!viability &&
-    ((livelihood?.trim().length ?? 0) > 0 || skills.length > 0 || passions.length > 0 || needs.length > 0);
+  const ikigaiReady = !!viability && ((livelihood?.trim().length ?? 0) > 0 || skills.length > 0 || passions.length > 0 || needs.length > 0);
 
-  const onSelectImage = async (file) => {
+  const onSelectImage = (file) => {
     if (!file) return;
     const reader = new FileReader();
     reader.onload = () => setRawImage(reader.result.toString());
@@ -326,22 +291,14 @@ export default function OnboardingFlow() {
       const blob = await getCroppedBlob(rawImage, crop, zoom, true);
       const path = `profiles/${user.id}.jpg`;
       await supabase.storage.from('profiles').remove([path]).catch(() => {});
-      const { error: upErr } = await supabase.storage.from('profiles').upload(path, blob, {
-        contentType: 'image/jpeg',
-        upsert: true,
-      });
+      const { error: upErr } = await supabase.storage.from('profiles').upload(path, blob, { contentType: 'image/jpeg', upsert: true });
       if (upErr) throw upErr;
 
       const { data: pub } = supabase.storage.from('profiles').getPublicUrl(path);
       const url = pub?.publicUrl;
       if (!url) throw new Error('No public URL');
 
-      await upsertProfileSafe({
-        user_id: user.id,
-        name: name.trim() || null,
-        photo_url: url,
-        updated_at: new Date().toISOString(),
-      });
+      await upsertProfileSafe({ user_id: user.id, name: name.trim() || null, surname: surname.trim() || null, photo_url: url, updated_at: new Date().toISOString() });
 
       setPhotoUrl(url);
       setRawImage('');
@@ -352,45 +309,27 @@ export default function OnboardingFlow() {
     } finally {
       setBusy(false);
     }
-  }, [user, rawImage, crop, zoom, name]);
+  }, [user, rawImage, crop, zoom, name, surname]);
 
-  const saveNameOnly = useCallback(async () => {
+  const saveNameSurname = useCallback(async () => {
     if (!user) return;
     try {
-      await upsertProfileSafe({
-        user_id: user.id,
-        name: name.trim() || null,
-        updated_at: new Date().toISOString(),
-      });
+      await upsertProfileSafe({ user_id: user.id, name: name.trim() || null, surname: surname.trim() || null, updated_at: new Date().toISOString() });
       showToast('Saved.');
     } catch (e) {
       console.error(e);
       showToast('Save failed.');
     }
-  }, [user, name]);
+  }, [user, name, surname]);
 
-  const saveRoots = useCallback(
-    async (rootsObj) => {
-      if (!user) return;
-      const payload = { user_id: user.id, updated_at: new Date().toISOString() };
-      if (rootsObj?.type === 'ward') {
-        payload.roots_json = rootsObj;
-        payload.diaspora_json = null;
-      } else if (rootsObj?.type === 'city') {
-        payload.diaspora_json = rootsObj;
-        payload.roots_json = null;
-      }
-      try {
-        await upsertProfileSafe(payload);
-        setRoots(rootsObj);
-        showToast('Location saved.');
-      } catch (e) {
-        console.error(e);
-        showToast('Could not save location.');
-      }
-    },
-    [user]
-  );
+  const saveRoots = useCallback(async (rootsObj) => {
+    if (!user) return;
+    const payload = { user_id: user.id, updated_at: new Date().toISOString() };
+    if (rootsObj?.type === 'ward') { payload.roots_json = rootsObj; payload.diaspora_json = null; }
+    else if (rootsObj?.type === 'city') { payload.diaspora_json = rootsObj; payload.roots_json = null; }
+    try { await upsertProfileSafe(payload); setRoots(rootsObj); showToast('Location saved.'); }
+    catch (e) { console.error(e); showToast('Could not save location.'); }
+  }, [user]);
 
   const saveIkigai = useCallback(async () => {
     if (!user) return;
@@ -398,9 +337,7 @@ export default function OnboardingFlow() {
       await upsertProfileSafe({
         user_id: user.id,
         livelihood: livelihood?.trim() || null,
-        skills,
-        passions,
-        needs,
+        skills, passions, needs,
         viability: viability || null,
         transition_target: transitionTarget?.trim() || null,
         updated_at: new Date().toISOString(),
@@ -418,10 +355,7 @@ export default function OnboardingFlow() {
     <div className="space-y-4">
       <h1 className="text-2xl font-semibold">🌳 Welcome to the Chauṭarī</h1>
       <p className="opacity-80">Others are already sitting under the tree. Let’s introduce yourself.</p>
-      <button
-        className="px-4 py-2 rounded-lg bg-amber-500 text-black hover:bg-amber-400"
-        onClick={() => setStep(STEP.NAME_PHOTO)}
-      >
+      <button className="px-4 py-2 rounded-lg bg-amber-500 text-black hover:bg-amber-400" onClick={() => setStep(STEP.NAME_PHOTO)}>
         Begin my circle
       </button>
     </div>
@@ -437,7 +371,7 @@ export default function OnboardingFlow() {
             placeholder="e.g., Nabin"
             value={name}
             onChange={(e) => setName(titleCase(e.target.value))}
-            onBlur={saveNameOnly}
+            onBlur={saveNameSurname}
           />
         </div>
         <div className="space-y-2">
@@ -447,10 +381,8 @@ export default function OnboardingFlow() {
             placeholder="e.g., Pradhan"
             value={surname}
             onChange={(e) => setSurname(titleCase(e.target.value))}
+            onBlur={saveNameSurname}
           />
-          <div className="text-xs opacity-60">
-            (Kept on this device for now — DB will add a <code>surname</code> column later.)
-          </div>
         </div>
       </div>
 
@@ -459,28 +391,14 @@ export default function OnboardingFlow() {
 
         {!rawImage && !photoUrl && (
           <div className="space-y-3">
-            <input
-              type="file"
-              accept="image/*"
-              onChange={(e) => onSelectImage(e.target.files?.[0])}
-              className="block w-full text-sm"
-            />
+            <input type="file" accept="image/*" onChange={(e) => onSelectImage(e.target.files?.[0])} className="block w-full text-sm" />
             <div className="text-xs opacity-60">Upload any image. You’ll crop it into a circle.</div>
           </div>
         )}
 
         {rawImage && (
           <div className="relative w-full aspect-square bg-black/40 rounded-lg overflow-hidden border border-white/10">
-            <Cropper
-              image={rawImage}
-              crop={crop}
-              zoom={zoom}
-              aspect={1}
-              cropShape="round"
-              showGrid={false}
-              onCropChange={setCrop}
-              onZoomChange={setZoom}
-            />
+            <Cropper image={rawImage} crop={crop} zoom={zoom} aspect={1} cropShape="round" showGrid={false} onCropChange={setCrop} onZoomChange={setZoom} />
           </div>
         )}
 
@@ -498,18 +416,10 @@ export default function OnboardingFlow() {
 
         {rawImage && (
           <div className="flex items-center gap-3">
-            <button
-              className="px-3 py-1.5 rounded-lg bg-amber-500 text-black hover:bg-amber-400 disabled:opacity-50"
-              disabled={busy}
-              onClick={saveCroppedPhoto}
-            >
+            <button className="px-3 py-1.5 rounded-lg bg-amber-500 text-black hover:bg-amber-400 disabled:opacity-50" disabled={busy} onClick={saveCroppedPhoto}>
               Save crop
             </button>
-            <button
-              className="px-3 py-1.5 rounded-lg bg-white/10 border border-white/15"
-              disabled={busy}
-              onClick={() => setRawImage('')}
-            >
+            <button className="px-3 py-1.5 rounded-lg bg-white/10 border border-white/15" disabled={busy} onClick={() => setRawImage('')}>
               Cancel
             </button>
           </div>
@@ -518,9 +428,7 @@ export default function OnboardingFlow() {
 
       <div className="pt-2">
         <button
-          className={`px-4 py-2 rounded-lg ${
-            screen1Ready ? 'bg-amber-500 text-black hover:bg-amber-400' : 'bg-white/10 text-white/60 cursor-not-allowed'
-          }`}
+          className={`px-4 py-2 rounded-lg ${screen1Ready ? 'bg-amber-500 text-black hover:bg-amber-400' : 'bg-white/10 text-white/60 cursor-not-allowed'}`}
           disabled={!screen1Ready || busy}
           onClick={() => setStep(STEP.ROOTS)}
         >
@@ -533,17 +441,9 @@ export default function OnboardingFlow() {
   const ScreenRoots = (
     <div className="space-y-5">
       <h2 className="text-xl font-semibold">Where do your roots touch the earth?</h2>
-      <ChautariLocationPicker
-        value={roots}
-        onChange={async (val) => {
-          await saveRoots(val);
-        }}
-      />
+      <ChautariLocationPicker value={roots} onChange={async (val) => { await saveRoots(val); }} />
       <div className="pt-2">
-        <button
-          className="px-4 py-2 rounded-lg bg-amber-500 text-black hover:bg-amber-400"
-          onClick={() => setStep(STEP.LIVELIHOOD_IKIGAI)}
-        >
+        <button className="px-4 py-2 rounded-lg bg-amber-500 text-black hover:bg-amber-400" onClick={() => setStep(STEP.LIVELIHOOD_IKIGAI)}>
           Continue
         </button>
       </div>
@@ -552,23 +452,14 @@ export default function OnboardingFlow() {
 
   const ScreenIkigai = (
     <IkigaiScreen
-      ikigaiTab={ikigaiTab}
-      setIkigaiTab={setIkigaiTab}
-      livelihood={livelihood}
-      setLivelihood={setLivelihood}
-      skills={skills}
-      setSkills={setSkills}
-      passions={passions}
-      setPassions={setPassions}
-      needs={needs}
-      setNeeds={setNeeds}
-      viability={viability}
-      setViability={setViability}
-      transitionTarget={transitionTarget}
-      setTransitionTarget={setTransitionTarget}
-      ready={ikigaiReady}
-      busy={busy}
-      onSave={saveIkigai}
+      ikigaiTab={ikigaiTab} setIkigaiTab={setIkigaiTab}
+      livelihood={livelihood} setLivelihood={setLivelihood}
+      skills={skills} setSkills={setSkills}
+      passions={passions} setPassions={setPassions}
+      needs={needs} setNeeds={setNeeds}
+      viability={viability} setViability={setViability}
+      transitionTarget={transitionTarget} setTransitionTarget={setTransitionTarget}
+      ready={ikigaiReady} busy={busy} onSave={saveIkigai}
     />
   );
 
@@ -594,23 +485,14 @@ export default function OnboardingFlow() {
 }
 
 function IkigaiScreen({
-  ikigaiTab,
-  setIkigaiTab,
-  livelihood,
-  setLivelihood,
-  skills,
-  setSkills,
-  passions,
-  setPassions,
-  needs,
-  setNeeds,
-  viability,
-  setViability,
-  transitionTarget,
-  setTransitionTarget,
-  ready,
-  busy,
-  onSave,
+  ikigaiTab, setIkigaiTab,
+  livelihood, setLivelihood,
+  skills, setSkills,
+  passions, setPassions,
+  needs, setNeeds,
+  viability, setViability,
+  transitionTarget, setTransitionTarget,
+  ready, busy, onSave,
 }) {
   const [localSaved, setLocalSaved] = useState(false);
 
@@ -620,9 +502,7 @@ function IkigaiScreen({
 
       <div className="flex gap-2 flex-wrap">
         {['Livelihood', 'Good At', 'Love', 'World Needs', 'Sustainability'].map((t) => (
-          <Pill key={t} active={ikigaiTab === t} onClick={() => setIkigaiTab(t)}>
-            {t}
-          </Pill>
+          <Pill key={t} active={ikigaiTab === t} onClick={() => setIkigaiTab(t)}>{t}</Pill>
         ))}
       </div>
 
@@ -637,53 +517,25 @@ function IkigaiScreen({
             placeholder="Farmer, Teacher, Software Developer…"
           />
           <div className="flex gap-2 flex-wrap text-xs opacity-80">
-            {['Farmer', 'Teacher', 'Software Developer', 'Driver', 'Tailor', 'Nurse', 'Shopkeeper', 'Carpenter'].map(
-              (s) => (
-                <button
-                  key={s}
-                  type="button"
-                  className="px-2 py-1 rounded-full bg-white/10 border border-white/15 hover:border-amber-400"
-                  onClick={() => setLivelihood(s)}
-                >
-                  {s}
-                </button>
-              )
-            )}
+            {['Farmer','Teacher','Software Developer','Driver','Tailor','Nurse','Shopkeeper','Carpenter'].map((s) => (
+              <button key={s} type="button" className="px-2 py-1 rounded-full bg-white/10 border border-white/15 hover:border-amber-400" onClick={() => setLivelihood(s)}>
+                {s}
+              </button>
+            ))}
           </div>
         </div>
       )}
 
       {ikigaiTab === 'Good At' && (
-        <ChipsInput
-          id="skills"
-          label="What are you reliably good at?"
-          items={skills}
-          setItems={(v) => setSkills(v.slice(0, ringLimit.skills))}
-          placeholder="Add a skill… (Enter)"
-          max={ringLimit.skills}
-        />
+        <ChipsInput id="skills" label="What are you reliably good at?" items={skills} setItems={(v) => setSkills(v.slice(0, ringLimit.skills))} placeholder="Add a skill… (Enter)" max={ringLimit.skills} />
       )}
 
       {ikigaiTab === 'Love' && (
-        <ChipsInput
-          id="passions"
-          label="What makes you feel alive lately?"
-          items={passions}
-          setItems={(v) => setPassions(v.slice(0, ringLimit.passions))}
-          placeholder="Add a passion… (Enter)"
-          max={ringLimit.passions}
-        />
+        <ChipsInput id="passions" label="What makes you feel alive lately?" items={passions} setItems={(v) => setPassions(v.slice(0, ringLimit.passions))} placeholder="Add a passion… (Enter)" max={ringLimit.passions} />
       )}
 
       {ikigaiTab === 'World Needs' && (
-        <ChipsInput
-          id="needs"
-          label="What needs around you pull your heart?"
-          items={needs}
-          setItems={(v) => setNeeds(v.slice(0, ringLimit.needs))}
-          placeholder="Add a community need… (Enter)"
-          max={ringLimit.needs}
-        />
+        <ChipsInput id="needs" label="What needs around you pull your heart?" items={needs} setItems={(v) => setNeeds(v.slice(0, ringLimit.needs))} placeholder="Add a community need… (Enter)" max={ringLimit.needs} />
       )}
 
       {ikigaiTab === 'Sustainability' && (
@@ -696,44 +548,25 @@ function IkigaiScreen({
               { key: 'learning', label: 'Learning / intern / volunteer' },
               { key: 'exploring', label: 'Exploring a shift' },
             ].map((o) => (
-              <button
-                key={o.key}
-                type="button"
-                className={`px-3 py-2 rounded-lg border ${
-                  viability === o.key
-                    ? 'bg-amber-500 text-black border-amber-500'
-                    : 'bg-white/5 border-white/15 hover:border-amber-400'
-                }`}
-                onClick={() => setViability(o.key)}
-              >
+              <button key={o.key} type="button"
+                className={`px-3 py-2 rounded-lg border ${viability === o.key ? 'bg-amber-500 text-black border-amber-500' : 'bg-white/5 border-white/15 hover:border-amber-400'}`}
+                onClick={() => setViability(o.key)}>
                 {o.label}
               </button>
             ))}
           </div>
 
           {(viability === 'learning' || viability === 'exploring') && (
-            <Typeahead
-              id="transition"
-              label="Transition toward… (optional)"
-              value={transitionTarget}
-              setValue={(v) => setTransitionTarget(titleCase(v))}
-              rpcName="search_livelihoods"
-              placeholder="Type a target livelihood"
-            />
+            <Typeahead id="transition" label="Transition toward… (optional)" value={transitionTarget} setValue={(v) => setTransitionTarget(titleCase(v))} rpcName="search_livelihoods" placeholder="Type a target livelihood" />
           )}
         </div>
       )}
 
       <div className="flex gap-2 pt-2">
         <button
-          className={`px-4 py-2 rounded-lg ${
-            ready ? 'bg-amber-500 text-black hover:bg-amber-400' : 'bg-white/10 text-white/60 cursor-not-allowed'
-          }`}
+          className={`px-4 py-2 rounded-lg ${ready ? 'bg-amber-500 text-black hover:bg-amber-400' : 'bg-white/10 text-white/60 cursor-not-allowed'}`}
           disabled={!ready || busy}
-          onClick={async () => {
-            await onSave();
-            setLocalSaved(true);
-          }}
+          onClick={async () => { await onSave(); setLocalSaved(true); }}
         >
           Save
         </button>
