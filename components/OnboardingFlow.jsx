@@ -1,54 +1,38 @@
-// components/OnboardingFlow.jsx
-// Gatishil — Digital Chauṭarī Onboarding (ONLY up to Screen 3)
-// • Uses robust dynamic import that supports default OR named export for ChautariLocationPicker.
-// • Safe for your schema; now includes `surname` writes (you added the column above).
-// • No other schema changes.
+"use client";
 
-import React, { useCallback, useEffect, useState } from 'react';
-import dynamic from 'next/dynamic';
-import Cropper from 'react-easy-crop';
-import { supabase } from '../lib/supabaseClient';
-
-/** Robust dynamic import:
- * - If default export exists -> use it
- * - Else if named export ChautariLocationPicker exists -> use it
- * - Else use a real fallback component
+/**
+ * Gatishil — Digital Chauṭarī Onboarding (Only up to Screen 3)
+ * Fixes "TypeError: n is not a function" by reverting to a STATIC import of ChautariLocationPicker.
+ * Adds Surname (required) on Screen 1 and integrates Ikigai into Screen 3.
+ * Remote-only: Next.js + Supabase + Vercel. No local steps.
+ *
+ * Notes:
+ * - Uses inline Supabase client (matches your original file style).
+ * - Writes ONLY columns that exist in your ikigai schema, plus `surname` (you added it).
+ * - Storage path respects your RLS: profiles/<auth.uid()>.jpg (image/jpeg).
  */
-const ChautariLocationPicker = dynamic(
-  async () => {
-    try {
-      const mod = await import('./ChautariLocationPicker');
-      return mod.default ?? mod.ChautariLocationPicker ?? function FallbackPicker() {
-        return (
-          <div className="text-sm opacity-80">
-            Location picker not found. (Add <code>components/ChautariLocationPicker.jsx</code> later.)
-          </div>
-        );
-      };
-    } catch {
-      return function FallbackPicker() {
-        return (
-          <div className="text-sm opacity-80">
-            Location picker not found. (Add <code>components/ChautariLocationPicker.jsx</code> later.)
-          </div>
-        );
-      };
-    }
-  },
-  { ssr: false }
+
+import { useCallback, useEffect, useMemo, useState } from "react";
+import Cropper from "react-easy-crop";
+import { createClient } from "@supabase/supabase-js";
+import ChautariLocationPicker from "./ChautariLocationPicker"; // ← static import (no dynamic())
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 );
 
 const STEP = {
-  ENTRY: 'entry',
-  NAME_PHOTO: 'name_photo',
-  ROOTS: 'roots',
-  LIVELIHOOD_IKIGAI: 'livelihood_ikigai',
+  ENTRY: "entry",
+  NAME_PHOTO: "name_photo",
+  ROOTS: "roots",
+  LIVELIHOOD_IKIGAI: "livelihood_ikigai",
 };
 
 const ringLimit = { skills: 8, passions: 6, needs: 6 };
 
 const titleCase = (s) =>
-  s?.toString().trim().toLowerCase().replace(/\s+/g, ' ').replace(/(^|\s)\S/g, (t) => t.toUpperCase()) || '';
+  s?.toString().trim().toLowerCase().replace(/\s+/g, " ").replace(/(^|\s)\S/g, (t) => t.toUpperCase()) || "";
 
 const dedupePush = (list, value, max) => {
   const v = titleCase(value);
@@ -58,104 +42,589 @@ const dedupePush = (list, value, max) => {
   return max ? next.slice(0, max) : next;
 };
 
-function useAuthUser() {
-  const [user, setUser] = useState(null);
-  useEffect(() => {
-    let mounted = true;
-    supabase.auth.getUser().then(({ data }) => mounted && setUser(data?.user ?? null));
-    const sub = supabase.auth.onAuthStateChange?.((_e, session) => setUser(session?.user ?? null));
-    return () => sub?.data?.subscription?.unsubscribe?.();
-  }, []);
-  return user;
-}
-
 async function upsertProfileSafe(payload) {
-  // Allow only known columns
+  // allow only known columns
   const allowed = [
-    'user_id',
-    'name',
-    'surname',
-    'photo_url',
-    'roots_json',
-    'diaspora_json',
-    'livelihood',
-    'skills',
-    'passions',
-    'needs',
-    'viability',
-    'transition_target',
-    'updated_at',
+    "user_id",
+    "name",
+    "surname",
+    "photo_url",
+    "roots_json",
+    "diaspora_json",
+    "livelihood",
+    "skills",
+    "passions",
+    "needs",
+    "viability",
+    "transition_target",
+    "updated_at",
   ];
   const clean = Object.fromEntries(Object.entries(payload).filter(([k]) => allowed.includes(k)));
-  const { data, error } = await supabase.from('profiles').upsert(clean, {
-    onConflict: 'user_id',
+  const { data, error } = await supabase.from("profiles").upsert(clean, {
+    onConflict: "user_id",
     ignoreDuplicates: false,
   }).select();
   if (error) throw error;
   return Array.isArray(data) ? data[0] : data;
 }
 
-async function getCroppedBlob(imageSrc, crop, zoom, maskCircle = true) {
-  const image = await new Promise((res, rej) => {
-    const img = new Image();
-    img.onload = () => res(img);
-    img.onerror = rej;
-    img.src = imageSrc;
-  });
+export default function OnboardingFlow() {
+  const [step, setStep] = useState(STEP.ENTRY);
+  const [userId, setUserId] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [toast, setToast] = useState(null);
 
-  const outputSize = 512;
-  const canvas = document.createElement('canvas');
-  canvas.width = outputSize;
-  canvas.height = outputSize;
-  const ctx = canvas.getContext('2d');
+  // Screen 1 — Name, Surname, Photo
+  const [name, setName] = useState("");
+  const [surname, setSurname] = useState("");
+  const [photoUrl, setPhotoUrl] = useState(""); // saved public URL
+  const [rawPhotoSrc, setRawPhotoSrc] = useState("");
+  const [crop, setCrop] = useState({ x: 0, y: 0 });
+  const [zoom, setZoom] = useState(1);
+  const [croppedAreaPixels, setCroppedAreaPixels] = useState(null);
+  const [cropping, setCropping] = useState(false);
+  const [croppedPreview, setCroppedPreview] = useState("");
 
-  if (maskCircle) {
-    ctx.save();
-    ctx.beginPath();
-    ctx.arc(outputSize / 2, outputSize / 2, outputSize / 2, 0, Math.PI * 2, true);
-    ctx.closePath();
-    ctx.clip();
+  // Screen 2 — Roots
+  const [roots, setRoots] = useState(null); // { type:'ward'|'city', label, ... }
+
+  // Screen 3 — Ikigai
+  const [ikigaiTab, setIkigaiTab] = useState("Livelihood");
+  const [livelihood, setLivelihood] = useState("");
+  const [skills, setSkills] = useState([]);
+  const [passions, setPassions] = useState([]);
+  const [needs, setNeeds] = useState([]);
+  const [viability, setViability] = useState(""); // 'paid','part_time','learning','exploring'
+  const [transitionTarget, setTransitionTarget] = useState("");
+
+  // auth
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase.auth.getUser();
+      if (data?.user?.id) setUserId(data.user.id);
+    })();
+    const sub = supabase.auth.onAuthStateChange?.((_e, session) => setUserId(session?.user?.id || null));
+    return () => sub?.data?.subscription?.unsubscribe?.();
+  }, []);
+
+  // prefill (array-safe; no .single/.maybeSingle)
+  useEffect(() => {
+    (async () => {
+      if (!userId) return;
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("name, surname, photo_url, roots_json, diaspora_json, livelihood, skills, passions, needs, viability, transition_target")
+        .eq("user_id", userId);
+      if (!error && Array.isArray(data) && data.length) {
+        const row = data[0];
+        setName(row.name || "");
+        setSurname(row.surname || "");
+        setPhotoUrl(row.photo_url || "");
+        setRoots(row.roots_json || row.diaspora_json || null);
+        setLivelihood(row.livelihood || "");
+        setSkills(Array.isArray(row.skills) ? row.skills : []);
+        setPassions(Array.isArray(row.passions) ? row.passions : []);
+        setNeeds(Array.isArray(row.needs) ? row.needs : []);
+        setViability(row.viability || "");
+        setTransitionTarget(row.transition_target || "");
+      }
+    })();
+  }, [userId]);
+
+  const showToast = (msg) => {
+    setToast(msg);
+    setTimeout(() => setToast(null), 1600);
+  };
+
+  // ---- Photo crop helpers (same UX as your old file, but saving to RLS-compliant path)
+  const fileToDataURL = (file) =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = reject;
+      reader.onload = () => resolve(reader.result);
+      reader.readAsDataURL(file);
+    });
+
+  const loadImage = (src) =>
+    new Promise((resolve, reject) => {
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      img.onload = () => resolve(img);
+      img.onerror = reject;
+      img.src = src;
+    });
+
+  async function getCroppedCanvasBlob(imageSrc, cropPixels, outputSize = 512) {
+    const image = await loadImage(imageSrc);
+    const canvas = document.createElement("canvas");
+    canvas.width = outputSize;
+    canvas.height = outputSize;
+    const ctx = canvas.getContext("2d");
+    const { x, y, width, height } = cropPixels;
+    ctx.imageSmoothingQuality = "high";
+    ctx.drawImage(image, x, y, width, height, 0, 0, outputSize, outputSize);
+    return await new Promise((resolve) => canvas.toBlob((blob) => resolve(blob), "image/jpeg", 0.92));
   }
 
-  const scale = zoom || 1;
-  const scaledW = image.width * scale;
-  const scaledH = image.height * scale;
-  const dx = (outputSize - scaledW) / 2 + (crop?.x || 0);
-  const dy = (outputSize - scaledH) / 2 + (crop?.y || 0);
+  const onCropComplete = useCallback((_, areaPixels) => setCroppedAreaPixels(areaPixels), []);
 
-  ctx.imageSmoothingQuality = 'high';
-  ctx.clearRect(0, 0, outputSize, outputSize);
-  ctx.drawImage(image, dx, dy, scaledW, scaledH);
+  const confirmCrop = useCallback(async () => {
+    if (!rawPhotoSrc || !croppedAreaPixels) return;
+    try {
+      setCropping(true);
+      const blob = await getCroppedCanvasBlob(rawPhotoSrc, croppedAreaPixels, 512);
+      const previewUrl = URL.createObjectURL(blob);
+      setCroppedPreview(previewUrl);
+    } finally {
+      setCropping(false);
+    }
+  }, [rawPhotoSrc, croppedAreaPixels]);
 
-  if (maskCircle) ctx.restore();
+  // ---- Saves (each step)
 
-  return await new Promise((resolve) => canvas.toBlob((b) => resolve(b), 'image/jpeg', 0.92));
-}
+  const saveNameSurname = useCallback(async () => {
+    if (!userId) return;
+    try {
+      await upsertProfileSafe({
+        user_id: userId,
+        name: name.trim() || null,
+        surname: surname.trim() || null,
+        updated_at: new Date().toISOString(),
+      });
+      showToast("Saved.");
+    } catch (e) {
+      console.error(e);
+      showToast("Save failed.");
+    }
+  }, [userId, name, surname]);
 
-function Pill({ active, onClick, children }) {
+  const saveCroppedPhoto = useCallback(async () => {
+    if (!userId || !croppedPreview) return;
+    setBusy(true);
+    try {
+      const resp = await fetch(croppedPreview);
+      const blob = await resp.blob();
+      const path = `profiles/${userId}.jpg`; // matches your storage RLS policy
+      await supabase.storage.from("profiles").remove([path]).catch(() => {});
+      const { error: upErr } = await supabase.storage
+        .from("profiles")
+        .upload(path, blob, { upsert: true, contentType: "image/jpeg", cacheControl: "3600" });
+      if (upErr) throw upErr;
+
+      const { data: pub } = supabase.storage.from("profiles").getPublicUrl(path);
+      const url = pub?.publicUrl;
+      if (!url) throw new Error("No public URL");
+
+      await upsertProfileSafe({
+        user_id: userId,
+        name: name.trim() || null,
+        surname: surname.trim() || null,
+        photo_url: url,
+        updated_at: new Date().toISOString(),
+      });
+
+      setPhotoUrl(url);
+      showToast("Photo saved.");
+    } catch (e) {
+      console.error(e);
+      showToast("Photo upload failed.");
+    } finally {
+      setBusy(false);
+    }
+  }, [userId, croppedPreview, name, surname]);
+
+  const saveRoots = useCallback(async (rootsObj) => {
+    if (!userId) return;
+    const payload = { user_id: userId, updated_at: new Date().toISOString() };
+    if (rootsObj?.type === "ward") {
+      payload.roots_json = {
+        type: "ward",
+        ward_id: rootsObj.id,
+        ward_no: rootsObj.ward_no ?? null,
+        local_level_id: rootsObj.local_level_id ?? null,
+        district_id: rootsObj.district_id ?? null,
+        province_id: rootsObj.province_id ?? null,
+        label: rootsObj.label,
+      };
+      payload.diaspora_json = null;
+    } else if (rootsObj?.type === "city") {
+      payload.roots_json = null;
+      payload.diaspora_json = {
+        type: "city",
+        city_id: rootsObj.city_id ?? rootsObj.id,
+        country_code: rootsObj.country_code ?? null,
+        label: rootsObj.label,
+      };
+    } else {
+      payload.roots_json = null;
+      payload.diaspora_json = null;
+    }
+    try {
+      await upsertProfileSafe(payload);
+      setRoots(rootsObj);
+      showToast("Location saved.");
+    } catch (e) {
+      console.error(e);
+      showToast("Could not save location.");
+    }
+  }, [userId]);
+
+  const saveIkigai = useCallback(async () => {
+    if (!userId) return;
+    try {
+      await upsertProfileSafe({
+        user_id: userId,
+        livelihood: livelihood?.trim() || null,
+        skills,
+        passions,
+        needs,
+        viability: viability || null,
+        transition_target: transitionTarget?.trim() || null,
+        updated_at: new Date().toISOString(),
+      });
+      showToast("Saved.");
+    } catch (e) {
+      console.error(e);
+      showToast("Save failed.");
+    }
+  }, [userId, livelihood, skills, passions, needs, viability, transitionTarget]);
+
+  // ---- Guards
+
+  const nameOk = name.trim().length > 0;
+  const surnameOk = surname.trim().length > 0;
+  const photoOk = !!photoUrl || !!croppedPreview;
+  const screen1Ready = nameOk && surnameOk && photoOk;
+
+  const ikigaiReady =
+    !!viability &&
+    ((livelihood?.trim().length ?? 0) > 0 || skills.length > 0 || passions.length > 0 || needs.length > 0);
+
+  // ---- UI
+
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`px-3 py-1.5 rounded-full text-sm border transition ${
-        active ? 'bg-amber-500 text-black border-amber-500' : 'border-white/20 hover:border-amber-400'
-      }`}
-    >
-      {children}
-    </button>
+    <div className="flex min-h-screen items-center justify-center bg-black text-white p-6">
+      <div className="w-full max-w-md rounded-2xl bg-white/5 p-6 backdrop-blur-xl space-y-6 border border-white/10">
+
+        {/* Screen 0 — Entry */}
+        {step === STEP.ENTRY && (
+          <div className="space-y-4 text-center">
+            <h1 className="text-2xl font-bold">🌳 Welcome to the Chauṭarī</h1>
+            <p className="text-slate-300">Others are already sitting under the tree. Let’s introduce yourself.</p>
+            <button
+              onClick={() => setStep(STEP.NAME_PHOTO)}
+              className="w-full rounded-lg bg-amber-400 px-4 py-2 font-semibold text-black"
+            >
+              Begin my circle
+            </button>
+          </div>
+        )}
+
+        {/* Screen 1 — Name & Face (Name + Surname + Photo all required) */}
+        {step === STEP.NAME_PHOTO && (
+          <div className="space-y-5">
+            <h2 className="text-xl font-semibold">Name & Face</h2>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <label className="block text-sm opacity-80">Name (Given)</label>
+                <input
+                  className="w-full rounded-lg border border-white/20 bg-black/30 p-2"
+                  value={name}
+                  placeholder="e.g., Nabin"
+                  onChange={(e) => setName(titleCase(e.target.value))}
+                  onBlur={saveNameSurname}
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="block text-sm opacity-80">Surname (Thar)</label>
+                <input
+                  className="w-full rounded-lg border border-white/20 bg-black/30 p-2"
+                  value={surname}
+                  placeholder="e.g., Pradhan"
+                  onChange={(e) => setSurname(titleCase(e.target.value))}
+                  onBlur={saveNameSurname}
+                />
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <label className="block text-sm opacity-80">Your Photo (round avatar)</label>
+
+              {!rawPhotoSrc && !croppedPreview && !photoUrl && (
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    const durl = await fileToDataURL(file);
+                    setRawPhotoSrc(durl);
+                    setCroppedPreview("");
+                  }}
+                  className="block w-full text-sm text-slate-400
+                    file:mr-4 file:rounded-lg file:border-0
+                    file:bg-amber-400 file:px-4 file:py-2
+                    file:text-sm file:font-semibold file:text-black
+                    hover:file:bg-amber-500"
+                />
+              )}
+
+              {rawPhotoSrc && !croppedPreview && (
+                <div className="space-y-3">
+                  <div className="relative h-64 w-full overflow-hidden rounded-xl border border-white/10">
+                    <Cropper
+                      image={rawPhotoSrc}
+                      crop={crop}
+                      zoom={zoom}
+                      aspect={1}
+                      cropShape="round"
+                      showGrid={false}
+                      onCropChange={setCrop}
+                      onZoomChange={setZoom}
+                      onCropComplete={onCropComplete}
+                    />
+                  </div>
+                  <input
+                    type="range"
+                    min={1}
+                    max={3}
+                    step={0.01}
+                    value={zoom}
+                    onChange={(e) => setZoom(Number(e.target.value))}
+                    className="w-full"
+                    aria-label="Zoom"
+                  />
+                  <div className="flex gap-2">
+                    <button
+                      onClick={confirmCrop}
+                      disabled={cropping}
+                      className="flex-1 rounded-lg bg-amber-400 px-4 py-2 font-semibold text-black disabled:opacity-60"
+                    >
+                      {cropping ? "Cropping…" : "Save crop preview"}
+                    </button>
+                    <button
+                      onClick={() => {
+                        setRawPhotoSrc("");
+                        setCroppedPreview("");
+                      }}
+                      className="rounded-lg border border-white/20 px-4 py-2"
+                    >
+                      Choose another
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {(croppedPreview || photoUrl) && (
+                <div className="flex items-center gap-4">
+                  <img
+                    src={croppedPreview || photoUrl}
+                    alt="Profile"
+                    className="h-24 w-24 rounded-full object-cover border border-white/10"
+                  />
+                  {croppedPreview && (
+                    <button
+                      className="px-3 py-1.5 rounded-lg bg-amber-400 text-black font-semibold hover:bg-amber-500 disabled:opacity-50"
+                      disabled={busy}
+                      onClick={saveCroppedPhoto}
+                    >
+                      Upload & Save
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <button
+              onClick={() => setStep(STEP.ROOTS)}
+              disabled={!screen1Ready}
+              className="w-full rounded-lg bg-amber-400 px-4 py-2 font-semibold text-black disabled:opacity-60"
+              title={!screen1Ready ? "Please add Name, Surname and Photo" : ""}
+            >
+              Continue
+            </button>
+          </div>
+        )}
+
+        {/* Screen 2 — Roots */}
+        {step === STEP.ROOTS && (
+          <div className="space-y-5">
+            <h2 className="text-xl font-semibold">Where do your roots touch the earth?</h2>
+
+            <ChautariLocationPicker
+              value={roots}
+              onChange={async (v) => {
+                setRoots(v);
+                await saveRoots(v);
+              }}
+            />
+
+            {roots?.label && <p className="text-sm text-slate-300">Selected: {roots.label}</p>}
+
+            <button
+              onClick={() => setStep(STEP.LIVELIHOOD_IKIGAI)}
+              className="w-full rounded-lg bg-amber-400 px-4 py-2 font-semibold text-black"
+            >
+              Continue
+            </button>
+          </div>
+        )}
+
+        {/* Screen 3 — Livelihood & Ikigai (tabs) */}
+        {step === STEP.LIVELIHOOD_IKIGAI && (
+          <div className="space-y-6">
+            <h2 className="text-xl font-semibold">Let’s understand your work & gifts.</h2>
+
+            <div className="flex gap-2 flex-wrap">
+              {["Livelihood", "Good At", "Love", "World Needs", "Sustainability"].map((t) => (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => setIkigaiTab(t)}
+                  className={`px-3 py-1.5 rounded-full text-sm border transition ${
+                    ikigaiTab === t ? "bg-amber-400 text-black border-amber-400" : "border-white/20 hover:border-amber-400"
+                  }`}
+                >
+                  {t}
+                </button>
+              ))}
+            </div>
+
+            {ikigaiTab === "Livelihood" && (
+              <div className="space-y-3">
+                <label className="block text-sm opacity-80">What work do your hands and mind do?</label>
+                <input
+                  className="w-full rounded-lg border border-white/20 bg-black/30 p-2"
+                  placeholder="Farmer, Teacher, Software Developer…"
+                  value={livelihood}
+                  onChange={(e) => setLivelihood(titleCase(e.target.value))}
+                />
+                <div className="flex gap-2 flex-wrap text-xs opacity-80">
+                  {["Farmer","Teacher","Software Developer","Driver","Tailor","Nurse","Shopkeeper","Carpenter"].map((s) => (
+                    <button
+                      key={s}
+                      type="button"
+                      className="px-2 py-1 rounded-full bg-white/10 border border-white/15 hover:border-amber-400"
+                      onClick={() => setLivelihood(s)}
+                    >
+                      {s}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {ikigaiTab === "Good At" && (
+              <ChipsInput
+                id="skills"
+                label="What are you reliably good at?"
+                items={skills}
+                setItems={(v) => setSkills(v.slice(0, ringLimit.skills))}
+                placeholder="Add a skill… (Enter)"
+                max={ringLimit.skills}
+              />
+            )}
+
+            {ikigaiTab === "Love" && (
+              <ChipsInput
+                id="passions"
+                label="What makes you feel alive lately?"
+                items={passions}
+                setItems={(v) => setPassions(v.slice(0, ringLimit.passions))}
+                placeholder="Add a passion… (Enter)"
+                max={ringLimit.passions}
+              />
+            )}
+
+            {ikigaiTab === "World Needs" && (
+              <ChipsInput
+                id="needs"
+                label="What needs around you pull your heart?"
+                items={needs}
+                setItems={(v) => setNeeds(v.slice(0, ringLimit.needs))}
+                placeholder="Add a community need… (Enter)"
+                max={ringLimit.needs}
+              />
+            )}
+
+            {ikigaiTab === "Sustainability" && (
+              <div className="space-y-3">
+                <label className="block text-sm opacity-80">Is this sustaining you right now? (required)</label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {[
+                    { key: "paid", label: "Paid & stable" },
+                    { key: "part_time", label: "Part-time / side" },
+                    { key: "learning", label: "Learning / intern / volunteer" },
+                    { key: "exploring", label: "Exploring a shift" },
+                  ].map((o) => (
+                    <button
+                      key={o.key}
+                      type="button"
+                      className={`px-3 py-2 rounded-lg border ${
+                        viability === o.key ? "bg-amber-400 text-black border-amber-400" : "bg-white/5 border-white/15 hover:border-amber-400"
+                      }`}
+                      onClick={() => setViability(o.key)}
+                    >
+                      {o.label}
+                    </button>
+                  ))}
+                </div>
+
+                {(viability === "learning" || viability === "exploring") && (
+                  <div className="space-y-2">
+                    <label className="block text-sm opacity-80">Transition toward… (optional)</label>
+                    <input
+                      className="w-full rounded-lg border border-white/20 bg-black/30 p-2"
+                      placeholder="Type a target livelihood"
+                      value={transitionTarget}
+                      onChange={(e) => setTransitionTarget(titleCase(e.target.value))}
+                    />
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="flex gap-2 pt-2">
+              <button
+                className={`px-4 py-2 rounded-lg ${
+                  ikigaiReady ? "bg-amber-400 text-black hover:bg-amber-500" : "bg-white/10 text-white/60 cursor-not-allowed"
+                }`}
+                disabled={!ikigaiReady || busy}
+                onClick={saveIkigai}
+              >
+                Save
+              </button>
+              <span className="self-center text-xs opacity-70">Screens 4–9 coming later.</span>
+            </div>
+          </div>
+        )}
+
+        {/* Toast */}
+        {toast && (
+          <div className="text-center text-sm text-slate-200">{toast}</div>
+        )}
+      </div>
+    </div>
   );
 }
 
+/* Small chips input helper (no external libs) */
 function ChipsInput({ id, label, items, setItems, placeholder, max = 8 }) {
-  const [value, setValue] = useState('');
+  const [value, setValue] = useState("");
   return (
     <div className="space-y-2">
       <label className="block text-sm opacity-80" htmlFor={id}>{label}</label>
       <div className="flex gap-2 flex-wrap">
         {items.map((it) => (
           <span key={it} className="px-2 py-1 rounded-full text-xs bg-white/10 border border-white/15">
-            {it}{' '}
-            <button type="button" onClick={() => setItems(items.filter((x) => x !== it))} className="opacity-70 hover:opacity-100 ml-1" aria-label={`Remove ${it}`}>
+            {it}{" "}
+            <button
+              type="button"
+              onClick={() => setItems(items.filter((x) => x !== it))}
+              className="opacity-70 hover:opacity-100 ml-1"
+              aria-label={`Remove ${it}`}
+            >
               ✕
             </button>
           </span>
@@ -163,415 +632,25 @@ function ChipsInput({ id, label, items, setItems, placeholder, max = 8 }) {
       </div>
       <input
         id={id}
-        className="w-full bg-white/5 border border-white/15 rounded-md px-3 py-2 outline-none focus:border-amber-400"
+        className="w-full rounded-lg border border-white/20 bg-black/30 p-2"
         placeholder={placeholder}
         value={value}
         onChange={(e) => setValue(e.target.value)}
         onKeyDown={(e) => {
-          if (e.key === 'Enter') { e.preventDefault(); if (!value.trim()) return; setItems(dedupePush(items, value, max)); setValue(''); }
-          else if (e.key === 'Backspace' && !value && items.length) { setItems(items.slice(0, -1)); }
+          if (e.key === "Enter") {
+            e.preventDefault();
+            if (!value.trim()) return;
+            const v = titleCase(value);
+            const exists = items.some((x) => x.toLowerCase() === v.toLowerCase());
+            const next = exists ? items : [...items, v];
+            setItems(next.slice(0, max));
+            setValue("");
+          } else if (e.key === "Backspace" && !value && items.length) {
+            setItems(items.slice(0, -1));
+          }
         }}
       />
       <div className="text-xs opacity-60">{items.length}/{max} • Press Enter to add</div>
-    </div>
-  );
-}
-
-function Typeahead({ id, label, value, setValue, rpcName, placeholder }) {
-  const [q, setQ] = useState('');
-  const [opts, setOpts] = useState([]);
-
-  useEffect(() => {
-    let alive = true;
-    const run = async () => {
-      if (!rpcName) return;
-      const { data, error } = await supabase.rpc(rpcName, { q });
-      if (!alive) return;
-      if (!error && Array.isArray(data)) setOpts(data); else setOpts([]);
-    };
-    const t = setTimeout(run, 160);
-    return () => { alive = false; clearTimeout(t); };
-  }, [q, rpcName]);
-
-  return (
-    <div className="space-y-2">
-      <label className="block text-sm opacity-80" htmlFor={id}>{label}</label>
-      <input
-        id={id}
-        className="w-full bg-white/5 border border-white/15 rounded-md px-3 py-2 outline-none focus:border-amber-400"
-        value={value}
-        placeholder={placeholder}
-        onChange={(e) => { const v = e.target.value; setValue(titleCase(v)); setQ(v); }}
-      />
-      {opts?.length > 0 && (
-        <div className="mt-1 border border-white/15 rounded-md bg-black/60 max-h-44 overflow-auto">
-          {opts.map((o) => (
-            <button key={o.id} type="button" className="w-full text-left px-3 py-2 hover:bg-white/5"
-              onClick={() => { setValue(o.label); setQ(o.label); setOpts([]); }}>
-              {o.label}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-export default function OnboardingFlow() {
-  const user = useAuthUser();
-  const [step, setStep] = useState(STEP.ENTRY);
-  const [busy, setBusy] = useState(false);
-  const [toast, setToast] = useState(null);
-
-  // Screen 1 — Name, Surname, Photo
-  const [name, setName] = useState('');
-  const [surname, setSurname] = useState('');
-  const [photoUrl, setPhotoUrl] = useState('');
-  const [rawImage, setRawImage] = useState('');
-  const [crop, setCrop] = useState({ x: 0, y: 0 });
-  const [zoom, setZoom] = useState(1);
-
-  // Screen 2 — Roots
-  const [roots, setRoots] = useState(null); // { type:'ward'|'city', label, ... }
-
-  // Screen 3 — Ikigai
-  const [ikigaiTab, setIkigaiTab] = useState('Livelihood');
-  const [livelihood, setLivelihood] = useState('');
-  const [skills, setSkills] = useState([]);
-  const [passions, setPassions] = useState([]);
-  const [needs, setNeeds] = useState([]);
-  const [viability, setViability] = useState('');
-  const [transitionTarget, setTransitionTarget] = useState('');
-
-  // Prefill (array-safe; no maybeSingle/single)
-  useEffect(() => {
-    const load = async () => {
-      if (!user) return;
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('name, surname, photo_url, roots_json, diaspora_json, livelihood, skills, passions, needs, viability, transition_target')
-        .eq('user_id', user.id);
-      if (!error && Array.isArray(data) && data.length) {
-        const row = data[0];
-        setName(row.name || '');
-        setSurname(row.surname || '');
-        setPhotoUrl(row.photo_url || '');
-        setRoots(row.roots_json || row.diaspora_json || null);
-        setLivelihood(row.livelihood || '');
-        setSkills(Array.isArray(row.skills) ? row.skills : []);
-        setPassions(Array.isArray(row.passions) ? row.passions : []);
-        setNeeds(Array.isArray(row.needs) ? row.needs : []);
-        setViability(row.viability || '');
-        setTransitionTarget(row.transition_target || '');
-      }
-    };
-    load();
-  }, [user]);
-
-  const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(null), 1600); };
-
-  const nameOk = name.trim().length > 0;
-  const surnameOk = surname.trim().length > 0;
-  const photoOk = !!photoUrl || !!rawImage;
-  const screen1Ready = nameOk && surnameOk && photoOk;
-
-  const ikigaiReady = !!viability && ((livelihood?.trim().length ?? 0) > 0 || skills.length > 0 || passions.length > 0 || needs.length > 0);
-
-  const onSelectImage = (file) => {
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => setRawImage(reader.result.toString());
-    reader.readAsDataURL(file);
-  };
-
-  const saveCroppedPhoto = useCallback(async () => {
-    if (!user || !rawImage) return;
-    setBusy(true);
-    try {
-      const blob = await getCroppedBlob(rawImage, crop, zoom, true);
-      const path = `profiles/${user.id}.jpg`;
-      await supabase.storage.from('profiles').remove([path]).catch(() => {});
-      const { error: upErr } = await supabase.storage.from('profiles').upload(path, blob, { contentType: 'image/jpeg', upsert: true });
-      if (upErr) throw upErr;
-
-      const { data: pub } = supabase.storage.from('profiles').getPublicUrl(path);
-      const url = pub?.publicUrl;
-      if (!url) throw new Error('No public URL');
-
-      await upsertProfileSafe({ user_id: user.id, name: name.trim() || null, surname: surname.trim() || null, photo_url: url, updated_at: new Date().toISOString() });
-
-      setPhotoUrl(url);
-      setRawImage('');
-      showToast('Photo saved.');
-    } catch (e) {
-      console.error(e);
-      showToast('Photo upload failed. Please try another image.');
-    } finally {
-      setBusy(false);
-    }
-  }, [user, rawImage, crop, zoom, name, surname]);
-
-  const saveNameSurname = useCallback(async () => {
-    if (!user) return;
-    try {
-      await upsertProfileSafe({ user_id: user.id, name: name.trim() || null, surname: surname.trim() || null, updated_at: new Date().toISOString() });
-      showToast('Saved.');
-    } catch (e) {
-      console.error(e);
-      showToast('Save failed.');
-    }
-  }, [user, name, surname]);
-
-  const saveRoots = useCallback(async (rootsObj) => {
-    if (!user) return;
-    const payload = { user_id: user.id, updated_at: new Date().toISOString() };
-    if (rootsObj?.type === 'ward') { payload.roots_json = rootsObj; payload.diaspora_json = null; }
-    else if (rootsObj?.type === 'city') { payload.diaspora_json = rootsObj; payload.roots_json = null; }
-    try { await upsertProfileSafe(payload); setRoots(rootsObj); showToast('Location saved.'); }
-    catch (e) { console.error(e); showToast('Could not save location.'); }
-  }, [user]);
-
-  const saveIkigai = useCallback(async () => {
-    if (!user) return;
-    try {
-      await upsertProfileSafe({
-        user_id: user.id,
-        livelihood: livelihood?.trim() || null,
-        skills, passions, needs,
-        viability: viability || null,
-        transition_target: transitionTarget?.trim() || null,
-        updated_at: new Date().toISOString(),
-      });
-      showToast('Saved.');
-    } catch (e) {
-      console.error(e);
-      showToast('Save failed.');
-    }
-  }, [user, livelihood, skills, passions, needs, viability, transitionTarget]);
-
-  // --- UI: SCREENS (0–3 only) ---
-
-  const ScreenEntry = (
-    <div className="space-y-4">
-      <h1 className="text-2xl font-semibold">🌳 Welcome to the Chauṭarī</h1>
-      <p className="opacity-80">Others are already sitting under the tree. Let’s introduce yourself.</p>
-      <button className="px-4 py-2 rounded-lg bg-amber-500 text-black hover:bg-amber-400" onClick={() => setStep(STEP.NAME_PHOTO)}>
-        Begin my circle
-      </button>
-    </div>
-  );
-
-  const ScreenNamePhoto = (
-    <div className="space-y-6">
-      <div className="grid gap-4 md:grid-cols-2">
-        <div className="space-y-2">
-          <label className="block text-sm opacity-80">Name (Given)</label>
-          <input
-            className="w-full bg-white/5 border border-white/15 rounded-md px-3 py-2 outline-none focus:border-amber-400"
-            placeholder="e.g., Nabin"
-            value={name}
-            onChange={(e) => setName(titleCase(e.target.value))}
-            onBlur={saveNameSurname}
-          />
-        </div>
-        <div className="space-y-2">
-          <label className="block text-sm opacity-80">Surname (Thar)</label>
-          <input
-            className="w-full bg-white/5 border border-white/15 rounded-md px-3 py-2 outline-none focus:border-amber-400"
-            placeholder="e.g., Pradhan"
-            value={surname}
-            onChange={(e) => setSurname(titleCase(e.target.value))}
-            onBlur={saveNameSurname}
-          />
-        </div>
-      </div>
-
-      <div className="space-y-3">
-        <label className="block text-sm opacity-80">Your Photo (round avatar)</label>
-
-        {!rawImage && !photoUrl && (
-          <div className="space-y-3">
-            <input type="file" accept="image/*" onChange={(e) => onSelectImage(e.target.files?.[0])} className="block w-full text-sm" />
-            <div className="text-xs opacity-60">Upload any image. You’ll crop it into a circle.</div>
-          </div>
-        )}
-
-        {rawImage && (
-          <div className="relative w-full aspect-square bg-black/40 rounded-lg overflow-hidden border border-white/10">
-            <Cropper image={rawImage} crop={crop} zoom={zoom} aspect={1} cropShape="round" showGrid={false} onCropChange={setCrop} onZoomChange={setZoom} />
-          </div>
-        )}
-
-        {photoUrl && !rawImage && (
-          <div className="flex items-center gap-4">
-            <img src={photoUrl} alt="Profile" className="w-32 h-32 rounded-full object-cover border border-white/10" />
-            <div className="space-x-2">
-              <label className="px-3 py-1.5 rounded-lg bg-white/10 border border-white/15 cursor-pointer">
-                <input type="file" accept="image/*" className="hidden" onChange={(e) => onSelectImage(e.target.files?.[0])} />
-                Re-crop
-              </label>
-            </div>
-          </div>
-        )}
-
-        {rawImage && (
-          <div className="flex items-center gap-3">
-            <button className="px-3 py-1.5 rounded-lg bg-amber-500 text-black hover:bg-amber-400 disabled:opacity-50" disabled={busy} onClick={saveCroppedPhoto}>
-              Save crop
-            </button>
-            <button className="px-3 py-1.5 rounded-lg bg-white/10 border border-white/15" disabled={busy} onClick={() => setRawImage('')}>
-              Cancel
-            </button>
-          </div>
-        )}
-      </div>
-
-      <div className="pt-2">
-        <button
-          className={`px-4 py-2 rounded-lg ${screen1Ready ? 'bg-amber-500 text-black hover:bg-amber-400' : 'bg-white/10 text-white/60 cursor-not-allowed'}`}
-          disabled={!screen1Ready || busy}
-          onClick={() => setStep(STEP.ROOTS)}
-        >
-          Continue
-        </button>
-      </div>
-    </div>
-  );
-
-  const ScreenRoots = (
-    <div className="space-y-5">
-      <h2 className="text-xl font-semibold">Where do your roots touch the earth?</h2>
-      <ChautariLocationPicker value={roots} onChange={async (val) => { await saveRoots(val); }} />
-      <div className="pt-2">
-        <button className="px-4 py-2 rounded-lg bg-amber-500 text-black hover:bg-amber-400" onClick={() => setStep(STEP.LIVELIHOOD_IKIGAI)}>
-          Continue
-        </button>
-      </div>
-    </div>
-  );
-
-  const ScreenIkigai = (
-    <IkigaiScreen
-      ikigaiTab={ikigaiTab} setIkigaiTab={setIkigaiTab}
-      livelihood={livelihood} setLivelihood={setLivelihood}
-      skills={skills} setSkills={setSkills}
-      passions={passions} setPassions={setPassions}
-      needs={needs} setNeeds={setNeeds}
-      viability={viability} setViability={setViability}
-      transitionTarget={transitionTarget} setTransitionTarget={setTransitionTarget}
-      ready={ikigaiReady} busy={busy} onSave={saveIkigai}
-    />
-  );
-
-  return (
-    <div className="min-h-[70vh] text-white">
-      <div className="max-w-3xl mx-auto p-4">
-        <div className="bg-white/5 border border-white/10 rounded-2xl p-5 md:p-8">
-          {step === STEP.ENTRY && ScreenEntry}
-          {step === STEP.NAME_PHOTO && ScreenNamePhoto}
-          {step === STEP.ROOTS && ScreenRoots}
-          {step === STEP.LIVELIHOOD_IKIGAI && ScreenIkigai}
-        </div>
-        <div className="mt-4 text-xs opacity-60">Step: {String(step).split('_').join(' ')}</div>
-      </div>
-
-      {toast && (
-        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 bg-black/80 border border-white/15 text-sm px-3 py-2 rounded-lg">
-          {toast}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function IkigaiScreen({
-  ikigaiTab, setIkigaiTab,
-  livelihood, setLivelihood,
-  skills, setSkills,
-  passions, setPassions,
-  needs, setNeeds,
-  viability, setViability,
-  transitionTarget, setTransitionTarget,
-  ready, busy, onSave,
-}) {
-  const [localSaved, setLocalSaved] = useState(false);
-
-  return (
-    <div className="space-y-6">
-      <h2 className="text-xl font-semibold">Let’s understand your work & gifts.</h2>
-
-      <div className="flex gap-2 flex-wrap">
-        {['Livelihood', 'Good At', 'Love', 'World Needs', 'Sustainability'].map((t) => (
-          <Pill key={t} active={ikigaiTab === t} onClick={() => setIkigaiTab(t)}>{t}</Pill>
-        ))}
-      </div>
-
-      {ikigaiTab === 'Livelihood' && (
-        <div className="space-y-3">
-          <Typeahead
-            id="livelihood"
-            label="What work do your hands and mind do?"
-            value={livelihood}
-            setValue={(v) => setLivelihood(titleCase(v))}
-            rpcName="search_livelihoods"
-            placeholder="Farmer, Teacher, Software Developer…"
-          />
-          <div className="flex gap-2 flex-wrap text-xs opacity-80">
-            {['Farmer','Teacher','Software Developer','Driver','Tailor','Nurse','Shopkeeper','Carpenter'].map((s) => (
-              <button key={s} type="button" className="px-2 py-1 rounded-full bg-white/10 border border-white/15 hover:border-amber-400" onClick={() => setLivelihood(s)}>
-                {s}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {ikigaiTab === 'Good At' && (
-        <ChipsInput id="skills" label="What are you reliably good at?" items={skills} setItems={(v) => setSkills(v.slice(0, ringLimit.skills))} placeholder="Add a skill… (Enter)" max={ringLimit.skills} />
-      )}
-
-      {ikigaiTab === 'Love' && (
-        <ChipsInput id="passions" label="What makes you feel alive lately?" items={passions} setItems={(v) => setPassions(v.slice(0, ringLimit.passions))} placeholder="Add a passion… (Enter)" max={ringLimit.passions} />
-      )}
-
-      {ikigaiTab === 'World Needs' && (
-        <ChipsInput id="needs" label="What needs around you pull your heart?" items={needs} setItems={(v) => setNeeds(v.slice(0, ringLimit.needs))} placeholder="Add a community need… (Enter)" max={ringLimit.needs} />
-      )}
-
-      {ikigaiTab === 'Sustainability' && (
-        <div className="space-y-3">
-          <label className="block text-sm opacity-80">Is this sustaining you right now? (required)</label>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            {[
-              { key: 'paid', label: 'Paid & stable' },
-              { key: 'part_time', label: 'Part-time / side' },
-              { key: 'learning', label: 'Learning / intern / volunteer' },
-              { key: 'exploring', label: 'Exploring a shift' },
-            ].map((o) => (
-              <button key={o.key} type="button"
-                className={`px-3 py-2 rounded-lg border ${viability === o.key ? 'bg-amber-500 text-black border-amber-500' : 'bg-white/5 border-white/15 hover:border-amber-400'}`}
-                onClick={() => setViability(o.key)}>
-                {o.label}
-              </button>
-            ))}
-          </div>
-
-          {(viability === 'learning' || viability === 'exploring') && (
-            <Typeahead id="transition" label="Transition toward… (optional)" value={transitionTarget} setValue={(v) => setTransitionTarget(titleCase(v))} rpcName="search_livelihoods" placeholder="Type a target livelihood" />
-          )}
-        </div>
-      )}
-
-      <div className="flex gap-2 pt-2">
-        <button
-          className={`px-4 py-2 rounded-lg ${ready ? 'bg-amber-500 text-black hover:bg-amber-400' : 'bg-white/10 text-white/60 cursor-not-allowed'}`}
-          disabled={!ready || busy}
-          onClick={async () => { await onSave(); setLocalSaved(true); }}
-        >
-          Save
-        </button>
-        {localSaved && <div className="text-xs opacity-70 self-center">Saved. You can add Screens 4–9 later.</div>}
-      </div>
     </div>
   );
 }
