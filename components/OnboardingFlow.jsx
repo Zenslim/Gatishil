@@ -2,22 +2,21 @@
 "use client";
 
 /**
- * Gatishil — Digital Chauṭarī Onboarding (fix: Continue on Name & Face)
- * Remote-only: Next.js + Vercel + Supabase
+ * Fixes:
+ * 1) Robust image cropping guards to prevent "drawImage ... Overload resolution failed".
+ * 2) Continue never stalls: Name & Face -> Roots always advances (save is best-effort).
  *
- * What changed:
- * 1) NEW continueFromNameFace(): tries photo upload + profile save inside try/catch,
- *    then ALWAYS moves to "roots" in finally. No more dead button if Supabase/storage
- *    throws or user isn't authed yet.
- * 2) Kept Surname (Thar) field and updated Livelihood & Skills (typeahead + chips).
+ * Note on "Multiple GoTrueClient instances..." warning:
+ * - This component imports a single Supabase client from "@/lib/supabaseClient".
+ * - The warning appears when *other* parts of the app also create clients with the
+ *   same storage key. It's harmless but avoid creating extra clients elsewhere.
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Cropper from "react-easy-crop";
 import ChautariLocationPicker from "./ChautariLocationPicker";
 import { supabase } from "@/lib/supabaseClient";
 
-// ---------- text utils ----------
 const titleCase = (s) =>
   (s || "")
     .toLowerCase()
@@ -37,7 +36,6 @@ const byPrefixRank = (q) => (a, b) => {
   return (b.popularity || 0) - (a.popularity || 0);
 };
 
-// ---------- tiny UI ----------
 function Button({ children, onClick, variant = "primary", disabled = false }) {
   const base =
     "px-4 py-2 rounded-2xl text-sm font-semibold transition shadow-sm focus:outline-none focus:ring";
@@ -52,6 +50,7 @@ function Button({ children, onClick, variant = "primary", disabled = false }) {
     </button>
   );
 }
+
 function Chip({ label, onRemove }) {
   return (
     <span className="inline-flex items-center gap-2 bg-zinc-800 border border-zinc-700 px-3 py-1 rounded-full text-sm">
@@ -66,6 +65,7 @@ function Chip({ label, onRemove }) {
     </span>
   );
 }
+
 function SuggestModal({ open, typed, type, onCancel, onSubmit }) {
   if (!open) return null;
   return (
@@ -86,7 +86,6 @@ function SuggestModal({ open, typed, type, onCancel, onSubmit }) {
   );
 }
 
-// ---------- Typeahead (single-select) ----------
 function TypeaheadSelect({
   label,
   value,
@@ -118,7 +117,7 @@ function TypeaheadSelect({
           }}
           onChange={(e) => {
             setQ(e.target.value);
-            onChange(null); // clear when typing
+            onChange(null);
           }}
           onKeyDown={(e) => e.key === "Escape" && setOpen(false)}
         />
@@ -170,7 +169,6 @@ function TypeaheadSelect({
   );
 }
 
-// ---------- Chips Typeahead (multi-select) ----------
 function ChipsTypeahead({
   label,
   values,
@@ -238,18 +236,17 @@ function ChipsTypeahead({
   );
 }
 
-// ---------- main flow ----------
 const steps = [
-  "entry",        // 0
-  "name_face",    // 1
-  "roots",        // 2
-  "livelihood",   // 3
-  "passions",     // 4
-  "needs",        // 5
-  "viability",    // 6
-  "story",        // 7
-  "vow",          // 8
-  "reveal",       // 9
+  "entry",
+  "name_face",
+  "roots",
+  "livelihood",
+  "passions",
+  "needs",
+  "viability",
+  "story",
+  "vow",
+  "reveal",
 ];
 
 export default function OnboardingFlow() {
@@ -263,21 +260,19 @@ export default function OnboardingFlow() {
   const [user, setUser] = useState(null);
   const [profile, setProfile] = useState(null);
 
-  // option lists
   const [livelihoods, setLivelihoods] = useState([]);
   const [skills, setSkills] = useState([]);
   const [passions, setPassions] = useState([]);
   const [needs, setNeeds] = useState([]);
 
-  // suggest modal
   const [modal, setModal] = useState({ open: false, type: "", typed: "" });
 
-  // form state for early screens
   const [firstName, setFirstName] = useState("");
   const [surname, setSurname] = useState("");
 
-  // photo crop state
+  // crop state
   const [rawPhotoSrc, setRawPhotoSrc] = useState("");
+  const imgEl = useRef(null);
   const [crop, setCrop] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
   const [croppedAreaPixels, setCroppedAreaPixels] = useState(null);
@@ -285,7 +280,6 @@ export default function OnboardingFlow() {
   const [cropping, setCropping] = useState(false);
   const [uploading, setUploading] = useState(false);
 
-  // starters
   const starterLivelihoods = [
     "Farmer","Teacher","Software Developer","Driver","Tailor","Nurse","Shopkeeper","Carpenter",
   ];
@@ -299,51 +293,54 @@ export default function OnboardingFlow() {
     "Youth Mentoring","Elder Care","Local Food","Mental Health Support","Street Safety","Job Pathways","Clean Water","Arts for Kids",
   ];
 
-  // fetch auth + profile + option lists
   useEffect(() => {
     (async () => {
-      const { data: u } = await supabase.auth.getUser();
-      const authUser = u?.user;
-      setUser(authUser || null);
+      try {
+        const { data: u } = await supabase.auth.getUser();
+        const authUser = u?.user;
+        setUser(authUser || null);
 
-      if (authUser) {
-        const { data: prof } = await supabase
-          .from("profiles")
-          .select("*")
-          .eq("user_id", authUser.id)
-          .maybeSingle();
-        setProfile(
-          prof || {
-            user_id: authUser.id,
-            roots_json: null,
-            diaspora_json: null,
-            livelihood: null,
-            skills: [],
-            passions: [],
-            needs: [],
-            viability: null,
-            transition_target: null,
+        if (authUser) {
+          const { data: prof } = await supabase
+            .from("profiles")
+            .select("*")
+            .eq("user_id", authUser.id)
+            .maybeSingle();
+          setProfile(
+            prof || {
+              user_id: authUser.id,
+              roots_json: null,
+              diaspora_json: null,
+              livelihood: null,
+              skills: [],
+              passions: [],
+              needs: [],
+              viability: null,
+              transition_target: null,
+            }
+          );
+
+          if (prof?.name) {
+            const parts = String(prof.name).trim().split(/\s+/);
+            setFirstName(norm(parts[0] || ""));
+            setSurname(norm(parts.slice(1).join(" ")));
           }
-        );
-
-        if (prof?.name) {
-          const parts = String(prof.name).trim().split(/\s+/);
-          setFirstName(norm(parts[0] || ""));
-          setSurname(norm(parts.slice(1).join(" ")));
         }
+
+        const readList = async (table) =>
+          (await supabase
+            .from(table)
+            .select("id,label,popularity,active")
+            .order("popularity", { ascending: false })
+          ).data || [];
+
+        setLivelihoods(await readList("livelihoods"));
+        setSkills(await readList("skills"));
+        setPassions(await readList("passions"));
+        setNeeds(await readList("needs"));
+      } catch {
+        // ignore; UI stays usable
       }
-
-      const readList = async (table) =>
-        (await supabase
-          .from(table)
-          .select("id,label,popularity,active")
-          .order("popularity", { ascending: false })
-        ).data || [];
-
-      setLivelihoods(await readList("livelihoods"));
-      setSkills(await readList("skills"));
-      setPassions(await readList("passions"));
-      setNeeds(await readList("needs"));
     })();
   }, []);
 
@@ -364,20 +361,14 @@ export default function OnboardingFlow() {
   const saveProfile = async (patch) => {
     const payload = { ...(profile || {}), ...patch };
     setProfile(payload);
-    if (!user) return; // not signed in yet ⇒ soft-OK
+    if (!user) return;
 
     await supabase
       .from("profiles")
-      .upsert(
-        {
-          user_id: user.id,
-          ...pickProfileFields(payload),
-        },
-        { onConflict: "user_id" }
-      )
+      .upsert({ user_id: user.id, ...pickProfileFields(payload) }, { onConflict: "user_id" })
       .select()
       .single()
-      .catch(() => {}); // swallow; UI should never stall
+      .catch(() => {});
   };
 
   const openSuggest = (type, typed) => setModal({ open: true, type, typed });
@@ -400,10 +391,11 @@ export default function OnboardingFlow() {
     setStep(steps[i]);
   };
 
-  // ---------- photo helpers ----------
+  // ---------- crop helpers with HARD GUARDS ----------
   const onCropComplete = useCallback((_, areaPixels) => {
     setCroppedAreaPixels(areaPixels);
   }, []);
+
   const fileToDataURL = (file) =>
     new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -411,49 +403,72 @@ export default function OnboardingFlow() {
       reader.onload = () => resolve(reader.result);
       reader.readAsDataURL(file);
     });
+
   const loadImage = (src) =>
     new Promise((resolve, reject) => {
+      if (!src) return reject(new Error("No image source"));
       const img = new Image();
-      img.crossOrigin = "anonymous";
       img.onload = () => resolve(img);
-      img.onerror = reject;
-      img.src = src;
+      img.onerror = (e) => reject(e);
+      img.src = src; // data: URL stays same-origin
     });
+
+  function clamp(n, min, max) {
+    return Math.max(min, Math.min(max, n));
+  }
+
   async function getCroppedImg(imageSrc, pixelCrop) {
     const image = await loadImage(imageSrc);
+    // validate crop
+    if (
+      !pixelCrop ||
+      !isFinite(pixelCrop.x) ||
+      !isFinite(pixelCrop.y) ||
+      !isFinite(pixelCrop.width) ||
+      !isFinite(pixelCrop.height) ||
+      pixelCrop.width <= 0 ||
+      pixelCrop.height <= 0
+    ) {
+      throw new Error("Invalid crop rectangle");
+    }
+
+    // clamp to image bounds
+    const sx = clamp(pixelCrop.x, 0, image.width);
+    const sy = clamp(pixelCrop.y, 0, image.height);
+    const sw = clamp(pixelCrop.width, 1, image.width - sx);
+    const sh = clamp(pixelCrop.height, 1, image.height - sy);
+
+    const size = Math.max(sw, sh);
     const canvas = document.createElement("canvas");
-    const ctx = canvas.getContext("2d");
-    const size = Math.max(pixelCrop.width, pixelCrop.height);
     canvas.width = size;
     canvas.height = size;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("Canvas not supported");
+
     ctx.beginPath();
     ctx.arc(size / 2, size / 2, size / 2, 0, 2 * Math.PI);
     ctx.closePath();
     ctx.clip();
-    ctx.drawImage(
-      image,
-      pixelCrop.x,
-      pixelCrop.y,
-      pixelCrop.width,
-      pixelCrop.height,
-      0,
-      0,
-      size
-    );
+
+    // drawImage with validated numbers
+    ctx.drawImage(image, sx, sy, sw, sh, 0, 0, size, size);
+
     return canvas.toDataURL("image/jpeg", 0.9);
   }
-  async function confirmCrop() {
+
+  const confirmCrop = async () => {
     if (!rawPhotoSrc || !croppedAreaPixels) return;
     setCropping(true);
     try {
       const dataUrl = await getCroppedImg(rawPhotoSrc, croppedAreaPixels);
       setCroppedPreview(dataUrl);
+    } catch {
+      // soft fail: keep user on screen; they can re-try
     } finally {
       setCropping(false);
     }
-  }
+  };
 
-  // Try upload/save; NEVER block navigation
   async function uploadPhotoIfNeededAndSave() {
     setUploading(true);
     try {
@@ -471,28 +486,23 @@ export default function OnboardingFlow() {
       }
 
       const displayName = [firstName, surname].filter(Boolean).join(" ");
-      await saveProfile({
-        name: displayName || null,
-        photo_url: publicUrl || null,
-      });
+      await saveProfile({ name: displayName || null, photo_url: publicUrl || null });
     } catch {
-      // swallow; we still navigate
+      // swallow; never block UX
     } finally {
       setUploading(false);
     }
   }
 
-  // The fix: always advance even if save/upload fails
   const continueFromNameFace = async () => {
     await uploadPhotoIfNeededAndSave();
     next("roots");
   };
 
-  // ---------- guards ----------
   const canContinueNameFace =
     Boolean(firstName?.trim()) && Boolean(surname?.trim()) && Boolean(croppedPreview);
 
-  // ---------- screens ----------
+  // ---------- SCREENS ----------
   const ScreenEntry = (
     <div className="space-y-4 text-center">
       <h1 className="text-2xl font-bold">🌳 Welcome to the Chauṭarī</h1>
@@ -543,6 +553,10 @@ export default function OnboardingFlow() {
               const durl = await fileToDataURL(file);
               setRawPhotoSrc(durl);
               setCroppedPreview("");
+              // create a hidden <img> for intrinsic size (extra guard)
+              const img = new Image();
+              img.onload = () => (imgEl.current = img);
+              img.src = durl;
             }}
             className="block w-full text-sm text-slate-400
               file:mr-4 file:rounded-lg file:border-0
@@ -581,7 +595,14 @@ export default function OnboardingFlow() {
               <Button onClick={confirmCrop} disabled={cropping}>
                 {cropping ? "Cropping…" : "Save crop"}
               </Button>
-              <Button variant="secondary" onClick={() => { setRawPhotoSrc(""); setCroppedPreview(""); }}>
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  setRawPhotoSrc("");
+                  setCroppedPreview("");
+                  imgEl.current = null;
+                }}
+              >
                 Choose another
               </Button>
             </div>
@@ -641,7 +662,6 @@ export default function OnboardingFlow() {
     </div>
   );
 
-  // ---------- UPDATED Screen 3 — Livelihood & Skills ----------
   const ScreenLivelihood = (
     <div className="space-y-6">
       <h2 className="text-xl md:text-2xl font-bold">Screen 3 — Livelihood & Skills</h2>
