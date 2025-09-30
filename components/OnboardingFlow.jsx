@@ -1,6 +1,8 @@
 // components/OnboardingFlow.jsx
-// Ikigai Onboarding — Livelihood, Skills, Passions, Needs, Viability
-// Remote-only: Next.js + Vercel + Supabase. No local steps needed.
+// Ikigai Onboarding — now with Screen 0 (Tree welcome) + 5 reflective steps
+// Remote-only: Next.js + Vercel + Supabase
+
+"use client";
 
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
@@ -227,8 +229,63 @@ function ChipsTypeahead({
           </button>
         )}
       </div>
-      <p className="text-xs text-zinc-400 mt-2">{values?.length || 0} / {max}</p>
+      <p className="text-xs text-zinc-400 mt-2">
+        {values?.length || 0} / {max}
+      </p>
     </div>
+  );
+}
+
+// ---------- inline SVG: Tree with people under it ----------
+function ChautariTreeSVG(props) {
+  return (
+    <svg
+      viewBox="0 0 600 360"
+      role="img"
+      aria-label="People sitting under a tree"
+      className="w-full h-auto drop-shadow-[0_0_40px_rgba(251,191,36,0.15)]"
+      {...props}
+    >
+      <defs>
+        <linearGradient id="leafGrad" x1="0" x2="0" y1="0" y2="1">
+          <stop offset="0%" stopColor="#34D399" />
+          <stop offset="100%" stopColor="#065F46" />
+        </linearGradient>
+        <linearGradient id="skyGrad" x1="0" x2="0" y1="0" y2="1">
+          <stop offset="0%" stopColor="#0B1020" />
+          <stop offset="100%" stopColor="#000000" />
+        </linearGradient>
+      </defs>
+      <rect width="600" height="360" fill="url(#skyGrad)" />
+      {/* ground */}
+      <ellipse cx="300" cy="320" rx="250" ry="30" fill="#0f172a" />
+      {/* trunk */}
+      <path
+        d="M290 320 C290 280 280 260 285 220 C290 190 300 180 305 160 C310 140 310 120 310 90 L330 90 C330 120 330 140 335 160 C340 180 350 190 355 220 C360 260 350 280 350 320 Z"
+        fill="#5b3a29"
+      />
+      {/* canopy */}
+      <circle cx="320" cy="110" r="90" fill="url(#leafGrad)" />
+      <circle cx="260" cy="130" r="70" fill="url(#leafGrad)" opacity="0.9" />
+      <circle cx="380" cy="140" r="70" fill="url(#leafGrad)" opacity="0.9" />
+      {/* people silhouettes */}
+      <g fill="#cbd5e1">
+        <circle cx="240" cy="300" r="10" />
+        <rect x="235" y="308" width="10" height="10" rx="2" />
+        <circle cx="280" cy="300" r="10" />
+        <rect x="275" y="308" width="10" height="10" rx="2" />
+        <circle cx="320" cy="300" r="10" />
+        <rect x="315" y="308" width="10" height="10" rx="2" />
+        <circle cx="360" cy="300" r="10" />
+        <rect x="355" y="308" width="10" height="10" rx="2" />
+      </g>
+      {/* falling leaves */}
+      <g fill="#10b981" opacity="0.6">
+        <ellipse cx="430" cy="80" rx="6" ry="10" transform="rotate(20 430 80)" />
+        <ellipse cx="210" cy="70" rx="6" ry="10" transform="rotate(-10 210 70)" />
+        <ellipse cx="380" cy="200" rx="6" ry="10" transform="rotate(15 380 200)" />
+      </g>
+    </svg>
   );
 }
 
@@ -246,8 +303,9 @@ export default function OnboardingFlow() {
   // suggest modal
   const [modal, setModal] = useState({ open: false, type: "", typed: "" });
 
-  // steps: 3A..3D + viability (E)
-  const [step, setStep] = useState(0); // 0..4
+  // steps: 0 = Welcome Tree, then 1..5 actual inputs
+  const [step, setStep] = useState(0); // 0..5
+  const totalSteps = 6;
 
   // starters (safe defaults)
   const starterLivelihoods = [
@@ -308,8 +366,10 @@ export default function OnboardingFlow() {
       }
 
       const readList = async (table) =>
-        (await supabase.from(table).select("id,label,popularity,active").order("popularity", { ascending: false })).data ||
-        [];
+        (await supabase
+          .from(table)
+          .select("id,label,popularity,active")
+          .order("popularity", { ascending: false })).data || [];
 
       setLivelihoods(await readList("livelihoods"));
       setSkills(await readList("skills"));
@@ -323,7 +383,6 @@ export default function OnboardingFlow() {
     setProfile(payload);
     if (!user) return;
 
-    // Upsert on user_id
     await supabase
       .from("profiles")
       .upsert(
@@ -357,17 +416,39 @@ export default function OnboardingFlow() {
         slug: norm(typed).toLowerCase().replace(/\s+/g, "-"),
         by_user: user?.id || null,
       });
-    } catch (e) {
-      // ignore; soft-fail
-    }
+    } catch (_) {}
     setModal({ open: false, type: "", typed: "" });
   };
 
-  const next = () => setStep((s) => Math.min(4, s + 1));
+  const next = () => setStep((s) => Math.min(totalSteps - 1, s + 1));
   const back = () => setStep((s) => Math.max(0, s - 1));
 
-  // ----- screens -----
-  const ScreenA = (
+  // ----- Screen 0 (Welcome Tree) -----
+  const Screen0 = (
+    <div className="space-y-6">
+      <div className="rounded-3xl border border-zinc-800 bg-zinc-950 p-4">
+        <ChautariTreeSVG />
+      </div>
+      <h1 className="text-2xl md:text-3xl font-bold">
+        Sit under the tree for a moment 🌳
+      </h1>
+      <p className="text-sm text-zinc-300">
+        We’ll ask a few small questions to understand your{" "}
+        <span className="text-amber-400 font-medium">work, gifts, loves,</span> and{" "}
+        <span className="text-amber-400 font-medium">where the world needs you</span>.
+        One step at a time. You can always choose <em>Not sure yet</em>.
+      </p>
+      <div className="flex gap-3 pt-2">
+        <Button onClick={next}>Start</Button>
+        <Button variant="secondary" onClick={() => next()}>
+          Skip intro
+        </Button>
+      </div>
+    </div>
+  );
+
+  // ----- Screen 1: Livelihood -----
+  const Screen1 = (
     <div className="space-y-6">
       <h2 className="text-xl md:text-2xl font-bold">
         What work do your hands and mind do?
@@ -392,7 +473,8 @@ export default function OnboardingFlow() {
     </div>
   );
 
-  const ScreenB = (
+  // ----- Screen 2: Skills -----
+  const Screen2 = (
     <div className="space-y-6">
       <h2 className="text-xl md:text-2xl font-bold">What are you reliably good at?</h2>
       <p className="text-sm text-zinc-400">Add up to 8. Short and simple works best.</p>
@@ -414,7 +496,8 @@ export default function OnboardingFlow() {
     </div>
   );
 
-  const ScreenC = (
+  // ----- Screen 3: Passions -----
+  const Screen3 = (
     <div className="space-y-6">
       <h2 className="text-xl md:text-2xl font-bold">What makes you feel alive lately?</h2>
       <p className="text-sm text-zinc-400">Pick a few you’d happily do for hours.</p>
@@ -436,7 +519,8 @@ export default function OnboardingFlow() {
     </div>
   );
 
-  const ScreenD = (
+  // ----- Screen 4: Needs -----
+  const Screen4 = (
     <div className="space-y-6">
       <h2 className="text-xl md:text-2xl font-bold">
         What needs around you pull your heart?
@@ -460,7 +544,8 @@ export default function OnboardingFlow() {
     </div>
   );
 
-  const ScreenE = (
+  // ----- Screen 5: Viability -----
+  const Screen5 = (
     <div className="space-y-6">
       <h2 className="text-xl md:text-2xl font-bold">
         Is this work sustaining you right now?
@@ -515,7 +600,7 @@ export default function OnboardingFlow() {
     </div>
   );
 
-  const screens = [ScreenA, ScreenB, ScreenC, ScreenD, ScreenE];
+  const screens = [Screen0, Screen1, Screen2, Screen3, Screen4, Screen5];
 
   return (
     <div className="min-h-[70vh] w-full px-5 py-8 md:py-10 bg-gradient-to-b from-zinc-950 to-black text-zinc-100">
@@ -523,22 +608,22 @@ export default function OnboardingFlow() {
         <div className="flex items-center justify-between mb-6">
           <button
             onClick={back}
-            className="text-sm text-zinc-400 hover:text-zinc-200"
+            className={`text-sm ${
+              step === 0 ? "text-zinc-700 pointer-events-none" : "text-zinc-400 hover:text-zinc-200"
+            }`}
             aria-label="Back"
           >
             ← Back
           </button>
           <div className="text-xs text-zinc-400">
-            Step {step + 3} of 6
+            Step {step + 1} of {totalSteps}
           </div>
         </div>
 
         {screens[step]}
 
         <div className="mt-10 flex items-center justify-between text-xs text-zinc-500">
-          <div>
-            Choices autosave. If offline, they’ll sync later.
-          </div>
+          <div>Choices autosave. If offline, they’ll sync later.</div>
           <div className="flex gap-2">
             {Array.from({ length: screens.length }).map((_, i) => (
               <span
@@ -546,6 +631,7 @@ export default function OnboardingFlow() {
                 className={`inline-block h-2 w-2 rounded-full ${
                   i <= step ? "bg-amber-500" : "bg-zinc-700"
                 }`}
+                title={`Step ${i + 1}`}
               />
             ))}
           </div>
