@@ -1,66 +1,178 @@
 "use client";
 
 /**
- * Gatishil — Digital Chauṭarī Onboarding (Screens 0–3)
- * ELI15: Uses your ONE shared Supabase client from ../lib/supabaseClient (we do NOT create a new one),
- * static-imports ChautariLocationPicker, and keeps Surname + Ikigai on Screen 3.
- * Fixes Vercel build error: removed accidental arrow function in JSX.
+ * Gatishil — Digital Chauṭarī Onboarding (Screens 0–3, REST-only)
+ *
+ * ELI15:
+ * - We DO NOT import or create any Supabase client (so no “Multiple GoTrueClient instances” warnings).
+ * - We call Supabase REST endpoints directly with your current session token from localStorage.
+ * - We keep Screen 1 (Name + Surname + Photo), Screen 2 (Roots — simplified input), Screen 3 (Ikigai tabs).
+ * - Writes exactly your schema columns (incl. surname).
+ * - Storage upload uses REST and x-upsert; public URL comes from /storage/v1/object/public/...
+ *
+ * Remote-only: GitHub + Vercel + Supabase.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Cropper from "react-easy-crop";
-import { supabase } from "../lib/supabaseClient"; // ✅ use existing singleton only
-import ChautariLocationPicker from "./ChautariLocationPicker"; // ✅ static import
 
-const STEP = {
-  ENTRY: "entry",
-  NAME_PHOTO: "name_photo",
-  ROOTS: "roots",
-  LIVELIHOOD_IKIGAI: "livelihood_ikigai",
-};
+// ---------- ENV (provided by Vercel) ----------
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;          // e.g., https://xxxxx.supabase.co
+const SUPABASE_ANON = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;    // anon key (for apikey header)
 
-const ringLimit = { skills: 8, passions: 6, needs: 6 };
+// ---------- Session helpers (NO supabase client) ----------
+function findSupabaseSession() {
+  if (typeof window === "undefined") return null;
+  try {
+    // Look for any key that matches Supabase v2 pattern sb-*-auth-token, or a custom key if present
+    const keys = Object.keys(localStorage);
+    const authKey =
+      keys.find((k) => /^sb-.*-auth-token$/.test(k)) ||
+      keys.find((k) => k.includes("auth") && k.includes("token")) ||
+      null;
+    if (!authKey) return null;
+    const raw = localStorage.getItem(authKey);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    // supabase-js v2 stores { currentSession, expiresAt, ... } OR { access_token, user } in different shapes
+    // normalize:
+    const sess = parsed?.currentSession || parsed?.session || parsed;
+    const access_token = sess?.access_token || parsed?.access_token || null;
+    const user = sess?.user || parsed?.user || null;
+    const user_id = user?.id || null;
+    return access_token ? { access_token, user_id } : null;
+  } catch {
+    return null;
+  }
+}
 
+async function restGet(path, { token, params } = {}) {
+  const url = new URL(`${SUPABASE_URL}${path}`);
+  if (params) Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
+  const res = await fetch(url.toString(), {
+    headers: {
+      apikey: SUPABASE_ANON,
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(`GET ${path} ${res.status}`);
+  return await res.json();
+}
+
+async function restUpsert(table, rows, { token } = {}) {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
+    method: "POST",
+    headers: {
+      apikey: SUPABASE_ANON,
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+      Prefer: "resolution=merge-duplicates",
+    },
+    body: JSON.stringify(Array.isArray(rows) ? rows : [rows]),
+  });
+  if (!res.ok) {
+    const tx = await res.text().catch(() => "");
+    throw new Error(`UPSERT ${table} ${res.status} ${tx}`);
+  }
+  return await res.json();
+}
+
+async function restSelect(table, { token, query } = {}) {
+  const url = new URL(`${SUPABASE_URL}/rest/v1/${table}`);
+  // default: select full row, filter will be applied by caller
+  url.searchParams.set("select", "*");
+  if (query) Object.entries(query).forEach(([k, v]) => url.searchParams.set(k, v));
+  const res = await fetch(url.toString(), {
+    headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${token}` },
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(`SELECT ${table} ${res.status}`);
+  return await res.json();
+}
+
+async function uploadPublicProfilePhoto({ token, user_id, blob }) {
+  // REST storage upload (public bucket 'profiles'); path: profiles/<uid>.jpg
+  const path = `profiles/${user_id}.jpg`;
+  const url = `${SUPABASE_URL}/storage/v1/object/${encodeURIComponent(path)}`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      apikey: SUPABASE_ANON,
+      Authorization: `Bearer ${token}`,
+      "x-upsert": "true",
+      "Content-Type": "image/jpeg",
+      "Cache-Control": "public, max-age=3600",
+    },
+    body: blob,
+  });
+  if (!res.ok) {
+    const tx = await res.text().catch(() => "");
+    throw new Error(`UPLOAD storage ${res.status} ${tx}`);
+  }
+  // public URL (bucket is public by your SQL): /storage/v1/object/public/profiles/<uid>.jpg
+  return `${SUPABASE_URL}/storage/v1/object/public/profiles/${user_id}.jpg`;
+}
+
+// ---------- small utils ----------
 const titleCase = (s) =>
   s?.toString().trim().toLowerCase().replace(/\s+/g, " ").replace(/(^|\s)\S/g, (t) => t.toUpperCase()) || "";
 
-const dedupePush = (list, value, max) => {
-  const v = titleCase(value);
-  if (!v) return list;
-  const exists = list.some((x) => x.toLowerCase() === v.toLowerCase());
-  const next = exists ? list : [...list, v];
-  return max ? next.slice(0, max) : next;
-};
-
-// ——— DB helper: only allow columns that exist in your schema (incl. surname you added)
-async function upsertProfileSafe(payload) {
-  const allowed = [
-    "user_id",
-    "name",
-    "surname",
-    "photo_url",
-    "roots_json",
-    "diaspora_json",
-    "livelihood",
-    "skills",
-    "passions",
-    "needs",
-    "viability",
-    "transition_target",
-    "updated_at",
-  ];
-  const clean = Object.fromEntries(Object.entries(payload).filter(([k]) => allowed.includes(k)));
-  const { data, error } = await supabase
-    .from("profiles")
-    .upsert(clean, { onConflict: "user_id", ignoreDuplicates: false })
-    .select();
-  if (error) throw error;
-  return Array.isArray(data) ? data[0] : data;
+function ChipsInput({ id, label, items, setItems, placeholder, max = 8 }) {
+  const [value, setValue] = useState("");
+  return (
+    <div className="space-y-2">
+      <label className="block text-sm opacity-80" htmlFor={id}>{label}</label>
+      <div className="flex gap-2 flex-wrap">
+        {items.map((it) => (
+          <span key={it} className="px-2 py-1 rounded-full text-xs bg-white/10 border border-white/15">
+            {it}{" "}
+            <button
+              type="button"
+              onClick={() => setItems(items.filter((x) => x !== it))}
+              className="opacity-70 hover:opacity-100 ml-1"
+              aria-label={`Remove ${it}`}
+            >
+              ✕
+            </button>
+          </span>
+        ))}
+      </div>
+      <input
+        id={id}
+        className="w-full rounded-lg border border-white/20 bg-black/30 p-2"
+        placeholder={placeholder}
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            if (!value.trim()) return;
+            const v = titleCase(value);
+            const exists = items.some((x) => x.toLowerCase() === v.toLowerCase());
+            const next = exists ? items : [...items, v];
+            setItems(next.slice(0, max));
+            setValue("");
+          } else if (e.key === "Backspace" && !value && items.length) {
+            setItems(items.slice(0, -1));
+          }
+        }}
+      />
+      <div className="text-xs opacity-60">{items.length}/{max} • Press Enter to add</div>
+    </div>
+  );
 }
 
 export default function OnboardingFlow() {
-  const [step, setStep] = useState(STEP.ENTRY);
-  const [userId, setUserId] = useState(null);
+  // session (token + user_id) — read once, no listeners, no client
+  const [{ token, user_id }, setSession] = useState({ token: null, user_id: null });
+
+  useEffect(() => {
+    const sess = findSupabaseSession();
+    if (sess?.access_token && sess?.user_id) setSession({ token: sess.access_token, user_id: sess.user_id });
+  }, []);
+
+  const [step, setStep] = useState("entry");
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState(null);
 
@@ -74,8 +186,9 @@ export default function OnboardingFlow() {
   const [croppedAreaPixels, setCroppedAreaPixels] = useState(null);
   const [croppedPreview, setCroppedPreview] = useState("");
 
-  // Screen 2 — Roots
-  const [roots, setRoots] = useState(null);
+  // Screen 2 — Roots (simplified input to avoid any import issues)
+  const [rootsType, setRootsType] = useState("ward"); // 'ward' | 'city'
+  const [rootsLabel, setRootsLabel] = useState("");
 
   // Screen 3 — Ikigai
   const [ikigaiTab, setIkigaiTab] = useState("Livelihood");
@@ -86,56 +199,46 @@ export default function OnboardingFlow() {
   const [viability, setViability] = useState("");
   const [transitionTarget, setTransitionTarget] = useState("");
 
-  // --- Auth (ONE client): subscribe/unsubscribe using supabase-js v2 shape
-  useEffect(() => {
-    let mounted = true;
+  const screen1Ready = name.trim() && surname.trim() && (photoUrl || croppedPreview);
+  const ikigaiReady =
+    !!viability &&
+    ((livelihood?.trim().length ?? 0) > 0 || skills.length > 0 || passions.length > 0 || needs.length > 0);
 
-    supabase.auth.getUser().then(({ data }) => {
-      if (mounted) setUserId(data?.user?.id ?? null);
-    });
+  const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(null), 1600); };
 
-    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (mounted) setUserId(session?.user?.id ?? null);
-    });
-
-    return () => {
-      mounted = false;
-      authListener?.subscription?.unsubscribe?.();
-    };
-  }, []);
-
-  // Prefill existing profile (array-safe; no .single/.maybeSingle)
+  // ------- Prefill profile via REST
   useEffect(() => {
     (async () => {
-      if (!userId) return;
-      const { data, error } = await supabase
-        .from("profiles")
-        .select(
-          "name, surname, photo_url, roots_json, diaspora_json, livelihood, skills, passions, needs, viability, transition_target"
-        )
-        .eq("user_id", userId);
-      if (!error && Array.isArray(data) && data.length) {
-        const row = data[0];
-        setName(row.name || "");
-        setSurname(row.surname || "");
-        setPhotoUrl(row.photo_url || "");
-        setRoots(row.roots_json || row.diaspora_json || null);
-        setLivelihood(row.livelihood || "");
-        setSkills(Array.isArray(row.skills) ? row.skills : []);
-        setPassions(Array.isArray(row.passions) ? row.passions : []);
-        setNeeds(Array.isArray(row.needs) ? row.needs : []);
-        setViability(row.viability || "");
-        setTransitionTarget(row.transition_target || "");
+      if (!token || !user_id) return;
+      try {
+        const rows = await restSelect("profiles", {
+          token,
+          query: { user_id: `eq.${user_id}` },
+        });
+        if (Array.isArray(rows) && rows.length) {
+          const r = rows[0];
+          setName(r.name || "");
+          setSurname(r.surname || "");
+          setPhotoUrl(r.photo_url || "");
+          // try to show something user-friendly for roots
+          const rlabel = r?.roots_json?.label || r?.diaspora_json?.label || "";
+          const rtype = r?.roots_json ? "ward" : r?.diaspora_json ? "city" : "ward";
+          setRootsType(rtype);
+          setRootsLabel(rlabel);
+          setLivelihood(r.livelihood || "");
+          setSkills(Array.isArray(r.skills) ? r.skills : []);
+          setPassions(Array.isArray(r.passions) ? r.passions : []);
+          setNeeds(Array.isArray(r.needs) ? r.needs : []);
+          setViability(r.viability || "");
+          setTransitionTarget(r.transition_target || "");
+        }
+      } catch (e) {
+        console.error(e);
       }
     })();
-  }, [userId]);
+  }, [token, user_id]);
 
-  const showToast = (msg) => {
-    setToast(msg);
-    setTimeout(() => setToast(null), 1600);
-  };
-
-  // --- Photo helpers
+  // ------- Photo helpers
   const fileToDataURL = (file) =>
     new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -174,51 +277,42 @@ export default function OnboardingFlow() {
     setCroppedPreview(url);
   }, [rawPhotoSrc, croppedAreaPixels]);
 
-  // --- Saves
+  // ------- Saves (REST)
+
   const saveNameSurname = useCallback(async () => {
-    if (!userId) return;
+    if (!token || !user_id) return;
     try {
-      await upsertProfileSafe({
-        user_id: userId,
+      await restUpsert("profiles", {
+        user_id,
         name: name.trim() || null,
         surname: surname.trim() || null,
         updated_at: new Date().toISOString(),
-      });
+      }, { token });
       showToast("Saved.");
     } catch (e) {
       console.error(e);
       showToast("Save failed.");
     }
-  }, [userId, name, surname]);
+  }, [token, user_id, name, surname]);
 
   const saveCroppedPhoto = useCallback(async () => {
-    if (!userId || !croppedPreview) return;
+    if (!token || !user_id || !croppedPreview) return;
     setBusy(true);
     try {
       const resp = await fetch(croppedPreview);
       const blob = await resp.blob();
-      const path = `profiles/${userId}.jpg`; // matches your storage RLS
 
-      await supabase.storage.from("profiles").remove([path]).catch(() => {});
-      const { error: upErr } = await supabase
-        .storage
-        .from("profiles")
-        .upload(path, blob, { upsert: true, contentType: "image/jpeg", cacheControl: "3600" });
-      if (upErr) throw upErr;
+      const publicUrl = await uploadPublicProfilePhoto({ token, user_id, blob });
 
-      const { data: pub } = supabase.storage.from("profiles").getPublicUrl(path);
-      const url = pub?.publicUrl;
-      if (!url) throw new Error("No public URL");
-
-      await upsertProfileSafe({
-        user_id: userId,
+      await restUpsert("profiles", {
+        user_id,
         name: name.trim() || null,
         surname: surname.trim() || null,
-        photo_url: url,
+        photo_url: publicUrl,
         updated_at: new Date().toISOString(),
-      });
+      }, { token });
 
-      setPhotoUrl(url);
+      setPhotoUrl(publicUrl);
       showToast("Photo saved.");
     } catch (e) {
       console.error(e);
@@ -226,39 +320,33 @@ export default function OnboardingFlow() {
     } finally {
       setBusy(false);
     }
-  }, [userId, croppedPreview, name, surname]);
+  }, [token, user_id, croppedPreview, name, surname]);
 
-  const saveRoots = useCallback(
-    async (rootsObj) => {
-      if (!userId) return;
-      const payload = { user_id: userId, updated_at: new Date().toISOString() };
-      if (rootsObj?.type === "ward") {
-        payload.roots_json = rootsObj;
-        payload.diaspora_json = null;
-      } else if (rootsObj?.type === "city") {
-        payload.diaspora_json = rootsObj;
-        payload.roots_json = null;
-      } else {
-        payload.roots_json = null;
-        payload.diaspora_json = null;
-      }
-      try {
-        await upsertProfileSafe(payload);
-        setRoots(rootsObj);
-        showToast("Location saved.");
-      } catch (e) {
-        console.error(e);
-        showToast("Could not save location.");
-      }
-    },
-    [userId]
-  );
+  const saveRoots = useCallback(async () => {
+    if (!token || !user_id) return;
+    const label = rootsLabel.trim();
+    const payload = { user_id, updated_at: new Date().toISOString() };
+    if (rootsType === "ward") {
+      payload.roots_json = { type: "ward", label };
+      payload.diaspora_json = null;
+    } else {
+      payload.diaspora_json = { type: "city", label };
+      payload.roots_json = null;
+    }
+    try {
+      await restUpsert("profiles", payload, { token });
+      showToast("Location saved.");
+    } catch (e) {
+      console.error(e);
+      showToast("Could not save location.");
+    }
+  }, [token, user_id, rootsType, rootsLabel]);
 
   const saveIkigai = useCallback(async () => {
-    if (!userId) return;
+    if (!token || !user_id) return;
     try {
-      await upsertProfileSafe({
-        user_id: userId,
+      await restUpsert("profiles", {
+        user_id,
         livelihood: livelihood?.trim() || null,
         skills,
         passions,
@@ -266,32 +354,27 @@ export default function OnboardingFlow() {
         viability: viability || null,
         transition_target: transitionTarget?.trim() || null,
         updated_at: new Date().toISOString(),
-      });
+      }, { token });
       showToast("Saved.");
     } catch (e) {
       console.error(e);
       showToast("Save failed.");
     }
-  }, [userId, livelihood, skills, passions, needs, viability, transitionTarget]);
+  }, [token, user_id, livelihood, skills, passions, needs, viability, transitionTarget]);
 
-  // --- Guards
-  const screen1Ready = name.trim() && surname.trim() && (photoUrl || croppedPreview);
-  const ikigaiReady =
-    !!viability &&
-    ((livelihood?.trim().length ?? 0) > 0 || skills.length > 0 || passions.length > 0 || needs.length > 0);
+  // ------- UI
 
-  // --- UI
   return (
     <div className="flex min-h-screen items-center justify-center bg-black text-white p-6">
       <div className="w-full max-w-md rounded-2xl bg-white/5 p-6 backdrop-blur-xl space-y-6 border border-white/10">
 
         {/* Screen 0 — Entry */}
-        {step === STEP.ENTRY && (
+        {step === "entry" && (
           <div className="space-y-4 text-center">
             <h1 className="text-2xl font-bold">🌳 Welcome to the Chauṭarī</h1>
             <p className="text-slate-300">Others are already sitting under the tree. Let’s introduce yourself.</p>
             <button
-              onClick={() => setStep(STEP.NAME_PHOTO)}
+              onClick={() => setStep("name_photo")}
               className="w-full rounded-lg bg-amber-400 px-4 py-2 font-semibold text-black"
             >
               Begin my circle
@@ -299,8 +382,8 @@ export default function OnboardingFlow() {
           </div>
         )}
 
-        {/* Screen 1 — Name & Face */}
-        {step === STEP.NAME_PHOTO && (
+        {/* Screen 1 — Name & Face (both required incl. Surname) */}
+        {step === "name_photo" && (
           <div className="space-y-5">
             <h2 className="text-xl font-semibold">Name & Face</h2>
 
@@ -361,7 +444,7 @@ export default function OnboardingFlow() {
                       showGrid={false}
                       onCropChange={setCrop}
                       onZoomChange={setZoom}
-                      onCropComplete={onCropComplete}
+                      onCropComplete={(_, px) => setCroppedAreaPixels(px)}
                     />
                   </div>
                   <input
@@ -415,7 +498,7 @@ export default function OnboardingFlow() {
             </div>
 
             <button
-              onClick={() => setStep(STEP.ROOTS)}
+              onClick={() => setStep("roots")}
               disabled={!screen1Ready}
               className="w-full rounded-lg bg-amber-400 px-4 py-2 font-semibold text-black disabled:opacity-60"
               title={!screen1Ready ? "Please add Name, Surname and Photo" : ""}
@@ -425,23 +508,36 @@ export default function OnboardingFlow() {
           </div>
         )}
 
-        {/* Screen 2 — Roots */}
-        {step === STEP.ROOTS && (
+        {/* Screen 2 — Roots (simplified text input; saves to roots_json or diaspora_json) */}
+        {step === "roots" && (
           <div className="space-y-5">
             <h2 className="text-xl font-semibold">Where do your roots touch the earth?</h2>
 
-            <ChautariLocationPicker
-              value={roots}
-              onChange={async (v) => {
-                setRoots(v);
-                await saveRoots(v);
-              }}
-            />
+            <div className="flex gap-3">
+              <label className={`px-3 py-1.5 rounded-lg border cursor-pointer ${rootsType === "ward" ? "bg-amber-400 text-black border-amber-400" : "bg-white/5 border-white/15"}`}>
+                <input type="radio" name="rootsType" className="hidden" checked={rootsType === "ward"} onChange={() => setRootsType("ward")} />
+                Ward (Nepal)
+              </label>
+              <label className={`px-3 py-1.5 rounded-lg border cursor-pointer ${rootsType === "city" ? "bg-amber-400 text-black border-amber-400" : "bg-white/5 border-white/15"}`}>
+                <input type="radio" name="rootsType" className="hidden" checked={rootsType === "city"} onChange={() => setRootsType("city")} />
+                City (Abroad)
+              </label>
+            </div>
 
-            {roots?.label && <p className="text-sm text-slate-300">Selected: {roots.label}</p>}
+            <div className="space-y-2">
+              <label className="block text-sm opacity-80">Write the place name</label>
+              <input
+                className="w-full rounded-lg border border-white/20 bg-black/30 p-2"
+                placeholder={rootsType === "ward" ? "Your Ward / Local Level" : "Your City, Country"}
+                value={rootsLabel}
+                onChange={(e) => setRootsLabel(e.target.value)}
+                onBlur={saveRoots}
+              />
+              <div className="text-xs opacity-60">We’ll plug in the full picker later.</div>
+            </div>
 
             <button
-              onClick={() => setStep(STEP.LIVELIHOOD_IKIGAI)}
+              onClick={() => setStep("livelihood_ikigai")}
               className="w-full rounded-lg bg-amber-400 px-4 py-2 font-semibold text-black"
             >
               Continue
@@ -450,7 +546,7 @@ export default function OnboardingFlow() {
         )}
 
         {/* Screen 3 — Livelihood & Ikigai */}
-        {step === STEP.LIVELIHOOD_IKIGAI && (
+        {step === "livelihood_ikigai" && (
           <IkigaiScreen
             ikigaiTab={ikigaiTab}
             setIkigaiTab={setIkigaiTab}
@@ -474,6 +570,13 @@ export default function OnboardingFlow() {
 
         {/* Toast */}
         {toast && <div className="text-center text-sm text-slate-200">{toast}</div>}
+
+        {/* Session guard */}
+        {!token && (
+          <div className="text-xs text-amber-300">
+            Note: not signed in — login to enable saving (we reuse your existing session automatically).
+          </div>
+        )}
       </div>
     </div>
   );
@@ -498,6 +601,8 @@ function IkigaiScreen({
   busy,
   onSave,
 }) {
+  const ringLimit = { skills: 8, passions: 6, needs: 6 };
+
   return (
     <div className="space-y-6">
       <h2 className="text-xl font-semibold">Let’s understand your work & gifts.</h2>
@@ -623,52 +728,6 @@ function IkigaiScreen({
         </button>
         <span className="self-center text-xs opacity-70">Screens 4–9 later.</span>
       </div>
-    </div>
-  );
-}
-
-/* Chips input helper */
-function ChipsInput({ id, label, items, setItems, placeholder, max = 8 }) {
-  const [value, setValue] = useState("");
-  return (
-    <div className="space-y-2">
-      <label className="block text-sm opacity-80" htmlFor={id}>{label}</label>
-      <div className="flex gap-2 flex-wrap">
-        {items.map((it) => (
-          <span key={it} className="px-2 py-1 rounded-full text-xs bg-white/10 border border-white/15">
-            {it}{" "}
-            <button
-              type="button"
-              onClick={() => setItems(items.filter((x) => x !== it))}
-              className="opacity-70 hover:opacity-100 ml-1"
-              aria-label={`Remove ${it}`}
-            >
-              ✕
-            </button>
-          </span>
-        ))}
-      </div>
-      <input
-        id={id}
-        className="w-full rounded-lg border border-white/20 bg-black/30 p-2"
-        placeholder={placeholder}
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") {
-            e.preventDefault();
-            if (!value.trim()) return;
-            const v = titleCase(value);
-            const exists = items.some((x) => x.toLowerCase() === v.toLowerCase());
-            const next = exists ? items : [...items, v];
-            setItems(next.slice(0, max));
-            setValue("");
-          } else if (e.key === "Backspace" && !value && items.length) {
-            setItems(items.slice(0, -1));
-          }
-        }}
-      />
-      <div className="text-xs opacity-60">{items.length}/{max} • Press Enter to add</div>
     </div>
   );
 }
