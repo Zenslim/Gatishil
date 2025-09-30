@@ -1,24 +1,29 @@
 // components/OnboardingFlow.jsx
 // Gatishil — Digital Chauṭarī Onboarding (ONLY up to Screen 3)
-// Safe for your current Supabase schema: DOES NOT write "surname".
-// Fixes "n is not a function" by removing .maybeSingle() usage.
+// Robust dynamic import fallback to fix "TypeError: n is not a function".
+// No schema changes; DOES NOT write "surname".
 
 import React, { useCallback, useEffect, useState } from 'react';
 import dynamic from 'next/dynamic';
 import Cropper from 'react-easy-crop';
 import { supabase } from '../lib/supabaseClient';
 
+// ✅ Robust dynamic() that always returns a component (never a non-function)
 const ChautariLocationPicker = dynamic(
-  () =>
-    import('./ChautariLocationPicker').catch(() => {
-      const Fallback = () => (
-        <div className="text-sm opacity-80">
-          Location picker not found. (Add <code>components/ChautariLocationPicker.jsx</code> later.)
-        </div>
-      );
-      // dynamic() accepts a component result — returning a component is fine.
-      return Fallback;
-    }),
+  async () => {
+    try {
+      const mod = await import('./ChautariLocationPicker');
+      return mod.default || mod;
+    } catch {
+      return function FallbackPicker() {
+        return (
+          <div className="text-sm opacity-80">
+            Location picker not found. (Add <code>components/ChautariLocationPicker.jsx</code> later.)
+          </div>
+        );
+      };
+    }
+  },
   { ssr: false }
 );
 
@@ -54,16 +59,15 @@ function useAuthUser() {
     supabase.auth.getUser().then(({ data }) => {
       if (mounted) setUser(data?.user ?? null);
     });
-    const { data: sub } = supabase.auth.onAuthStateChange((_e, session) => {
+    const sub = supabase.auth.onAuthStateChange?.((_e, session) => {
       setUser(session?.user ?? null);
     });
-    return () => sub?.subscription?.unsubscribe();
+    return () => sub?.data?.subscription?.unsubscribe?.();
   }, []);
   return user;
 }
 
 async function upsertProfileSafe(payload) {
-  // Only columns guaranteed by your ikigai_schema.sql
   const allowed = [
     'user_id',
     'name',
@@ -79,10 +83,10 @@ async function upsertProfileSafe(payload) {
     'updated_at',
   ];
   const clean = Object.fromEntries(Object.entries(payload).filter(([k]) => allowed.includes(k)));
-  const { data, error } = await supabase
-    .from('profiles')
-    .upsert(clean, { onConflict: 'user_id', ignoreDuplicates: false })
-    .select();
+  const { data, error } = await supabase.from('profiles').upsert(clean, {
+    onConflict: 'user_id',
+    ignoreDuplicates: false,
+  }).select();
   if (error) throw error;
   return Array.isArray(data) ? data[0] : data;
 }
@@ -250,7 +254,7 @@ export default function OnboardingFlow() {
 
   // Screen 1 — Name, Surname (client-only), Photo
   const [name, setName] = useState('');
-  const [surname, setSurname] = useState(''); // client-only for now (no DB column)
+  const [surname, setSurname] = useState(''); // client-only; not persisted
   const [photoUrl, setPhotoUrl] = useState('');
   const [rawImage, setRawImage] = useState('');
   const [crop, setCrop] = useState({ x: 0, y: 0 });
@@ -268,7 +272,7 @@ export default function OnboardingFlow() {
   const [viability, setViability] = useState('');
   const [transitionTarget, setTransitionTarget] = useState('');
 
-  // Prefill existing data (array-safe; no maybeSingle())
+  // Prefill existing data (array-safe; no maybeSingle(); no .single())
   useEffect(() => {
     const load = async () => {
       if (!user) return;
@@ -300,7 +304,7 @@ export default function OnboardingFlow() {
   };
 
   const nameOk = name.trim().length > 0;
-  const surnameOk = surname.trim().length > 0; // required for UX, not persisted
+  const surnameOk = surname.trim().length > 0; // required in UI, not persisted yet
   const photoOk = !!photoUrl || !!rawImage;
   const screen1Ready = nameOk && surnameOk && photoOk;
 
@@ -577,7 +581,7 @@ export default function OnboardingFlow() {
           {step === STEP.ROOTS && ScreenRoots}
           {step === STEP.LIVELIHOOD_IKIGAI && ScreenIkigai}
         </div>
-        <div className="mt-4 text-xs opacity-60">Step: {step.replaceAll('_', ' ')}</div>
+        <div className="mt-4 text-xs opacity-60">Step: {String(step).split('_').join(' ')}</div>
       </div>
 
       {toast && (
