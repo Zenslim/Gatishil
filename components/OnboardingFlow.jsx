@@ -1,17 +1,36 @@
 "use client";
 
 /**
- * Gatishil — Digital Chauṭarī Onboarding (Only up to Screen 3)
- * Fixes both issues:
- *  - Removes inline createClient() → uses the shared singleton from ../lib/supabaseClient
- *  - Static import for ChautariLocationPicker (no dynamic import surprises)
- * Schema: writes `surname` (you added it) + other existing columns only.
+ * Gatishil — Digital Chauṭarī Onboarding (Screens 0–3)
+ * ELI15: We DO NOT create a Supabase client here. We only use the ONE your app already made.
+ * - Pass it as a prop: <OnboardingFlow supabase={supabase} />
+ *   OR wrap the app with @supabase/auth-helpers and we'll read it via useSupabaseClient().
+ * This removes "Multiple GoTrueClient instances..." and the minified "n is not a function" cascade.
+ * Schema: reads/writes ONLY existing columns incl. `surname`.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Cropper from "react-easy-crop";
-import { supabase } from "../lib/supabaseClient"; // 👈 use ONE shared instance
-import ChautariLocationPicker from "./ChautariLocationPicker"; // 👈 static import
+import ChautariLocationPicker from "./ChautariLocationPicker"; // static import; it worked before
+
+// try to read client from auth-helpers context if available (optional dependency)
+let useSupabaseClientHook = null;
+try {
+  // will succeed only if @supabase/auth-helpers-react is installed AND Provider is in tree
+  // we do NOT import supabase-js or createClient here
+  // eslint-disable-next-line import/no-extraneous-dependencies, global-require
+  useSupabaseClientHook = require("@supabase/auth-helpers-react").useSupabaseClient;
+} catch (_) {
+  /* not installed — that's fine, we'll use the prop */
+}
+
+function useSupabaseFromApp(propClient) {
+  // strict: prefer prop; else context; else hard fail (we do not create a new one)
+  const ctxClient = useSupabaseClientHook ? useSupabaseClientHook() : null;
+  return useMemo(() => {
+    return propClient || ctxClient || null;
+  }, [propClient, ctxClient]);
+}
 
 const STEP = {
   ENTRY: "entry",
@@ -33,7 +52,7 @@ const dedupePush = (list, value, max) => {
   return max ? next.slice(0, max) : next;
 };
 
-async function upsertProfileSafe(payload) {
+async function upsertProfileSafe(supabase, payload) {
   const allowed = [
     "user_id",
     "name",
@@ -58,7 +77,8 @@ async function upsertProfileSafe(payload) {
   return Array.isArray(data) ? data[0] : data;
 }
 
-export default function OnboardingFlow() {
+export default function OnboardingFlow({ supabase }) {
+  const sb = useSupabaseFromApp(supabase); // must be non-null
   const [step, setStep] = useState(STEP.ENTRY);
   const [userId, setUserId] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -86,29 +106,41 @@ export default function OnboardingFlow() {
   const [viability, setViability] = useState(""); // 'paid','part_time','learning','exploring'
   const [transitionTarget, setTransitionTarget] = useState("");
 
-  // --- Auth: use ONE client; correct subscribe/unsubscribe shape for supabase-js v2
+  // hard guard: we need a client from the app
+  if (typeof window !== "undefined" && !sb) {
+    // render a friendly message instead of creating another client and causing the warning
+    return (
+      <div className="p-4 text-sm text-red-200 bg-red-900/20 rounded-xl border border-red-800">
+        Onboarding needs the app’s Supabase client. Pass it as <code>supabase</code> prop or wrap your app with{" "}
+        <code>@supabase/auth-helpers-react</code> and provider.
+      </div>
+    );
+  }
+
+  // --- Auth: subscribe using the provided singleton client
   useEffect(() => {
+    if (!sb) return;
     let mounted = true;
 
-    supabase.auth.getUser().then(({ data }) => {
+    sb.auth.getUser().then(({ data }) => {
       if (mounted) setUserId(data?.user?.id ?? null);
     });
 
-    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: authListener } = sb.auth.onAuthStateChange((_event, session) => {
       if (mounted) setUserId(session?.user?.id ?? null);
     });
 
     return () => {
       mounted = false;
-      authListener?.subscription?.unsubscribe(); // v2 shape
+      authListener?.subscription?.unsubscribe?.();
     };
-  }, []);
+  }, [sb]);
 
-  // Prefill existing profile (array-safe; no .single/.maybeSingle)
+  // Prefill profile
   useEffect(() => {
     (async () => {
-      if (!userId) return;
-      const { data, error } = await supabase
+      if (!sb || !userId) return;
+      const { data, error } = await sb
         .from("profiles")
         .select(
           "name, surname, photo_url, roots_json, diaspora_json, livelihood, skills, passions, needs, viability, transition_target"
@@ -128,7 +160,7 @@ export default function OnboardingFlow() {
         setTransitionTarget(row.transition_target || "");
       }
     })();
-  }, [userId]);
+  }, [sb, userId]);
 
   const showToast = (msg) => {
     setToast(msg);
@@ -174,11 +206,11 @@ export default function OnboardingFlow() {
     setCroppedPreview(url);
   }, [rawPhotoSrc, croppedAreaPixels]);
 
-  // --- Saves
+  // --- Saves (use provided sb)
   const saveNameSurname = useCallback(async () => {
-    if (!userId) return;
+    if (!sb || !userId) return;
     try {
-      await upsertProfileSafe({
+      await upsertProfileSafe(sb, {
         user_id: userId,
         name: name.trim() || null,
         surname: surname.trim() || null,
@@ -189,28 +221,27 @@ export default function OnboardingFlow() {
       console.error(e);
       showToast("Save failed.");
     }
-  }, [userId, name, surname]);
+  }, [sb, userId, name, surname]);
 
   const saveCroppedPhoto = useCallback(async () => {
-    if (!userId || !croppedPreview) return;
+    if (!sb || !userId || !croppedPreview) return;
     setBusy(true);
     try {
       const resp = await fetch(croppedPreview);
       const blob = await resp.blob();
-      const path = `profiles/${userId}.jpg`; // matches your storage RLS
+      const path = `profiles/${userId}.jpg`; // matches your RLS
 
-      await supabase.storage.from("profiles").remove([path]).catch(() => {});
-      const { error: upErr } = await supabase
-        .storage
+      await sb.storage.from("profiles").remove([path]).catch(() => {});
+      const { error: upErr } = await sb.storage
         .from("profiles")
         .upload(path, blob, { upsert: true, contentType: "image/jpeg", cacheControl: "3600" });
       if (upErr) throw upErr;
 
-      const { data: pub } = supabase.storage.from("profiles").getPublicUrl(path);
+      const { data: pub } = sb.storage.from("profiles").getPublicUrl(path);
       const url = pub?.publicUrl;
       if (!url) throw new Error("No public URL");
 
-      await upsertProfileSafe({
+      await upsertProfileSafe(sb, {
         user_id: userId,
         name: name.trim() || null,
         surname: surname.trim() || null,
@@ -226,11 +257,11 @@ export default function OnboardingFlow() {
     } finally {
       setBusy(false);
     }
-  }, [userId, croppedPreview, name, surname]);
+  }, [sb, userId, croppedPreview, name, surname]);
 
   const saveRoots = useCallback(
     async (rootsObj) => {
-      if (!userId) return;
+      if (!sb || !userId) return;
       const payload = { user_id: userId, updated_at: new Date().toISOString() };
       if (rootsObj?.type === "ward") {
         payload.roots_json = rootsObj;
@@ -243,7 +274,7 @@ export default function OnboardingFlow() {
         payload.diaspora_json = null;
       }
       try {
-        await upsertProfileSafe(payload);
+        await upsertProfileSafe(sb, payload);
         setRoots(rootsObj);
         showToast("Location saved.");
       } catch (e) {
@@ -251,13 +282,13 @@ export default function OnboardingFlow() {
         showToast("Could not save location.");
       }
     },
-    [userId]
+    [sb, userId]
   );
 
   const saveIkigai = useCallback(async () => {
-    if (!userId) return;
+    if (!sb || !userId) return;
     try {
-      await upsertProfileSafe({
+      await upsertProfileSafe(sb, {
         user_id: userId,
         livelihood: livelihood?.trim() || null,
         skills,
@@ -272,7 +303,7 @@ export default function OnboardingFlow() {
       console.error(e);
       showToast("Save failed.");
     }
-  }, [userId, livelihood, skills, passions, needs, viability, transitionTarget]);
+  }, [sb, userId, livelihood, skills, passions, needs, viability, transitionTarget]);
 
   // --- Guards
   const screen1Ready = name.trim() && surname.trim() && (photoUrl || croppedPreview);
