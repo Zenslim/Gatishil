@@ -1,7 +1,7 @@
 // components/OnboardingFlow.jsx
 // Gatishil — Digital Chauṭarī Onboarding (ONLY up to Screen 3)
-// ⚠️ DB-SAFE: Does NOT write `surname` (your current schema has no such column).
-// Remote-only: Next.js + Supabase. Storage key must be: profiles/<auth.uid()>.jpg
+// Safe for your current Supabase schema: DOES NOT write "surname".
+// Fixes "n is not a function" by removing .maybeSingle() usage.
 
 import React, { useCallback, useEffect, useState } from 'react';
 import dynamic from 'next/dynamic';
@@ -10,11 +10,15 @@ import { supabase } from '../lib/supabaseClient';
 
 const ChautariLocationPicker = dynamic(
   () =>
-    import('./ChautariLocationPicker').catch(() => () => (
-      <div className="text-sm opacity-80">
-        Location picker not found. (Add components/ChautariLocationPicker.jsx later.)
-      </div>
-    )),
+    import('./ChautariLocationPicker').catch(() => {
+      const Fallback = () => (
+        <div className="text-sm opacity-80">
+          Location picker not found. (Add <code>components/ChautariLocationPicker.jsx</code> later.)
+        </div>
+      );
+      // dynamic() accepts a component result — returning a component is fine.
+      return Fallback;
+    }),
   { ssr: false }
 );
 
@@ -59,7 +63,7 @@ function useAuthUser() {
 }
 
 async function upsertProfileSafe(payload) {
-  // Only uses columns that exist in your current schema.
+  // Only columns guaranteed by your ikigai_schema.sql
   const allowed = [
     'user_id',
     'name',
@@ -78,10 +82,9 @@ async function upsertProfileSafe(payload) {
   const { data, error } = await supabase
     .from('profiles')
     .upsert(clean, { onConflict: 'user_id', ignoreDuplicates: false })
-    .select()
-    .single();
+    .select();
   if (error) throw error;
-  return data;
+  return Array.isArray(data) ? data[0] : data;
 }
 
 async function getCroppedBlob(imageSrc, crop, zoom, maskCircle = true) {
@@ -92,13 +95,12 @@ async function getCroppedBlob(imageSrc, crop, zoom, maskCircle = true) {
     img.src = imageSrc;
   });
 
-  const outputSize = 512; // final square
+  const outputSize = 512;
   const canvas = document.createElement('canvas');
   canvas.width = outputSize;
   canvas.height = outputSize;
   const ctx = canvas.getContext('2d');
 
-  // circle mask
   if (maskCircle) {
     ctx.save();
     ctx.beginPath();
@@ -107,7 +109,6 @@ async function getCroppedBlob(imageSrc, crop, zoom, maskCircle = true) {
     ctx.clip();
   }
 
-  // Basic crop+zoom approximation: center image and apply crop translation
   const scale = zoom || 1;
   const scaledW = image.width * scale;
   const scaledH = image.height * scale;
@@ -120,9 +121,7 @@ async function getCroppedBlob(imageSrc, crop, zoom, maskCircle = true) {
 
   if (maskCircle) ctx.restore();
 
-  return await new Promise((resolve) =>
-    canvas.toBlob((b) => resolve(b), 'image/jpeg', 0.92)
-  );
+  return await new Promise((resolve) => canvas.toBlob((b) => resolve(b), 'image/jpeg', 0.92));
 }
 
 function Pill({ active, onClick, children }) {
@@ -190,16 +189,17 @@ function Typeahead({ id, label, value, setValue, rpcName, placeholder }) {
   const [opts, setOpts] = useState([]);
 
   useEffect(() => {
-    let active = true;
+    let alive = true;
     const run = async () => {
       if (!rpcName) return;
       const { data, error } = await supabase.rpc(rpcName, { q });
-      if (!active) return;
+      if (!alive) return;
       if (!error && Array.isArray(data)) setOpts(data);
+      else setOpts([]);
     };
     const t = setTimeout(run, 160);
     return () => {
-      active = false;
+      alive = false;
       clearTimeout(t);
     };
   }, [q, rpcName]);
@@ -250,7 +250,7 @@ export default function OnboardingFlow() {
 
   // Screen 1 — Name, Surname (client-only), Photo
   const [name, setName] = useState('');
-  const [surname, setSurname] = useState(''); // client-side only; NOT saved (no column yet)
+  const [surname, setSurname] = useState(''); // client-only for now (no DB column)
   const [photoUrl, setPhotoUrl] = useState('');
   const [rawImage, setRawImage] = useState('');
   const [crop, setCrop] = useState({ x: 0, y: 0 });
@@ -268,26 +268,27 @@ export default function OnboardingFlow() {
   const [viability, setViability] = useState('');
   const [transitionTarget, setTransitionTarget] = useState('');
 
-  // Prefill existing data (only known columns)
+  // Prefill existing data (array-safe; no maybeSingle())
   useEffect(() => {
     const load = async () => {
       if (!user) return;
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('profiles')
-        .select('name, photo_url, roots_json, diaspora_json, livelihood, skills, passions, needs, viability, transition_target')
-        .eq('user_id', user.id)
-        .maybeSingle();
-
-      if (data) {
-        setName(data.name || '');
-        setPhotoUrl(data.photo_url || '');
-        setRoots(data.roots_json || data.diaspora_json || null);
-        setLivelihood(data.livelihood || '');
-        setSkills(Array.isArray(data.skills) ? data.skills : []);
-        setPassions(Array.isArray(data.passions) ? data.passions : []);
-        setNeeds(Array.isArray(data.needs) ? data.needs : []);
-        setViability(data.viability || '');
-        setTransitionTarget(data.transition_target || '');
+        .select(
+          'name, photo_url, roots_json, diaspora_json, livelihood, skills, passions, needs, viability, transition_target'
+        )
+        .eq('user_id', user.id);
+      if (!error && Array.isArray(data) && data.length) {
+        const row = data[0];
+        setName(row.name || '');
+        setPhotoUrl(row.photo_url || '');
+        setRoots(row.roots_json || row.diaspora_json || null);
+        setLivelihood(row.livelihood || '');
+        setSkills(Array.isArray(row.skills) ? row.skills : []);
+        setPassions(Array.isArray(row.passions) ? row.passions : []);
+        setNeeds(Array.isArray(row.needs) ? row.needs : []);
+        setViability(row.viability || '');
+        setTransitionTarget(row.transition_target || '');
       }
     };
     load();
@@ -299,7 +300,7 @@ export default function OnboardingFlow() {
   };
 
   const nameOk = name.trim().length > 0;
-  const surnameOk = surname.trim().length > 0; // still required for UX; not persisted yet
+  const surnameOk = surname.trim().length > 0; // required for UX, not persisted
   const photoOk = !!photoUrl || !!rawImage;
   const screen1Ready = nameOk && surnameOk && photoOk;
 
@@ -331,7 +332,6 @@ export default function OnboardingFlow() {
       const url = pub?.publicUrl;
       if (!url) throw new Error('No public URL');
 
-      // Upsert ONLY safe columns
       await upsertProfileSafe({
         user_id: user.id,
         name: name.trim() || null,
@@ -408,7 +408,7 @@ export default function OnboardingFlow() {
     }
   }, [user, livelihood, skills, passions, needs, viability, transitionTarget]);
 
-  // --- UI: SCREENS (only up to Screen 3) ---
+  // --- UI: SCREENS (0–3 only) ---
 
   const ScreenEntry = (
     <div className="space-y-4">
@@ -445,7 +445,7 @@ export default function OnboardingFlow() {
             onChange={(e) => setSurname(titleCase(e.target.value))}
           />
           <div className="text-xs opacity-60">
-            (Kept on this device for now — DB will add a surname column later.)
+            (Kept on this device for now — DB will add a <code>surname</code> column later.)
           </div>
         </div>
       </div>
