@@ -1,11 +1,18 @@
 // components/OnboardingFlow.jsx
-// Ikigai Onboarding — now with Screen 0 (Tree welcome) + 5 reflective steps
-// Remote-only: Next.js + Vercel + Supabase
+// Onboarding Flow: Screen 0 → 1 → 2 (your Roots picker) → Ikigai (3..7)
+// Remote-only: Next.js + Vercel + Supabase. Reuses your ChautariLocationPicker as-is.
 
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { supabase } from "@/lib/supabaseClient";
+import dynamic from "next/dynamic";
+
+// IMPORTANT: we do NOT modify your working Roots picker.
+// If the file path differs, adjust the import path only.
+const ChautariLocationPicker = dynamic(() => import("@/components/ChautariLocationPicker"), {
+  ssr: false,
+});
 
 // ---------- tiny helpers ----------
 const titleCase = (s) =>
@@ -28,16 +35,17 @@ const byPrefixRank = (q) => (a, b) => {
 };
 
 // ---------- generic UI bits ----------
-function Button({ children, onClick, variant = "primary", disabled = false }) {
+function Button({ children, onClick, variant = "primary", disabled = false, full = false }) {
   const base =
-    "px-4 py-2 rounded-2xl text-sm font-semibold transition shadow-sm focus:outline-none focus:ring";
+    "px-4 py-3 rounded-2xl text-sm font-semibold transition shadow-sm focus:outline-none focus:ring";
   const styles =
     variant === "secondary"
       ? "bg-zinc-700 hover:bg-zinc-600 text-white"
       : "bg-amber-500 hover:bg-amber-400 text-black";
   const dis = disabled ? "opacity-50 pointer-events-none" : "";
+  const w = full ? "w-full" : "";
   return (
-    <button className={`${base} ${styles} ${dis}`} onClick={onClick} disabled={disabled}>
+    <button className={`${base} ${styles} ${dis} ${w}`} onClick={onClick} disabled={disabled}>
       {children}
     </button>
   );
@@ -279,12 +287,6 @@ function ChautariTreeSVG(props) {
         <circle cx="360" cy="300" r="10" />
         <rect x="355" y="308" width="10" height="10" rx="2" />
       </g>
-      {/* falling leaves */}
-      <g fill="#10b981" opacity="0.6">
-        <ellipse cx="430" cy="80" rx="6" ry="10" transform="rotate(20 430 80)" />
-        <ellipse cx="210" cy="70" rx="6" ry="10" transform="rotate(-10 210 70)" />
-        <ellipse cx="380" cy="200" rx="6" ry="10" transform="rotate(15 380 200)" />
-      </g>
     </svg>
   );
 }
@@ -303,9 +305,9 @@ export default function OnboardingFlow() {
   // suggest modal
   const [modal, setModal] = useState({ open: false, type: "", typed: "" });
 
-  // steps: 0 = Welcome Tree, then 1..5 actual inputs
-  const [step, setStep] = useState(0); // 0..5
-  const totalSteps = 6;
+  // steps: 0..7
+  const [step, setStep] = useState(0);
+  const totalSteps = 8;
 
   // starters (safe defaults)
   const starterLivelihoods = [
@@ -378,6 +380,21 @@ export default function OnboardingFlow() {
     })();
   }, []);
 
+  const pickProfileFields = (p) => ({
+    // Name & face
+    name: p?.name || null,
+    thar: p?.thar || null, // surname
+    photo: p?.photo || null,
+    // Ikigai
+    livelihood: p?.livelihood || null,
+    skills: p?.skills ? dedupe(p.skills) : [],
+    passions: p?.passions ? dedupe(p.passions) : [],
+    needs: p?.needs ? dedupe(p.needs) : [],
+    viability: p?.viability || null,
+    transition_target: p?.transition_target || null,
+    // Roots are handled by your existing picker (no extra fields here).
+  });
+
   const saveProfile = async (patch) => {
     const payload = { ...(profile || {}), ...patch };
     setProfile(payload);
@@ -397,15 +414,6 @@ export default function OnboardingFlow() {
       .catch(() => {});
   };
 
-  const pickProfileFields = (p) => ({
-    livelihood: p?.livelihood || null,
-    skills: p?.skills ? dedupe(p.skills) : [],
-    passions: p?.passions ? dedupe(p.passions) : [],
-    needs: p?.needs ? dedupe(p.needs) : [],
-    viability: p?.viability || null,
-    transition_target: p?.transition_target || null,
-  });
-
   const openSuggest = (type, typed) => setModal({ open: true, type, typed });
   const submitSuggest = async () => {
     const { type, typed } = modal;
@@ -423,32 +431,135 @@ export default function OnboardingFlow() {
   const next = () => setStep((s) => Math.min(totalSteps - 1, s + 1));
   const back = () => setStep((s) => Math.max(0, s - 1));
 
-  // ----- Screen 0 (Welcome Tree) -----
+  // ----- Screen 0 — Entry Prompt -----
   const Screen0 = (
     <div className="space-y-6">
       <div className="rounded-3xl border border-zinc-800 bg-zinc-950 p-4">
         <ChautariTreeSVG />
       </div>
-      <h1 className="text-2xl md:text-3xl font-bold">
-        Sit under the tree for a moment 🌳
-      </h1>
-      <p className="text-sm text-zinc-300">
-        We’ll ask a few small questions to understand your{" "}
-        <span className="text-amber-400 font-medium">work, gifts, loves,</span> and{" "}
-        <span className="text-amber-400 font-medium">where the world needs you</span>.
-        One step at a time. You can always choose <em>Not sure yet</em>.
+      <h1 className="text-2xl md:text-3xl font-bold text-center">Welcome to the Chauṭarī</h1>
+      <p className="text-sm text-zinc-300 text-center">
+        Others are already sitting under the tree. Let’s introduce yourself.
       </p>
+      <div className="pt-2">
+        <Button full onClick={next}>Begin my circle</Button>
+      </div>
+    </div>
+  );
+
+  // ----- Screen 1 — Name & Face -----
+  const fileInputRef = useRef(null);
+  const [uploading, setUploading] = useState(false);
+
+  const pickImage = () => fileInputRef.current?.click();
+
+  const handleAvatar = async (file) => {
+    if (!file || !user) return;
+    try {
+      setUploading(true);
+      const ext = file.name.split(".").pop() || "jpg";
+      const path = `avatars/${user.id}/${Date.now()}.${ext}`;
+      // Note: requires a public "avatars" bucket (standard Supabase practice).
+      const { error: upErr } = await supabase.storage.from("avatars").upload(path, file, {
+        cacheControl: "3600",
+        upsert: true,
+      });
+      if (upErr) throw upErr;
+      const { data: publicUrl } = supabase.storage.from("avatars").getPublicUrl(path);
+      await saveProfile({ photo: publicUrl?.publicUrl || null });
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const Screen1 = (
+    <div className="space-y-6">
+      <h2 className="text-xl md:text-2xl font-bold">What should we call you in the circle?</h2>
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <div>
+          <label className="block text-sm text-zinc-300 mb-2">Name</label>
+          <input
+            className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-3 outline-none focus:ring focus:ring-amber-500/30"
+            placeholder="Your first name"
+            value={profile?.name || ""}
+            onChange={(e) => saveProfile({ name: norm(e.target.value) })}
+          />
+        </div>
+        <div>
+          <label className="block text-sm text-zinc-300 mb-2">Surname</label>
+          <input
+            className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-3 outline-none focus:ring focus:ring-amber-500/30"
+            placeholder="Your surname"
+            value={profile?.thar || ""}
+            onChange={(e) => saveProfile({ thar: norm(e.target.value) })}
+          />
+        </div>
+      </div>
+
+      <div className="flex items-center gap-4">
+        <div className="relative h-24 w-24 rounded-full overflow-hidden border border-zinc-700 bg-zinc-900">
+          {profile?.photo ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={profile.photo} alt="Your photo" className="h-full w-full object-cover" />
+          ) : (
+            <div className="h-full w-full grid place-items-center text-zinc-500 text-xs">
+              No photo
+            </div>
+          )}
+        </div>
+        <div className="flex flex-col gap-2">
+          <Button variant="secondary" onClick={pickImage} disabled={uploading}>
+            {uploading ? "Uploading…" : "Upload / Take Photo"}
+          </Button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            className="hidden"
+            onChange={(e) => handleAvatar(e.target.files?.[0])}
+          />
+          <p className="text-xs text-zinc-400">Tip: You can use your camera on mobile.</p>
+        </div>
+      </div>
+
       <div className="flex gap-3 pt-2">
-        <Button onClick={next}>Start</Button>
+        <Button onClick={next} disabled={!profile?.name || !profile?.thar}>
+          Next
+        </Button>
         <Button variant="secondary" onClick={() => next()}>
-          Skip intro
+          Not sure yet
         </Button>
       </div>
     </div>
   );
 
-  // ----- Screen 1: Livelihood -----
-  const Screen1 = (
+  // ----- Screen 2 — Roots (Progressive Disclosure) -----
+  // We deliberately do NOT change your working component. It controls its own behavior.
+  // If your picker exposes save hooks, you can wire them later; for now we keep it simple.
+  const Screen2 = (
+    <div className="space-y-6">
+      <h2 className="text-xl md:text-2xl font-bold">Where do your roots touch the earth?</h2>
+      <p className="text-sm text-zinc-400">
+        Choose Province → District → Palika → Ward → Tole. Or toggle “I live abroad”.
+      </p>
+
+      <div className="rounded-2xl border border-zinc-800 p-4 bg-zinc-950">
+        <ChautariLocationPicker />
+      </div>
+
+      <div className="flex gap-3 pt-2">
+        <Button onClick={next}>Continue</Button>
+        <Button variant="secondary" onClick={() => next()}>
+          Not sure yet
+        </Button>
+      </div>
+    </div>
+  );
+
+  // ----- Screen 3 — Livelihood -----
+  const Screen3 = (
     <div className="space-y-6">
       <h2 className="text-xl md:text-2xl font-bold">
         What work do your hands and mind do?
@@ -473,8 +584,8 @@ export default function OnboardingFlow() {
     </div>
   );
 
-  // ----- Screen 2: Skills -----
-  const Screen2 = (
+  // ----- Screen 4 — Skills -----
+  const Screen4 = (
     <div className="space-y-6">
       <h2 className="text-xl md:text-2xl font-bold">What are you reliably good at?</h2>
       <p className="text-sm text-zinc-400">Add up to 8. Short and simple works best.</p>
@@ -496,8 +607,8 @@ export default function OnboardingFlow() {
     </div>
   );
 
-  // ----- Screen 3: Passions -----
-  const Screen3 = (
+  // ----- Screen 5 — Passions -----
+  const Screen5 = (
     <div className="space-y-6">
       <h2 className="text-xl md:text-2xl font-bold">What makes you feel alive lately?</h2>
       <p className="text-sm text-zinc-400">Pick a few you’d happily do for hours.</p>
@@ -519,8 +630,8 @@ export default function OnboardingFlow() {
     </div>
   );
 
-  // ----- Screen 4: Needs -----
-  const Screen4 = (
+  // ----- Screen 6 — Needs -----
+  const Screen6 = (
     <div className="space-y-6">
       <h2 className="text-xl md:text-2xl font-bold">
         What needs around you pull your heart?
@@ -544,8 +655,8 @@ export default function OnboardingFlow() {
     </div>
   );
 
-  // ----- Screen 5: Viability -----
-  const Screen5 = (
+  // ----- Screen 7 — Viability -----
+  const Screen7 = (
     <div className="space-y-6">
       <h2 className="text-xl md:text-2xl font-bold">
         Is this work sustaining you right now?
@@ -600,7 +711,7 @@ export default function OnboardingFlow() {
     </div>
   );
 
-  const screens = [Screen0, Screen1, Screen2, Screen3, Screen4, Screen5];
+  const screens = [Screen0, Screen1, Screen2, Screen3, Screen4, Screen5, Screen6, Screen7];
 
   return (
     <div className="min-h-[70vh] w-full px-5 py-8 md:py-10 bg-gradient-to-b from-zinc-950 to-black text-zinc-100">
