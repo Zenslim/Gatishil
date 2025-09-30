@@ -4,13 +4,13 @@
  * Gatishil — Digital Chauṭarī Onboarding (Screens 0–3)
  * ELI15: Uses your ONE shared Supabase client from ../lib/supabaseClient (we do NOT create a new one),
  * static-imports ChautariLocationPicker, and keeps Surname + Ikigai on Screen 3.
- * This avoids the “Multiple GoTrueClient instances…” warning and the minified “n is not a function”.
+ * Fixes Vercel build error: removed accidental arrow function in JSX.
  */
 
 import { useCallback, useEffect, useState } from "react";
 import Cropper from "react-easy-crop";
 import { supabase } from "../lib/supabaseClient"; // ✅ use existing singleton only
-import ChautariLocationPicker from "./ChautariLocationPicker"; // ✅ static import (worked before)
+import ChautariLocationPicker from "./ChautariLocationPicker"; // ✅ static import
 
 const STEP = {
   ENTRY: "entry",
@@ -597,18 +597,16 @@ function IkigaiScreen({
             ))}
           </div>
 
-          {(viability === "learning" || viability === "exploring") => (
-            (viability === "learning" || viability === "exploring") && (
-              <div className="space-y-2">
-                <label className="block text-sm opacity-80">Transition toward… (optional)</label>
-                <input
-                  className="w-full rounded-lg border border-white/20 bg-black/30 p-2"
-                  placeholder="Type a target livelihood"
-                  value={transitionTarget}
-                  onChange={(e) => setTransitionTarget(titleCase(e.target.value))}
-                />
-              </div>
-            )
+          {(viability === "learning" || viability === "exploring") && (
+            <div className="space-y-2">
+              <label className="block text-sm opacity-80">Transition toward… (optional)</label>
+              <input
+                className="w-full rounded-lg border border-white/20 bg-black/30 p-2"
+                placeholder="Type a target livelihood"
+                value={transitionTarget}
+                onChange={(e) => setTransitionTarget(titleCase(e.target.value))}
+              />
+            </div>
           )}
         </div>
       )}
@@ -629,6 +627,7 @@ function IkigaiScreen({
   );
 }
 
+/* Chips input helper */
 function ChipsInput({ id, label, items, setItems, placeholder, max = 8 }) {
   const [value, setValue] = useState("");
   return (
