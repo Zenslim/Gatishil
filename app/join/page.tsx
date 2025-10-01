@@ -6,7 +6,7 @@
 
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 import { COUNTRIES } from '@/app/data/countries';
@@ -37,7 +37,7 @@ function e164(countryDial: string, raw: string) {
   return `+${d}${digits}`;
 }
 
-export default function JoinPage() {
+function JoinClient() {
   const router = useRouter();
   const params = useSearchParams();
 
@@ -255,3 +255,15 @@ async function safeJson(res: Response): Promise<any> {
 function httpErr(res: Response, data: any) {
   return (data && (data.error || data.message || data.raw)) || `HTTP ${res.status}`;
 }
+
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
+export default function JoinPage() {
+  return (
+    <Suspense fallback={<main className="min-h-dvh bg-black" />}> 
+      <JoinClient />
+    </Suspense>
+  );
+}
+
