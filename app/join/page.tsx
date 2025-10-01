@@ -1,56 +1,16 @@
-// app/join/page.tsx — Country picker that reads DIRECTLY from app/data/countries.ts (no DB, no runtime guessing)
+// app/join/page.tsx — Join → OnboardingFlow (with searchable Country Picker)
+// Next.js App Router + Supabase + Vercel
 'use client';
 
 import { Suspense, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import OnboardingFlow from '@/components/OnboardingFlow';
+import { COUNTRIES } from '@/app/data/countries';
 import { createClient } from '@supabase/supabase-js';
 
-/**
- * 🚨 IMPORTANT: We import from app/data/countries.ts exactly once here.
- * This supports any of these shapes inside your countries.ts:
- *   export const COUNTRIES = [...]
- *   export const countries = [...]
- *   export default [...]
- * If the file instead exports an object map { NP: {...}, IN: {...} }, we convert Object.values(...) to an array.
- */
- // @ts-ignore — allow missing named exports without type errors
-import COUNTRIES_DEFAULT, { COUNTRIES as COUNTRIES_NAMED, countries as COUNTRIES_LOWER } from '@/app/data/countries';
+// Shape expected from app/data/countries.ts
+type Country = { flag: string; dial: string; name: string };
 
-type RawCountry = Record<string, any>;
-type Country = { flag: string; name: string; dial: string };
-
-/* ---------- Build-time extraction (no runtime import) ---------- */
-const RAW_FROM_FILE: unknown =
-  // prefer explicit named export
-  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-  // @ts-ignore
-  (typeof COUNTRIES_NAMED !== 'undefined' ? COUNTRIES_NAMED :
-  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-  // @ts-ignore
-  typeof COUNTRIES_LOWER !== 'undefined' ? COUNTRIES_LOWER :
-  typeof COUNTRIES_DEFAULT !== 'undefined' ? COUNTRIES_DEFAULT :
-  undefined);
-
-const RAW_ARRAY: RawCountry[] = Array.isArray(RAW_FROM_FILE)
-  ? (RAW_FROM_FILE as RawCountry[])
-  : RAW_FROM_FILE && typeof RAW_FROM_FILE === 'object'
-    ? (Object.values(RAW_FROM_FILE as Record<string, RawCountry>))
-    : [];
-
-// Normalize many possible keys (name/label/country, dial/phone/code, flag/emoji).
-function normalizeCountry(c: RawCountry): Country | null {
-  if (!c || typeof c !== 'object') return null;
-  const name = String(c.name ?? c.label ?? c.country ?? '').trim();
-  const dial = String(c.dial ?? c.phone ?? c.code ?? '').replace(/^\+/, '').trim();
-  const flag = String(c.flag ?? c.emoji ?? '').trim();
-  if (!name || !dial) return null;
-  return { name, dial, flag };
-}
-
-const COUNTRIES: Country[] = RAW_ARRAY.map(normalizeCountry).filter(Boolean) as Country[];
-
-/* ---------- Supabase (auth only) ---------- */
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -59,18 +19,24 @@ const supabase = createClient(
 type Phase = 'auth' | 'verify' | 'onboarding';
 type Channel = 'phone' | 'email';
 
-const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, '') || 'https://www.gatishilnepal.org');
+/** Canonical domain + callback (overridable by env) */
+const SITE_URL =
+  (process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, '') ||
+    'https://www.gatishilnepal.org');
 const CALLBACK = `${SITE_URL}/join?onboarding=1`;
 
+/** Simple E.164 check (+97798… etc.) */
 const isE164 = (s: string) => /^\+\d{8,15}$/.test((s || '').trim());
 
 export default function JoinPage() {
   return (
-    <Suspense fallback={
-      <main className="min-h-dvh grid place-items-center bg-black text-slate-300">
-        <div className="text-sm opacity-80">Loading…</div>
-      </main>
-    }>
+    <Suspense
+      fallback={
+        <main className="min-h-dvh grid place-items-center bg-black text-slate-300">
+          <div className="text-sm opacity-80">Loading…</div>
+        </main>
+      }
+    >
       <JoinPageInner />
     </Suspense>
   );
@@ -80,32 +46,28 @@ function JoinPageInner() {
   const router = useRouter();
   const params = useSearchParams();
 
+  // Phase & channel
   const [phase, setPhase] = useState<Phase>('auth');
   const [channel, setChannel] = useState<Channel>('phone');
 
-  // Country picker — default Nepal if present, else first item from file (never DB).
-  const defaultCountry =
-    COUNTRIES.find((c) => c.dial === '977') ||
-    COUNTRIES[0] ||
-    { flag: '🌍', name: 'Country', dial: '1' };
+  // Country + phone
+  const defaultCountry = (Array.isArray(COUNTRIES) && COUNTRIES.length
+    ? COUNTRIES[0]
+    : { flag: '🇳🇵', dial: '977', name: 'Nepal' }) as Country;
 
   const [country, setCountry] = useState<Country>(defaultCountry);
   const [showPicker, setShowPicker] = useState(false);
-  const [query, setQuery] = useState('');
-
-  // Phone + OTP
   const [localNumber, setLocalNumber] = useState('');
   const e164 = useMemo(() => {
     const digits = (localNumber || '').replace(/\D/g, '');
     return digits ? `+${country.dial}${digits}` : '';
   }, [country, localNumber]);
 
+  // OTP + Email
   const [otp, setOtp] = useState('');
-
-  // Email
   const [email, setEmail] = useState('');
 
-  // Prefill (optional)
+  // Optional prefill
   const [name, setName] = useState('');
   const [role, setRole] = useState('');
 
@@ -115,10 +77,10 @@ function JoinPageInner() {
   const [err, setErr] = useState<string | null>(null);
   const resetAlerts = () => { setMsg(null); setErr(null); };
 
-  // Existing session fast-path
+  // Fast-path for existing session
   useEffect(() => {
     (async () => {
-      const { data: { session } } = await supabase.auth.getSession();
+      const { data: { session} } = await supabase.auth.getSession();
       const wantsOnboarding = params.get('onboarding') === '1';
       if (session && wantsOnboarding) { setPhase('onboarding'); return; }
       if (session && !wantsOnboarding) { router.replace('/dashboard'); return; }
@@ -126,9 +88,10 @@ function JoinPageInner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Magic link normalization
+  // Magic-link flow: WAIT for session before stripping hash; normalize to canonical
   useEffect(() => {
     let alive = true;
+
     async function waitForSession(maxTries = 40, delayMs = 100) {
       for (let i = 0; i < maxTries; i++) {
         const { data: { session } } = await supabase.auth.getSession();
@@ -138,48 +101,69 @@ function JoinPageInner() {
       }
       return null;
     }
+
     (async () => {
       if (typeof window === 'undefined') return;
+
       const { hash, origin, pathname, search } = window.location;
-      const wantsOnboarding = new URLSearchParams(search).get('onboarding') === '1';
+      const wantsOnboarding =
+        new URLSearchParams(search).get('onboarding') === '1';
       const hasAccessToken = hash && hash.includes('access_token=');
+
+      // Arrived via magic-link
       if (hasAccessToken) {
+        // If on wrong host, go to canonical callback first
         if (!origin.startsWith(SITE_URL)) {
           window.location.replace(CALLBACK);
           return;
         }
+
+        // On canonical host: WAIT for Supabase to hydrate the session…
         const session = await waitForSession();
+
+        // …then clean URL (strip hash, enforce onboarding=1)
         const clean = new URL(`${origin}${pathname}`);
         clean.searchParams.set('onboarding', '1');
         window.history.replaceState({}, '', clean.toString());
-        if (session && wantsOnboarding) { setPhase('onboarding'); return; }
+
+        // Enter onboarding once session exists
+        if (session && wantsOnboarding) {
+          setPhase('onboarding');
+          return;
+        }
       } else {
+        // No hash; if already authenticated + onboarding requested, go in
         const { data: { session } } = await supabase.auth.getSession();
         if (session && wantsOnboarding) { setPhase('onboarding'); return; }
         if (session && !wantsOnboarding) { router.replace('/dashboard'); return; }
       }
     })();
+
     return () => { alive = false; };
   }, [router]);
 
+  // Safety net: react to late hydration or provider callbacks
   useEffect(() => {
     const { data: sub } = supabase.auth.onAuthStateChange((_evt, session) => {
-      const wantsOnboarding = new URLSearchParams(window.location.search).get('onboarding') === '1';
-      if (session && wantsOnboarding) setPhase('onboarding');
-      else if (session && !wantsOnboarding) router.replace('/dashboard');
+      const wantsOnboarding =
+        new URLSearchParams(window.location.search).get('onboarding') === '1';
+      if (session && wantsOnboarding) {
+        setPhase('onboarding');
+      } else if (session && !wantsOnboarding) {
+        router.replace('/dashboard');
+      }
     });
     return () => { sub.subscription?.unsubscribe?.(); };
   }, [router]);
 
-  // PHONE OTP — send
+  // PHONE OTP — send (custom API using public.otps)
   async function sendPhoneOtp() {
     resetAlerts();
     if (!isE164(e164)) { setErr('Please enter a valid phone number.'); return; }
     setLoading(true);
     try {
       const res = await fetch('/api/otp/send', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ phone: e164 }),
       });
       const data = await safeJson(res);
@@ -192,27 +176,27 @@ function JoinPageInner() {
     } finally { setLoading(false); }
   }
 
-  // PHONE OTP — verify
+  // PHONE OTP — verify (custom API)
   async function verifyPhoneOtp() {
     resetAlerts();
     if (!/^\d{6}$/.test(otp.trim())) { setErr('Enter the 6-digit code.'); return; }
     setLoading(true);
     try {
       const res = await fetch('/api/otp/verify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ phone: e164, code: otp.trim(), name, role }),
       });
       const data = await safeJson(res);
       if (!res.ok) { setErr(httpErr(res, data)); return; }
       if (!data?.ok) { setErr(data?.error || 'Invalid code'); return; }
+      // Session now active; continue onboarding in place
       setPhase('onboarding');
     } catch (e: any) {
       setErr(e?.message || 'Network error while verifying OTP');
     } finally { setLoading(false); }
   }
 
-  // EMAIL — magic link
+  // EMAIL — magic link → always to canonical /join?onboarding=1
   async function sendEmailMagicLink() {
     resetAlerts();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) { setErr('Enter a valid email.'); return; }
@@ -220,17 +204,22 @@ function JoinPageInner() {
     try {
       const { error } = await supabase.auth.signInWithOtp({
         email: email.trim(),
-        options: { shouldCreateUser: true, emailRedirectTo: CALLBACK },
+        options: {
+          shouldCreateUser: true,
+          emailRedirectTo: CALLBACK, // force canonical domain
+        },
       });
       if (error) { setErr(error.message); return; }
-      setMsg('Check your inbox and tap the magic link. It opens here.');
+      setMsg('Check your email and tap the magic link. It opens on gatishilnepal.org.');
     } catch (e: any) {
       setErr(e?.message || 'Network error while sending magic link');
     } finally { setLoading(false); }
   }
 
+  // Onboarding
   if (phase === 'onboarding') return <OnboardingFlow />;
 
+  // ---------------- UI ----------------
   return (
     <main className="min-h-dvh bg-black text-white">
       {/* Hero */}
@@ -250,7 +239,7 @@ function JoinPageInner() {
       {/* Card */}
       <section className="px-6 md:px-10 pb-16">
         <div className="max-w-xl mx-auto rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl p-6 shadow-[0_0_60px_-20px_rgba(255,255,255,0.3)]">
-          {/* Personalize */}
+          {/* Personalize (optional) */}
           <details className="rounded-xl border border-white/10 bg-white/5">
             <summary className="cursor-pointer list-none px-3 py-2 text-sm text-slate-200 rounded-xl">
               ✨ Personalize (optional)
@@ -274,6 +263,9 @@ function JoinPageInner() {
                   className="w-full rounded-xl bg-transparent border border-white/15 px-3 py-2 placeholder:text-slate-400"
                 />
               </div>
+              <p className="text-[11px] text-slate-400">
+                This only shapes your welcome and recommendations. Skip anytime — you can set it later.
+              </p>
             </div>
           </details>
 
@@ -299,19 +291,18 @@ function JoinPageInner() {
               <div>
                 <label className="block text-xs text-slate-300/70 mb-1">Phone</label>
 
-                {/* Mobile stacked; md+ two columns */}
-                <div className="mt-1 grid grid-cols-1 gap-2 md:grid-cols-[minmax(11rem,14rem)_1fr] items-stretch">
+                {/* Country trigger (opens full-screen picker) */}
+                <div className="flex gap-2">
                   <button
                     type="button"
-                    className="rounded-xl bg-transparent border border-white/15 px-3 py-2 text-left"
-                    aria-label="Select country code"
-                    onClick={() => { setQuery(''); setShowPicker(true); }}
+                    onClick={() => setShowPicker(true)}
+                    className="flex items-center gap-2 rounded-xl bg-transparent border border-white/15 px-3 py-2 hover:bg-white/5"
+                    aria-label="Select country"
                   >
-                    <div className="flex items-center gap-2">
-                      <span className="text-xl">{country.flag || '🌍'}</span>
-                      <span className="font-medium">{country.name}</span>
-                      <span className="opacity-70">( +{country.dial} )</span>
-                    </div>
+                    <span className="text-lg">{country.flag}</span>
+                    <span className="hidden sm:inline text-slate-200">{country.name}</span>
+                    <span className="opacity-70">+{country.dial}</span>
+                    <svg className="ml-1 h-4 w-4 opacity-60" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fillRule="evenodd" d="M5.23 7.21a.75.75 0 0 1 1.06.02L10 10.94l3.71-3.71a.75.75 0 1 1 1.06 1.06l-4.24 4.24a.75.75 0 0 1-1.06 0L5.21 8.29a.75.75 0 0 1 .02-1.08z" clipRule="evenodd" /></svg>
                   </button>
 
                   <input
@@ -319,7 +310,7 @@ function JoinPageInner() {
                     onChange={(e) => setLocalNumber(e.target.value)}
                     placeholder="98XXXXXXXX"
                     inputMode="numeric"
-                    className="w-full rounded-xl bg-transparent border border-white/15 px-3 py-2 placeholder:text-slate-400"
+                    className="flex-1 rounded-xl bg-transparent border border-white/15 px-3 py-2 placeholder:text-slate-400"
                   />
                 </div>
 
@@ -393,61 +384,109 @@ function JoinPageInner() {
         </div>
       </section>
 
-      {/* Country Picker Sheet */}
+      {/* COUNTRY PICKER (full-screen modal) */}
       {showPicker && (
-        <div role="dialog" aria-modal="true" className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm">
-          <div className="absolute inset-x-0 bottom-0 top-0 md:top-10 md:inset-x-1/2 md:-translate-x-1/2 md:w-[420px] rounded-t-2xl md:rounded-2xl bg-slate-900/95 border border-white/10 shadow-2xl overflow-hidden flex flex-col">
-            <div className="flex items-center gap-3 px-5 py-4 border-b border-white/10">
-              <button className="text-xl" onClick={() => setShowPicker(false)} aria-label="Back">←</button>
-              <h2 className="text-lg font-semibold">Select Country</h2>
-            </div>
-
-            <div className="px-5 py-4">
-              <div className="relative">
-                <input
-                  autoFocus
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  placeholder="Search"
-                  className="w-full rounded-xl bg-black/40 border border-white/15 px-4 py-3 placeholder:text-slate-400 pr-10"
-                />
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 opacity-60">🔎</span>
-              </div>
-            </div>
-
-            <div className="flex-1 overflow-y-auto px-2 pb-4">
-              {COUNTRIES
-                .filter((c) => {
-                  const q = query.trim().toLowerCase();
-                  if (!q) return true;
-                  return c.name.toLowerCase().includes(q) || c.dial.includes(q.replace(/^\+/, ''));
-                })
-                .map((c, idx) => (
-                  <button
-                    key={`${c.name}-${c.dial}-${idx}`}
-                    className="w-full text-left flex items-center gap-4 px-4 py-3 rounded-xl hover:bg-white/5 focus:bg-white/10"
-                    onClick={() => { setCountry(c); setShowPicker(false); }}
-                  >
-                    <div className="text-2xl w-8 text-center">{c.flag || '🌍'}</div>
-                    <div className="flex-1">
-                      <div className="font-medium">{c.name}</div>
-                      <div className="text-xs opacity-70">+{c.dial}</div>
-                    </div>
-                  </button>
-                ))}
-
-              {COUNTRIES.length === 0 && (
-                <div className="px-5 py-6 text-slate-300/80 text-sm">
-                  No countries loaded from <code>app/data/countries.ts</code>.
-                  Ensure it exports an array (named <code>COUNTRIES</code> or <code>countries</code>) or a default array,
-                  or an object map of rows.
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
+        <CountryPicker
+          countries={COUNTRIES as Country[]}
+          selectedDial={country.dial}
+          onClose={() => setShowPicker(false)}
+          onSelect={(c) => { setCountry(c); setShowPicker(false); }}
+        />
       )}
     </main>
+  );
+}
+
+/* ---------------- Country Picker ---------------- */
+function CountryPicker({
+  countries,
+  selectedDial,
+  onClose,
+  onSelect,
+}: {
+  countries: Country[];
+  selectedDial: string;
+  onClose: () => void;
+  onSelect: (c: Country) => void;
+}) {
+  const [q, setQ] = useState('');
+  const filtered = useMemo(() => {
+    const term = q.trim().toLowerCase();
+    if (!term) return countries;
+    return countries.filter(
+      (c) =>
+        c.name.toLowerCase().includes(term) ||
+        c.dial.toLowerCase().includes(term) ||
+        c.flag.includes(term) // harmless; allows emoji paste search
+    );
+  }, [q, countries]);
+
+  // Close on Escape
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm"
+      role="dialog"
+      aria-modal="true"
+    >
+      <div className="absolute inset-x-0 top-0 flex items-center gap-3 p-4">
+        <button
+          onClick={onClose}
+          className="rounded-full p-2 hover:bg-white/10"
+          aria-label="Go back"
+        >
+          <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none"><path d="M15 18l-6-6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+        </button>
+        <h2 className="text-lg font-semibold">Select Country</h2>
+      </div>
+
+      <div className="mt-14 px-4">
+        <div className="rounded-2xl bg-white/5 border border-white/10 px-4 py-3 flex items-center gap-3">
+          <svg className="h-5 w-5 opacity-70" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="2"/><path d="M20 20l-3.5-3.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
+          <input
+            autoFocus
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Search"
+            className="w-full bg-transparent outline-none placeholder:text-slate-400"
+          />
+        </div>
+      </div>
+
+      <div className="mt-3 pb-6 h-[calc(100dvh-150px)] overflow-y-auto px-2">
+        <ul className="divide-y divide-white/5">
+          {filtered.map((c, idx) => {
+            const active = c.dial === selectedDial;
+            return (
+              <li key={`${c.dial}-${idx}`}>
+                <button
+                  onClick={() => onSelect(c)}
+                  className="w-full flex items-center gap-4 px-4 py-3 text-left hover:bg-white/5"
+                  aria-label={`Choose ${c.name}`}
+                >
+                  <span className="text-2xl">{c.flag}</span>
+                  <div className="flex-1">
+                    <div className="font-medium">{c.name}</div>
+                    <div className="text-xs opacity-70">+{c.dial}</div>
+                  </div>
+                  {active && (
+                    <svg className="h-5 w-5 text-emerald-400" viewBox="0 0 24 24" fill="none"><path d="M20 6L9 17l-5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                  )}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+        {filtered.length === 0 && (
+          <p className="px-4 py-8 text-center text-sm text-slate-400">No matches.</p>
+        )}
+      </div>
+    </div>
   );
 }
 
