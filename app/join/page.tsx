@@ -1,4 +1,4 @@
-// app/join/page.tsx — Join with searchable Country Picker (names fixed + alignment polished)
+// app/join/page.tsx — Join with searchable Country Picker (uses your COUNTRIES only)
 'use client';
 
 import { Suspense, useEffect, useMemo, useState } from 'react';
@@ -6,47 +6,23 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import OnboardingFlow from '@/components/OnboardingFlow';
 import { createClient } from '@supabase/supabase-js';
 
-// If you already have a countries list elsewhere, keep the import and delete the fallback below:
-// import { COUNTRIES } from '@/app/data/countries';
-
-// ---- Fallback: minimal countries (safe if your external list isn't loaded). ----
-// You can remove this block if you import COUNTRIES from your data file.
-const FALLBACK_COUNTRIES = [
-  { flag: '🇳🇵', name: 'Nepal', dial: '977' },
-  { flag: '🇮🇳', name: 'India', dial: '91' },
-  { flag: '🇺🇸', name: 'United States', dial: '1' },
-  { flag: '🇦🇪', name: 'United Arab Emirates', dial: '971' },
-  { flag: '🇬🇧', name: 'United Kingdom', dial: '44' },
-  { flag: '🇦🇫', name: 'Afghanistan', dial: '93' },
-  { flag: '🇦🇩', name: 'Andorra', dial: '376' },
-  { flag: '🇦🇬', name: 'Antigua and Barbuda', dial: '1268' },
-  { flag: '🇦🇮', name: 'Anguilla', dial: '1264' },
-  { flag: '🇦🇲', name: 'Armenia', dial: '374' },
-  { flag: '🇦🇴', name: 'Angola', dial: '244' },
-  { flag: '🇦🇶', name: 'Antarctica', dial: '672' },
-];
+// ✅ Use your canonical list. Ensure it exports an array of country-like objects.
+import { COUNTRIES as RAW_COUNTRIES } from '@/app/data/countries';
 
 type RawCountry = Record<string, any>;
 type Country = { flag: string; name: string; dial: string };
 
-// Accept many shapes (name/label/country, dial/phone/code, flag/emoji)
+// Robust normalizer → handles mixed keys (name/label/country, dial/phone/code, flag/emoji).
 function normalizeCountry(c: RawCountry): Country {
-  const name = c.name || c.label || c.country || '';
-  const dialRaw = c.dial ?? c.phone ?? c.code ?? '';
-  const dial = String(dialRaw).replace(/^\+/, '');
-  const flag = c.flag || c.emoji || '';
+  const name = (c.name ?? c.label ?? c.country ?? '').toString();
+  const dial = String((c.dial ?? c.phone ?? c.code ?? '')).replace(/^\+/, '');
+  const flag = (c.flag ?? c.emoji ?? '').toString();
   return { name, dial, flag };
 }
 
-// Try to resolve a global COUNTRIES (if your app defines it). Otherwise fallback.
-const SOURCE: RawCountry[] =
-  (globalThis as any).COUNTRIES?.length
-    ? (globalThis as any).COUNTRIES
-    : (FALLBACK_COUNTRIES as unknown as RawCountry[]);
-
-const COUNTRIES: Country[] = SOURCE.map(normalizeCountry).filter(
-  (c) => c.name && c.dial
-);
+const COUNTRIES: Country[] = (RAW_COUNTRIES as RawCountry[])
+  .map(normalizeCountry)
+  .filter((c) => c.name && c.dial);
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -297,7 +273,7 @@ function JoinPageInner() {
               <div>
                 <label className="block text-xs text-slate-300/70 mb-1">Phone</label>
 
-                {/* Mobile: stacked; md+: two columns. This fixes the alignment below the "Phone" label. */}
+                {/* Mobile: stacked; md+: two columns (alignment fixed). */}
                 <div className="mt-1 grid grid-cols-1 gap-2 md:grid-cols-[minmax(11rem,14rem)_1fr] items-stretch">
                   <button
                     type="button"
