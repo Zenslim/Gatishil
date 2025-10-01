@@ -1,7 +1,4 @@
-// app/join/page.tsx — Country picker that strictly uses countries.ts (no DB), with robust import adapter.
-// ELI15: We *only* read the list from your repo’s countries.ts, normalize it, and render it.
-// If countries.ts exports in any of these shapes, it “just works”:
-//   export const COUNTRIES = [...]  |  export const countries = [...]  |  export default [...]
+// app/join/page.tsx — Country picker that reads DIRECTLY from app/data/countries.ts (no DB, no runtime guessing)
 'use client';
 
 import { Suspense, useEffect, useMemo, useState } from 'react';
@@ -9,54 +6,51 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import OnboardingFlow from '@/components/OnboardingFlow';
 import { createClient } from '@supabase/supabase-js';
 
-// ✅ Single source of truth — adapt to any export shape from countries.ts
-import * as COUNTRY_SRC from '@/app/data/countries';
+/**
+ * 🚨 IMPORTANT: We import from app/data/countries.ts exactly once here.
+ * This supports any of these shapes inside your countries.ts:
+ *   export const COUNTRIES = [...]
+ *   export const countries = [...]
+ *   export default [...]
+ * If the file instead exports an object map { NP: {...}, IN: {...} }, we convert Object.values(...) to an array.
+ */
+ // @ts-ignore — allow missing named exports without type errors
+import COUNTRIES_DEFAULT, { COUNTRIES as COUNTRIES_NAMED, countries as COUNTRIES_LOWER } from '@/app/data/countries';
 
 type RawCountry = Record<string, any>;
 type Country = { flag: string; name: string; dial: string };
 
-// --- Adapter: pull array out of whatever countries.ts exports ---
-function extractRawCountries(mod: any): RawCountry[] {
-  const candidate =
-    mod?.COUNTRIES ??
-    mod?.countries ??
-    mod?.default ??
-    mod; // if it exported an object map
+/* ---------- Build-time extraction (no runtime import) ---------- */
+const RAW_FROM_FILE: unknown =
+  // prefer explicit named export
+  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+  // @ts-ignore
+  (typeof COUNTRIES_NAMED !== 'undefined' ? COUNTRIES_NAMED :
+  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+  // @ts-ignore
+  typeof COUNTRIES_LOWER !== 'undefined' ? COUNTRIES_LOWER :
+  typeof COUNTRIES_DEFAULT !== 'undefined' ? COUNTRIES_DEFAULT :
+  undefined);
 
-  if (Array.isArray(candidate)) return candidate as RawCountry[];
-  if (candidate && typeof candidate === 'object') {
-    const vals = Object.values(candidate);
-    return Array.isArray(vals) ? (vals as RawCountry[]) : [];
-  }
-  return [];
-}
+const RAW_ARRAY: RawCountry[] = Array.isArray(RAW_FROM_FILE)
+  ? (RAW_FROM_FILE as RawCountry[])
+  : RAW_FROM_FILE && typeof RAW_FROM_FILE === 'object'
+    ? (Object.values(RAW_FROM_FILE as Record<string, RawCountry>))
+    : [];
 
-// Normalize many possible keys (name/label/country, dial/phone/code, flag/emoji)
+// Normalize many possible keys (name/label/country, dial/phone/code, flag/emoji).
 function normalizeCountry(c: RawCountry): Country | null {
   if (!c || typeof c !== 'object') return null;
   const name = String(c.name ?? c.label ?? c.country ?? '').trim();
-  const dial = String(c.dial ?? c.phone ?? c.code ?? '')
-    .replace(/^\+/, '')
-    .trim();
+  const dial = String(c.dial ?? c.phone ?? c.code ?? '').replace(/^\+/, '').trim();
   const flag = String(c.flag ?? c.emoji ?? '').trim();
   if (!name || !dial) return null;
   return { name, dial, flag };
 }
 
-const RAW_LIST = extractRawCountries(COUNTRY_SRC);
-const COUNTRIES: Country[] = RAW_LIST.map(normalizeCountry).filter(
-  (x): x is Country => !!x
-);
+const COUNTRIES: Country[] = RAW_ARRAY.map(normalizeCountry).filter(Boolean) as Country[];
 
-// Hard stop if someone accidentally empties countries.ts
-if (process.env.NODE_ENV !== 'production' && COUNTRIES.length === 0) {
-  // eslint-disable-next-line no-console
-  console.warn(
-    '[join/page] countries.ts exported no usable rows. Ensure it exports an array (default/COUNTRIES/countries) or an object of rows.'
-  );
-}
-
-// --- Supabase only for auth (not for countries) ---
+/* ---------- Supabase (auth only) ---------- */
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -65,22 +59,18 @@ const supabase = createClient(
 type Phase = 'auth' | 'verify' | 'onboarding';
 type Channel = 'phone' | 'email';
 
-const SITE_URL =
-  (process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, '') ||
-    'https://www.gatishilnepal.org');
+const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, '') || 'https://www.gatishilnepal.org');
 const CALLBACK = `${SITE_URL}/join?onboarding=1`;
 
 const isE164 = (s: string) => /^\+\d{8,15}$/.test((s || '').trim());
 
 export default function JoinPage() {
   return (
-    <Suspense
-      fallback={
-        <main className="min-h-dvh grid place-items-center bg-black text-slate-300">
-          <div className="text-sm opacity-80">Loading…</div>
-        </main>
-      }
-    >
+    <Suspense fallback={
+      <main className="min-h-dvh grid place-items-center bg-black text-slate-300">
+        <div className="text-sm opacity-80">Loading…</div>
+      </main>
+    }>
       <JoinPageInner />
     </Suspense>
   );
@@ -93,10 +83,12 @@ function JoinPageInner() {
   const [phase, setPhase] = useState<Phase>('auth');
   const [channel, setChannel] = useState<Channel>('phone');
 
-  // Country picker — default to Nepal (+977) if present, else first item.
+  // Country picker — default Nepal if present, else first item from file (never DB).
   const defaultCountry =
     COUNTRIES.find((c) => c.dial === '977') ||
-    COUNTRIES[0] || { flag: '🌍', name: 'Country', dial: '1' };
+    COUNTRIES[0] ||
+    { flag: '🌍', name: 'Country', dial: '1' };
+
   const [country, setCountry] = useState<Country>(defaultCountry);
   const [showPicker, setShowPicker] = useState(false);
   const [query, setQuery] = useState('');
@@ -123,7 +115,7 @@ function JoinPageInner() {
   const [err, setErr] = useState<string | null>(null);
   const resetAlerts = () => { setMsg(null); setErr(null); };
 
-  // Fast-path for existing session
+  // Existing session fast-path
   useEffect(() => {
     (async () => {
       const { data: { session } } = await supabase.auth.getSession();
@@ -149,8 +141,7 @@ function JoinPageInner() {
     (async () => {
       if (typeof window === 'undefined') return;
       const { hash, origin, pathname, search } = window.location;
-      const wantsOnboarding =
-        new URLSearchParams(search).get('onboarding') === '1';
+      const wantsOnboarding = new URLSearchParams(search).get('onboarding') === '1';
       const hasAccessToken = hash && hash.includes('access_token=');
       if (hasAccessToken) {
         if (!origin.startsWith(SITE_URL)) {
@@ -173,22 +164,22 @@ function JoinPageInner() {
 
   useEffect(() => {
     const { data: sub } = supabase.auth.onAuthStateChange((_evt, session) => {
-      const wantsOnboarding =
-        new URLSearchParams(window.location.search).get('onboarding') === '1';
+      const wantsOnboarding = new URLSearchParams(window.location.search).get('onboarding') === '1';
       if (session && wantsOnboarding) setPhase('onboarding');
       else if (session && !wantsOnboarding) router.replace('/dashboard');
     });
     return () => { sub.subscription?.unsubscribe?.(); };
   }, [router]);
 
-  // PHONE OTP — send via API
+  // PHONE OTP — send
   async function sendPhoneOtp() {
     resetAlerts();
-    if (!/^\+\d{8,15}$/.test(e164)) { setErr('Please enter a valid phone number.'); return; }
+    if (!isE164(e164)) { setErr('Please enter a valid phone number.'); return; }
     setLoading(true);
     try {
       const res = await fetch('/api/otp/send', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ phone: e164 }),
       });
       const data = await safeJson(res);
@@ -201,14 +192,15 @@ function JoinPageInner() {
     } finally { setLoading(false); }
   }
 
-  // PHONE OTP — verify via API
+  // PHONE OTP — verify
   async function verifyPhoneOtp() {
     resetAlerts();
     if (!/^\d{6}$/.test(otp.trim())) { setErr('Enter the 6-digit code.'); return; }
     setLoading(true);
     try {
       const res = await fetch('/api/otp/verify', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ phone: e164, code: otp.trim(), name, role }),
       });
       const data = await safeJson(res);
@@ -307,7 +299,7 @@ function JoinPageInner() {
               <div>
                 <label className="block text-xs text-slate-300/70 mb-1">Phone</label>
 
-                {/* Mobile: stacked; md+: two columns (alignment perfect). */}
+                {/* Mobile stacked; md+ two columns */}
                 <div className="mt-1 grid grid-cols-1 gap-2 md:grid-cols-[minmax(11rem,14rem)_1fr] items-stretch">
                   <button
                     type="button"
@@ -405,13 +397,11 @@ function JoinPageInner() {
       {showPicker && (
         <div role="dialog" aria-modal="true" className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm">
           <div className="absolute inset-x-0 bottom-0 top-0 md:top-10 md:inset-x-1/2 md:-translate-x-1/2 md:w-[420px] rounded-t-2xl md:rounded-2xl bg-slate-900/95 border border-white/10 shadow-2xl overflow-hidden flex flex-col">
-            {/* Header */}
             <div className="flex items-center gap-3 px-5 py-4 border-b border-white/10">
               <button className="text-xl" onClick={() => setShowPicker(false)} aria-label="Back">←</button>
               <h2 className="text-lg font-semibold">Select Country</h2>
             </div>
 
-            {/* Search */}
             <div className="px-5 py-4">
               <div className="relative">
                 <input
@@ -425,16 +415,12 @@ function JoinPageInner() {
               </div>
             </div>
 
-            {/* List */}
             <div className="flex-1 overflow-y-auto px-2 pb-4">
               {COUNTRIES
                 .filter((c) => {
                   const q = query.trim().toLowerCase();
                   if (!q) return true;
-                  return (
-                    c.name.toLowerCase().includes(q) ||
-                    c.dial.includes(q.replace(/^\+/, ''))
-                  );
+                  return c.name.toLowerCase().includes(q) || c.dial.includes(q.replace(/^\+/, ''));
                 })
                 .map((c, idx) => (
                   <button
@@ -449,10 +435,12 @@ function JoinPageInner() {
                     </div>
                   </button>
                 ))}
+
               {COUNTRIES.length === 0 && (
                 <div className="px-5 py-6 text-slate-300/80 text-sm">
-                  No countries loaded from <code>countries.ts</code>. Please ensure it exports an array
-                  (default or named) or an object map.
+                  No countries loaded from <code>app/data/countries.ts</code>.
+                  Ensure it exports an array (named <code>COUNTRIES</code> or <code>countries</code>) or a default array,
+                  or an object map of rows.
                 </div>
               )}
             </div>
