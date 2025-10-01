@@ -1,4 +1,4 @@
-// app/join/page.tsx — Join → OnboardingFlow (session-aware magic-link cleanup)
+// app/join/page.tsx — Join → OTP/Magic Link + Mobile Country Picker (searchable)
 // Next.js App Router + Supabase + Vercel
 'use client';
 
@@ -8,7 +8,6 @@ import OnboardingFlow from '@/components/OnboardingFlow';
 import { COUNTRIES } from '@/app/data/countries';
 import { createClient } from '@supabase/supabase-js';
 
-// Define the exact shape we need here (flag + dial + name)
 type Country = { flag: string; dial: string; name: string };
 
 const supabase = createClient(
@@ -19,13 +18,11 @@ const supabase = createClient(
 type Phase = 'auth' | 'verify' | 'onboarding';
 type Channel = 'phone' | 'email';
 
-/** Canonical domain + callback (overridable by env) */
 const SITE_URL =
   (process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, '') ||
     'https://www.gatishilnepal.org');
 const CALLBACK = `${SITE_URL}/join?onboarding=1`;
 
-/** Simple E.164 check (+97798… etc.) */
 const isE164 = (s: string) => /^\+\d{8,15}$/.test((s || '').trim());
 
 export default function JoinPage() {
@@ -46,20 +43,24 @@ function JoinPageInner() {
   const router = useRouter();
   const params = useSearchParams();
 
-  // Phase & channel
   const [phase, setPhase] = useState<Phase>('auth');
   const [channel, setChannel] = useState<Channel>('phone');
 
-  // Country + phone
-  const [country, setCountry] = useState<Country>(COUNTRIES[0] as Country); // 🇳🇵 default
+  // Country picker state
+  const [country, setCountry] = useState<Country>(COUNTRIES[0] as Country); // default 🇳🇵 or first item
+  const [showPicker, setShowPicker] = useState(false);
+  const [query, setQuery] = useState('');
+
+  // Phone + OTP
   const [localNumber, setLocalNumber] = useState('');
   const e164 = useMemo(() => {
     const digits = (localNumber || '').replace(/\D/g, '');
     return digits ? `+${country.dial}${digits}` : '';
   }, [country, localNumber]);
 
-  // OTP + Email
   const [otp, setOtp] = useState('');
+
+  // Email
   const [email, setEmail] = useState('');
 
   // Optional prefill
@@ -75,7 +76,7 @@ function JoinPageInner() {
   // Fast-path for existing session
   useEffect(() => {
     (async () => {
-      const { data: { session} } = await supabase.auth.getSession();
+      const { data: { session } } = await supabase.auth.getSession();
       const wantsOnboarding = params.get('onboarding') === '1';
       if (session && wantsOnboarding) { setPhase('onboarding'); return; }
       if (session && !wantsOnboarding) { router.replace('/dashboard'); return; }
@@ -83,7 +84,7 @@ function JoinPageInner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Magic-link flow: WAIT for session before stripping hash; normalize to canonical
+  // Magic-link normalization + onboarding entry
   useEffect(() => {
     let alive = true;
 
@@ -105,29 +106,17 @@ function JoinPageInner() {
         new URLSearchParams(search).get('onboarding') === '1';
       const hasAccessToken = hash && hash.includes('access_token=');
 
-      // Arrived via magic-link
       if (hasAccessToken) {
-        // If on wrong host, go to canonical callback first
         if (!origin.startsWith(SITE_URL)) {
           window.location.replace(CALLBACK);
           return;
         }
-
-        // On canonical host: WAIT for Supabase to hydrate the session…
         const session = await waitForSession();
-
-        // …then clean URL (strip hash, enforce onboarding=1)
         const clean = new URL(`${origin}${pathname}`);
         clean.searchParams.set('onboarding', '1');
         window.history.replaceState({}, '', clean.toString());
-
-        // Enter onboarding once session exists
-        if (session && wantsOnboarding) {
-          setPhase('onboarding');
-          return;
-        }
+        if (session && wantsOnboarding) { setPhase('onboarding'); return; }
       } else {
-        // No hash; if already authenticated + onboarding requested, go in
         const { data: { session } } = await supabase.auth.getSession();
         if (session && wantsOnboarding) { setPhase('onboarding'); return; }
         if (session && !wantsOnboarding) { router.replace('/dashboard'); return; }
@@ -137,16 +126,13 @@ function JoinPageInner() {
     return () => { alive = false; };
   }, [router]);
 
-  // Safety net: react to late hydration or provider callbacks
+  // Auth state safety net
   useEffect(() => {
     const { data: sub } = supabase.auth.onAuthStateChange((_evt, session) => {
       const wantsOnboarding =
         new URLSearchParams(window.location.search).get('onboarding') === '1';
-      if (session && wantsOnboarding) {
-        setPhase('onboarding');
-      } else if (session && !wantsOnboarding) {
-        router.replace('/dashboard');
-      }
+      if (session && wantsOnboarding) setPhase('onboarding');
+      else if (session && !wantsOnboarding) router.replace('/dashboard');
     });
     return () => { sub.subscription?.unsubscribe?.(); };
   }, [router]);
@@ -184,14 +170,13 @@ function JoinPageInner() {
       const data = await safeJson(res);
       if (!res.ok) { setErr(httpErr(res, data)); return; }
       if (!data?.ok) { setErr(data?.error || 'Invalid code'); return; }
-      // Session now active; continue onboarding in place
       setPhase('onboarding');
     } catch (e: any) {
       setErr(e?.message || 'Network error while verifying OTP');
     } finally { setLoading(false); }
   }
 
-  // EMAIL — magic link → always to canonical /join?onboarding=1
+  // EMAIL — magic link
   async function sendEmailMagicLink() {
     resetAlerts();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) { setErr('Enter a valid email.'); return; }
@@ -199,22 +184,19 @@ function JoinPageInner() {
     try {
       const { error } = await supabase.auth.signInWithOtp({
         email: email.trim(),
-        options: {
-          shouldCreateUser: true,
-          emailRedirectTo: CALLBACK, // force canonical domain
-        },
+        options: { shouldCreateUser: true, emailRedirectTo: CALLBACK },
       });
       if (error) { setErr(error.message); return; }
-      setMsg('Check your email and tap the magic link. It opens on gatishilnepal.org.');
+      setMsg('Check your inbox and tap the magic link. It opens on gatishilnepal.org.');
     } catch (e: any) {
       setErr(e?.message || 'Network error while sending magic link');
     } finally { setLoading(false); }
   }
 
-  // Onboarding
+  // Onboarding hand-off
   if (phase === 'onboarding') return <OnboardingFlow />;
 
-  // ---------------- UI ----------------
+  // -------- UI --------
   return (
     <main className="min-h-dvh bg-black text-white">
       {/* Hero */}
@@ -285,22 +267,20 @@ function JoinPageInner() {
             <form onSubmit={(e) => { e.preventDefault(); sendPhoneOtp(); }} className="mt-4 space-y-3">
               <div>
                 <label className="block text-xs text-slate-300/70 mb-1">Phone</label>
+
+                {/* Country 'select' → opens full-screen picker */}
                 <div className="flex gap-2">
-                  <select
-                    value={country.dial}
-                    onChange={(e) => {
-                      const next = (COUNTRIES as Country[]).find(c => c.dial === e.target.value) || (COUNTRIES[0] as Country);
-                      setCountry(next);
-                    }}
-                    className="rounded-xl bg-transparent border border-white/15 px-3 py-2"
+                  <button
+                    type="button"
+                    className="rounded-xl bg-transparent border border-white/15 px-3 py-2 min-w-[12rem] text-left"
                     aria-label="Select country code"
+                    onClick={() => { setQuery(''); setShowPicker(true); }}
                   >
-                    {(COUNTRIES as Country[]).map((c, i) => (
-                      <option key={`${c.dial}-${i}`} value={c.dial} className="bg-slate-900">
-                        {c.flag} {c.name} (+{c.dial})
-                      </option>
-                    ))}
-                  </select>
+                    <span className="mr-2">{(country as Country).flag}</span>
+                    <span className="font-medium">{(country as Country).name}</span>
+                    <span className="opacity-70"> (+{(country as Country).dial})</span>
+                  </button>
+
                   <input
                     value={localNumber}
                     onChange={(e) => setLocalNumber(e.target.value)}
@@ -309,6 +289,7 @@ function JoinPageInner() {
                     className="flex-1 rounded-xl bg-transparent border border-white/15 px-3 py-2 placeholder:text-slate-400"
                   />
                 </div>
+
                 <div className="text-xs opacity-70 mt-1">
                   Will send OTP to <code>{e164 || `+${country.dial}…`}</code>
                 </div>
@@ -354,7 +335,7 @@ function JoinPageInner() {
             <div className="mt-4 space-y-3">
               <div>
                 <label className="block text-xs text-slate-300/70 mb-1">Email</label>
-              <input
+                <input
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="you@example.com"
@@ -378,6 +359,69 @@ function JoinPageInner() {
           {!!err && <p className="mt-2 text-xs text-rose-300">{err}</p>}
         </div>
       </section>
+
+      {/* Country Picker Sheet (like your screenshot) */}
+      {showPicker && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm"
+        >
+          <div className="absolute inset-x-0 bottom-0 top-0 md:top-10 md:inset-x-1/2 md:-translate-x-1/2 md:w-[420px] rounded-t-2xl md:rounded-2xl bg-slate-900/95 border border-white/10 shadow-2xl overflow-hidden flex flex-col">
+            {/* Header */}
+            <div className="flex items-center gap-3 px-5 py-4 border-b border-white/10">
+              <button
+                className="text-xl"
+                onClick={() => setShowPicker(false)}
+                aria-label="Back"
+              >
+                ←
+              </button>
+              <h2 className="text-lg font-semibold">Select Country</h2>
+            </div>
+
+            {/* Search */}
+            <div className="px-5 py-4">
+              <div className="relative">
+                <input
+                  autoFocus
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Search"
+                  className="w-full rounded-xl bg-black/40 border border-white/15 px-4 py-3 placeholder:text-slate-400 pr-10"
+                />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 opacity-60">🔎</span>
+              </div>
+            </div>
+
+            {/* List */}
+            <div className="flex-1 overflow-y-auto px-2 pb-4">
+              {(COUNTRIES as Country[])
+                .filter((c) => {
+                  const q = query.trim().toLowerCase();
+                  if (!q) return true;
+                  return (
+                    c.name.toLowerCase().includes(q) ||
+                    c.dial.includes(q.replace(/^\+/, ''))
+                  );
+                })
+                .map((c, idx) => (
+                  <button
+                    key={`${c.dial}-${idx}`}
+                    className="w-full text-left flex items-center gap-4 px-4 py-3 rounded-xl hover:bg-white/5 focus:bg-white/10"
+                    onClick={() => { setCountry(c); setShowPicker(false); }}
+                  >
+                    <div className="text-2xl w-8 text-center">{c.flag}</div>
+                    <div className="flex-1">
+                      <div className="font-medium">{c.name}</div>
+                      <div className="text-xs opacity-70">+{c.dial}</div>
+                    </div>
+                  </button>
+                ))}
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
