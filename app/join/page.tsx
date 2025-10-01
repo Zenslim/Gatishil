@@ -9,7 +9,7 @@ import { COUNTRIES } from '@/app/data/countries';
 
 type Country = { flag: string; dial: string; name: string };
 type Channel = 'phone' | 'email';
-\ nconst supabase = createClient(
+const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
