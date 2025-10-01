@@ -257,7 +257,9 @@ function httpErr(res: Response, data: any) {
 }
 
 export const dynamic = 'force-dynamic';
-export const revalidate = 0;
+export const revalidate = false;       // <-- was being read as an object, set to false
+// optional but explicit:
+export const fetchCache = 'force-no-store';
 
 export default function JoinPage() {
   return (
