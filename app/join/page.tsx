@@ -304,7 +304,7 @@ function JoinClient() {
               )}
 
               <p className="text-[11px] text-slate-400 mt-2">
-                We never show whether a number exists—generic errors protect your privacy.
+                We keep our promises when voices are verified.
               </p>
             </div>
           )}
