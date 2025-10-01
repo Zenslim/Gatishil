@@ -1,6 +1,7 @@
-// app/join/page.tsx — Join with searchable Country Picker (strictly from countries.ts; no DB fetch)
-// ELI15: We show a full-screen country list from a static file. Pick a row → we fill its dial code.
-// Supabase is used only for auth (magic link/OTP), not for countries.
+// app/join/page.tsx — Country picker that strictly uses countries.ts (no DB), with robust import adapter.
+// ELI15: We *only* read the list from your repo’s countries.ts, normalize it, and render it.
+// If countries.ts exports in any of these shapes, it “just works”:
+//   export const COUNTRIES = [...]  |  export const countries = [...]  |  export default [...]
 'use client';
 
 import { Suspense, useEffect, useMemo, useState } from 'react';
@@ -8,32 +9,54 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import OnboardingFlow from '@/components/OnboardingFlow';
 import { createClient } from '@supabase/supabase-js';
 
-// ✅ OUR SINGLE SOURCE OF TRUTH
-import { COUNTRIES as RAW_COUNTRIES } from '@/app/data/countries';
+// ✅ Single source of truth — adapt to any export shape from countries.ts
+import * as COUNTRY_SRC from '@/app/data/countries';
 
 type RawCountry = Record<string, any>;
 type Country = { flag: string; name: string; dial: string };
 
-// Robust normalizer for mixed shapes (name/label/country, dial/phone/code, flag/emoji).
+// --- Adapter: pull array out of whatever countries.ts exports ---
+function extractRawCountries(mod: any): RawCountry[] {
+  const candidate =
+    mod?.COUNTRIES ??
+    mod?.countries ??
+    mod?.default ??
+    mod; // if it exported an object map
+
+  if (Array.isArray(candidate)) return candidate as RawCountry[];
+  if (candidate && typeof candidate === 'object') {
+    const vals = Object.values(candidate);
+    return Array.isArray(vals) ? (vals as RawCountry[]) : [];
+  }
+  return [];
+}
+
+// Normalize many possible keys (name/label/country, dial/phone/code, flag/emoji)
 function normalizeCountry(c: RawCountry): Country | null {
   if (!c || typeof c !== 'object') return null;
   const name = String(c.name ?? c.label ?? c.country ?? '').trim();
-  const dial = String(c.dial ?? c.phone ?? c.code ?? '').replace(/^\+/, '').trim();
+  const dial = String(c.dial ?? c.phone ?? c.code ?? '')
+    .replace(/^\+/, '')
+    .trim();
   const flag = String(c.flag ?? c.emoji ?? '').trim();
   if (!name || !dial) return null;
-  return { name, dial, flag: flag || emojiFromDial(name) };
+  return { name, dial, flag };
 }
 
-// If your list lacks flag emojis for a few entries, this gives a neutral placeholder.
-function emojiFromDial(_name: string) {
-  return '🌍';
+const RAW_LIST = extractRawCountries(COUNTRY_SRC);
+const COUNTRIES: Country[] = RAW_LIST.map(normalizeCountry).filter(
+  (x): x is Country => !!x
+);
+
+// Hard stop if someone accidentally empties countries.ts
+if (process.env.NODE_ENV !== 'production' && COUNTRIES.length === 0) {
+  // eslint-disable-next-line no-console
+  console.warn(
+    '[join/page] countries.ts exported no usable rows. Ensure it exports an array (default/COUNTRIES/countries) or an object of rows.'
+  );
 }
 
-const COUNTRIES: Country[] = (RAW_COUNTRIES as RawCountry[])
-  .map(normalizeCountry)
-  .filter(Boolean) as Country[];
-
-// ---- Supabase only for auth (not for country list) ----
+// --- Supabase only for auth (not for countries) ---
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -70,9 +93,10 @@ function JoinPageInner() {
   const [phase, setPhase] = useState<Phase>('auth');
   const [channel, setChannel] = useState<Channel>('phone');
 
-  // Country picker: default to Nepal if present.
+  // Country picker — default to Nepal (+977) if present, else first item.
   const defaultCountry =
-    COUNTRIES.find((c) => c.dial === '977') || COUNTRIES[0] || { flag: '🌍', name: 'Country', dial: '1' };
+    COUNTRIES.find((c) => c.dial === '977') ||
+    COUNTRIES[0] || { flag: '🌍', name: 'Country', dial: '1' };
   const [country, setCountry] = useState<Country>(defaultCountry);
   const [showPicker, setShowPicker] = useState(false);
   const [query, setQuery] = useState('');
@@ -102,7 +126,7 @@ function JoinPageInner() {
   // Fast-path for existing session
   useEffect(() => {
     (async () => {
-      const { data: { session} } = await supabase.auth.getSession();
+      const { data: { session } } = await supabase.auth.getSession();
       const wantsOnboarding = params.get('onboarding') === '1';
       if (session && wantsOnboarding) { setPhase('onboarding'); return; }
       if (session && !wantsOnboarding) { router.replace('/dashboard'); return; }
@@ -160,7 +184,7 @@ function JoinPageInner() {
   // PHONE OTP — send via API
   async function sendPhoneOtp() {
     resetAlerts();
-    if (!isE164(e164)) { setErr('Please enter a valid phone number.'); return; }
+    if (!/^\+\d{8,15}$/.test(e164)) { setErr('Please enter a valid phone number.'); return; }
     setLoading(true);
     try {
       const res = await fetch('/api/otp/send', {
@@ -377,7 +401,7 @@ function JoinPageInner() {
         </div>
       </section>
 
-      {/* Country Picker Sheet (full-screen mobile; desktop panel) */}
+      {/* Country Picker Sheet */}
       {showPicker && (
         <div role="dialog" aria-modal="true" className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm">
           <div className="absolute inset-x-0 bottom-0 top-0 md:top-10 md:inset-x-1/2 md:-translate-x-1/2 md:w-[420px] rounded-t-2xl md:rounded-2xl bg-slate-900/95 border border-white/10 shadow-2xl overflow-hidden flex flex-col">
@@ -407,7 +431,10 @@ function JoinPageInner() {
                 .filter((c) => {
                   const q = query.trim().toLowerCase();
                   if (!q) return true;
-                  return c.name.toLowerCase().includes(q) || c.dial.includes(q.replace(/^\+/, ''));
+                  return (
+                    c.name.toLowerCase().includes(q) ||
+                    c.dial.includes(q.replace(/^\+/, ''))
+                  );
                 })
                 .map((c, idx) => (
                   <button
@@ -422,6 +449,12 @@ function JoinPageInner() {
                     </div>
                   </button>
                 ))}
+              {COUNTRIES.length === 0 && (
+                <div className="px-5 py-6 text-slate-300/80 text-sm">
+                  No countries loaded from <code>countries.ts</code>. Please ensure it exports an array
+                  (default or named) or an object map.
+                </div>
+              )}
             </div>
           </div>
         </div>
