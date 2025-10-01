@@ -1,529 +1,257 @@
-// app/join/page.tsx — Join → Auth-only per PRD (redirect to /onboarding)
-// Next.js App Router + Supabase + Vercel
+// app/join/page.tsx — Minimal, production-tight Join (Auth-only) → redirect to /onboarding
+// - Two channels: Phone OTP (via /api/otp/*) and Email Magic Link (Supabase)
+// - Handles magic-link return (hash), wrong-host bounce, URL cleanup
+// - If already signed-in, idempotently redirects to /onboarding
+// - No OnboardingFlow here; /onboarding owns the flow
+
 'use client';
 
-import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { createClient } from '@supabase/supabase-js';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { supabase } from '@/lib/supabaseClient';
 import { COUNTRIES } from '@/app/data/countries';
 
+/** Types */
 type Country = { flag: string; dial: string; name: string };
-type Channel = 'phone' | 'email';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
+/** Env */
+const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL || '').replace(/\/$/, ''); // e.g., https://gatishilnepal.org
 
-const SITE_URL =
-  (process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, '') ||
-    'https://www.gatishilnepal.org');
-const CALLBACK = `${SITE_URL}/join`;
-
-const isEmail = (s: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test((s || '').trim());
-const isE164 = (s: string) => /^\+\d{8,15}$/.test((s || '').trim());
-
-export default function JoinPage() {
-  return (
-    <Suspense
-      fallback={
-        <main className="min-h-dvh grid place-items-center bg-black text-slate-300">
-          <div className="text-sm opacity-80">Loading…</div>
-        </main>
-      }
-    >
-      <JoinInner />
-    </Suspense>
-  );
+/** Utilities */
+async function waitForSession(timeoutMs = 8000): Promise<import('@supabase/supabase-js').Session | null> {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    const { data } = await supabase.auth.getSession();
+    const s = data?.session ?? null;
+    if (s) return s;
+    await new Promise((r) => setTimeout(r, 200));
+  }
+  return null;
 }
 
-function JoinInner() {
-  const router = useRouter();
+function e164(countryDial: string, raw: string) {
+  const digits = raw.replace(/\D/g, '');
+  const d = countryDial.replace(/\D/g, '');
+  // If user typed a full international already, prefer it
+  if (digits.startsWith(d)) return `+${digits}`;
+  return `+${d}${digits}`;
+}
 
-  // -------------- State --------------
-  const [channel, setChannel] = useState<Channel>('phone');
+export default function JoinPage() {
+  const router = useRouter();
+  const params = useSearchParams();
+
+  /** Tabs */
+  const [tab, setTab] = useState<'phone' | 'email'>('phone');
+
+  /** Phone */
+  const [country, setCountry] = useState<Country>(() => (COUNTRIES as Country[])[0]);
+  const [phoneRaw, setPhoneRaw] = useState('');
+  const [otpSentTo, setOtpSentTo] = useState<string | null>(null);
+  const [otp, setOtp] = useState('');
+
+  /** Email */
+  const [email, setEmail] = useState('');
+
+  /** UI */
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  const resetAlerts = () => {
-    setMsg(null);
-    setErr(null);
-  };
 
-  // Phone (Nepal default, country picker hidden until toggled)
-  const [countryQuery, setCountryQuery] = useState('');
-  const getDefaultCountry = () =>
-    (COUNTRIES as Country[]).find((c) => c.name === 'Nepal' || c.dial === '977') ||
-    (COUNTRIES as Country[])[0];
-  const [country, setCountry] = useState<Country>(getDefaultCountry());
-  const [showCountryPicker, setShowCountryPicker] = useState(false);
-  const [localNumber, setLocalNumber] = useState('');
-  const e164 = useMemo(() => {
-    const digits = (localNumber || '').replace(/\D/g, '');
-    return digits ? `+${country.dial}${digits}` : '';
-  }, [country, localNumber]);
+  const phoneInputRef = useRef<HTMLInputElement>(null);
+  const otpInputRef = useRef<HTMLInputElement>(null);
 
-  // OTP (6 cells)
-  const [otpCells, setOtpCells] = useState<string[]>(['', '', '', '', '', '']);
-  const cellRefs = useRef<Array<HTMLInputElement | null>>([
-    null,
-    null,
-    null,
-    null,
-    null,
-    null,
-  ]);
-  const otp = useMemo(() => otpCells.join(''), [otpCells]);
-
-  // Resend cooldown (seconds)
-  const [cooldown, setCooldown] = useState<number>(0);
+  // --------------- Boot: handle existing session or magic-link return -----------
   useEffect(() => {
-    if (!cooldown) return;
-    const t = setInterval(() => setCooldown((s) => (s > 0 ? s - 1 : 0)), 1000);
-    return () => clearInterval(t);
-  }, [cooldown]);
-
-  // Email
-  const [email, setEmail] = useState('');
-
-  // -------------- Session guards --------------
-  // If session present at any time on /join → redirect to /onboarding
-  useEffect(() => {
+    let cancelled = false;
     (async () => {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      if (session) router.replace('/onboarding');
-    })();
-  }, [router]);
-
-  useEffect(() => {
-    const { data: sub } = supabase.auth.onAuthStateChange((_evt, session) => {
-      if (session) router.replace('/onboarding');
-    });
-    return () => {
-      sub.subscription?.unsubscribe?.();
-    };
-  }, [router]);
-
-  // Magic-link return handler: wait for session, strip hash, redirect
-  useEffect(() => {
-    let alive = true;
-    async function waitForSession(maxTries = 60, delayMs = 200) {
-      for (let i = 0; i < maxTries; i++) {
-        const {
-          data: { session },
-        } = await supabase.auth.getSession();
-        if (!alive) return null;
-        if (session) return session;
-        // eslint-disable-next-line no-await-in-loop
-        await new Promise((r) => setTimeout(r, delayMs));
+      // If already authenticated, skip join
+      const { data } = await supabase.auth.getSession();
+      const sess = data?.session ?? null;
+      if (sess) {
+        router.replace('/onboarding?src=join');
+        return;
       }
-      return null;
-    }
-    (async () => {
-      if (typeof window === 'undefined') return;
-      const { origin, pathname, hash } = window.location;
-      const hasAccessToken = hash && hash.includes('access_token=');
+
+      // Handle magic-link return via hash fragment
+      const { hash, origin, pathname } = window.location;
+      const hasAccessToken = !!hash && hash.includes('access_token=');
       if (!hasAccessToken) return;
 
-      // If on wrong host → bounce to canonical
-      if (!origin.startsWith(SITE_URL)) {
-        window.location.replace(CALLBACK);
+      // Wrong-host bounce (keep hash intact)
+      if (SITE_URL && !origin.startsWith(SITE_URL)) {
+        window.location.replace(`${SITE_URL}/join${hash}`);
         return;
       }
 
-      // Wait for Supabase to hydrate, then clean hash and redirect
-      await waitForSession();
+      // On canonical host; wait for Supabase to hydrate session from hash
+      const session = await waitForSession();
+      if (!session) return; // let the user retry
+
+      // Clean URL (strip hash), then go to onboarding
       const clean = new URL(`${origin}${pathname}`);
       window.history.replaceState({}, '', clean.toString());
-      router.replace('/onboarding');
+      if (!cancelled) router.replace('/onboarding?src=ml');
     })();
     return () => {
-      alive = false;
+      cancelled = true;
     };
   }, [router]);
 
-  // -------------- Actions --------------
-  async function sendPhoneOtp() {
-    resetAlerts();
-    if (!isE164(e164)) {
-      setErr('Enter a valid phone number.');
-      return;
-    }
-    setLoading(true);
+  // --------------- Actions: OTP ----------------------
+  async function sendOtp() {
+    setErr(null); setMsg(null); setLoading(true);
     try {
+      const phone = e164(country.dial, phoneRaw);
       const res = await fetch('/api/otp/send', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: e164 }),
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ phone })
       });
       const data = await safeJson(res);
-      if (!res.ok || !data?.ok) {
-        setErr(data?.error || httpErr(res, data));
-        return;
-      }
-      setMsg(`We sent a code to +${country.dial} ${maskLocalForHint(localNumber)}`);
-      setCooldown(30);
-      // focus first cell
-      setTimeout(() => cellRefs.current[0]?.focus(), 0);
-      console.log('analytics: otp.send');
+      if (!res.ok || data?.ok !== true) throw new Error(httpErr(res, data));
+      setOtpSentTo(phone);
+      setMsg('We sent a 6‑digit code (expires in 5 minutes).');
+      setTimeout(() => otpInputRef.current?.focus(), 50);
     } catch (e: any) {
-      setErr(e?.message || 'Network error while sending OTP');
-    } finally {
-      setLoading(false);
-    }
+      setErr(e?.message || 'Could not send OTP. Try again.');
+    } finally { setLoading(false); }
   }
 
-  async function verifyPhoneOtp() {
-    resetAlerts();
-    if (!/^\d{6}$/.test(otp)) {
-      setErr('Enter the 6-digit code.');
-      cellRefs.current[0]?.focus();
-      return;
-    }
-    setLoading(true);
+  async function verifyOtp() {
+    if (!otpSentTo) return;
+    setErr(null); setMsg(null); setLoading(true);
     try {
       const res = await fetch('/api/otp/verify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: e164, code: otp }),
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ phone: otpSentTo, code: otp.trim() })
       });
       const data = await safeJson(res);
-      if (!res.ok || !data?.ok) {
-        setErr(data?.error || 'Invalid or expired code');
-        return;
-      }
-      // Session will hydrate; onAuthStateChange will redirect.
-      setMsg('Securing session…');
-      console.log('analytics: otp.verify.ok');
+      if (!res.ok || data?.ok !== true) throw new Error(httpErr(res, data));
+
+      // Server sets Supabase session; redirect to onboarding
+      const session = await waitForSession();
+      if (!session) throw new Error('Session not ready. Please try again.');
+      router.replace('/onboarding?src=otp');
     } catch (e: any) {
-      setErr(e?.message || 'Network error while verifying OTP');
-      console.log('analytics: otp.verify.fail');
-    } finally {
-      setLoading(false);
-    }
+      setErr(e?.message || 'Invalid or expired code.');
+    } finally { setLoading(false); }
   }
 
-  async function resendOtp() {
-    if (cooldown > 0) return;
-    await sendPhoneOtp();
-  }
-
-  async function sendEmailMagicLink() {
-    resetAlerts();
-    if (!isEmail(email)) {
-      setErr('Enter a valid email.');
-      return;
-    }
-    setLoading(true);
+  // --------------- Actions: Magic Link ---------------
+  async function sendMagicLink() {
+    setErr(null); setMsg(null); setLoading(true);
     try {
-      const { error } = await supabase.auth.signInWithOtp({
-        email: email.trim(),
-        options: { shouldCreateUser: true, emailRedirectTo: CALLBACK },
-      });
-      if (error) {
-        setErr(error.message);
-        return;
-      }
-      setMsg("Check your email and tap the magic link. You'll return here.");
-      console.log('analytics: ml.send');
+      const { error } = await supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: `${SITE_URL || window.location.origin}/join` } });
+      if (error) throw error;
+      setMsg('Check your email and tap the magic link. You will return here.');
     } catch (e: any) {
-      setErr(e?.message || 'Network error while sending magic link');
-    } finally {
-      setLoading(false);
-    }
+      setErr(e?.message || 'Could not send magic link.');
+    } finally { setLoading(false); }
   }
 
-  // -------------- OTP Cells handlers --------------
-  const onCellChange = useCallback((idx: number, val: string) => {
-    const v = val.replace(/\D/g, '').slice(0, 1);
-    setOtpCells((prev) => {
-      const next = [...prev];
-      next[idx] = v;
-      return next;
-    });
-    if (v && idx < 5) cellRefs.current[idx + 1]?.focus();
-  }, []);
-
-  const onCellKeyDown = useCallback(
-    (idx: number, e: React.KeyboardEvent<HTMLInputElement>) => {
-      if (e.key === 'Backspace' && !otpCells[idx] && idx > 0) {
-        cellRefs.current[idx - 1]?.focus();
-      }
-    },
-    [otpCells]
-  );
-
-  const onOtpPaste = useCallback((e: React.ClipboardEvent) => {
-    const text = (e.clipboardData.getData('text') || '')
-      .replace(/\D/g, '')
-      .slice(0, 6);
-    if (text.length === 0) return;
-    e.preventDefault();
-    const filled = text.split('').concat(Array(6).fill('')).slice(0, 6);
-    setOtpCells(filled as string[]);
-    if (filled.every((c: string) => c)) cellRefs.current[5]?.blur();
-  }, []);
-
-  // -------------- UI --------------
+  // --------------- Render ----------------------------
   return (
     <main className="min-h-dvh bg-black text-white">
-      {/* Header */}
       <header className="px-6 md:px-10 pt-10 pb-6">
-        <span className="inline-block text-[10px] tracking-[0.2em] rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-sky-300/80">
-          GATISHIL NEPAL
-        </span>
-        <h1 className="mt-3 text-4xl md:text-5xl font-extrabold leading-tight">
-          Join the{' '}
-          <span className="bg-clip-text text-transparent bg-gradient-to-r from-amber-300 to-rose-300">
-            DAO Party
-          </span>
-          <br className="hidden md:block" /> of the Powerless.
-        </h1>
-        <p className="mt-3 text-slate-300/90 max-w-2xl">
-          Two simple ways: <b>Phone OTP</b> or <b>Email Magic Link</b>. After
-          verification, you&apos;ll be taken straight to onboarding.
-        </p>
+        <span className="inline-block text-[10px] tracking-[0.2em] rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-sky-300/80">GATISHILNEPAL.ORG</span>
+        <h1 className="mt-3 text-4xl md:text-5xl font-extrabold leading-tight">Join the DAO Party<br className="hidden md:block" /> of the Powerless.</h1>
+        <p className="mt-3 text-slate-300/90 max-w-2xl">Choose <b>Phone OTP</b> or <b>Email Magic Link</b>. Once verified, we’ll take you to onboarding.</p>
       </header>
 
-      {/* Card */}
       <section className="px-6 md:px-10 pb-16">
-        <div className="max-w-xl mx-auto rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl p-6 shadow-[0_0_60px_-20px_rgba(255,255,255,0.3)]">
+        <div className="max-w-xl mx-auto rounded-2xl border border-white/10 bg-white/[0.03] backdrop-blur-xl p-6 shadow-[0_0_60px_-20px_rgba(255,255,255,0.3)]">
           {/* Tabs */}
-          <div className="flex gap-2 text-sm">
-            <button
-              onClick={() => {
-                setChannel('phone');
-                resetAlerts();
-              }}
-              className={
-                'px-3 py-2 rounded-full border transition ' +
-                (channel === 'phone'
-                  ? 'bg-white text-black'
-                  : 'border-white/15 hover:bg-white/5')
-              }
-            >
-              📱 Phone
-            </button>
-            <button
-              onClick={() => {
-                setChannel('email');
-                resetAlerts();
-              }}
-              className={
-                'px-3 py-2 rounded-full border transition ' +
-                (channel === 'email'
-                  ? 'bg-white text-black'
-                  : 'border-white/15 hover:bg-white/5')
-              }
-            >
-              ✉️ Email
-            </button>
+          <div className="flex gap-2 rounded-xl bg-white/5 p-1 mb-6">
+            <button onClick={() => setTab('phone')} className={`flex-1 px-4 py-2 rounded-lg text-sm font-semibold ${tab==='phone' ? 'bg-white text-black' : 'text-slate-300'}`}>Phone OTP</button>
+            <button onClick={() => setTab('email')} className={`flex-1 px-4 py-2 rounded-lg text-sm font-semibold ${tab==='email' ? 'bg-white text-black' : 'text-slate-300'}`}>Email Link</button>
           </div>
 
-          {/* PHONE FLOW — Nepal default, simple UI */}
-          {channel === 'phone' && (
-            <div className="mt-4 space-y-4">
-              {/* Country — hidden by default (Nepal preselected) */}
-              <div>
-                <div className="flex items-center justify-between">
-                  <p className="text-xs text-slate-300/70">
-                    Nepal (+977) is set by default. Change if needed.
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => setShowCountryPicker((v) => !v)}
-                    className="text-xs underline opacity-80 hover:opacity-100"
-                  >
-                    {showCountryPicker ? 'Hide country' : 'Change country'}
-                  </button>
-                </div>
-
-                {showCountryPicker && (
-                  <div className="mt-2">
-                    <input
-                      value={countryQuery}
-                      onChange={(e) => setCountryQuery(e.target.value)}
-                      placeholder="Search country"
-                      className="w-full rounded-xl bg-transparent border border-white/15 px-3 py-2 placeholder:text-slate-400 mb-2"
-                      aria-label="Search country"
-                    />
-                    <select
-                      value={country.dial}
-                      onChange={(e) => {
-                        const next =
-                          (COUNTRIES as Country[]).find(
-                            (c) => c.dial === e.target.value
-                          ) || getDefaultCountry();
-                        setCountry(next);
-                      }}
-                      className="w-full rounded-xl bg-transparent border border-white/15 px-3 py-2"
-                      aria-label="Select country code"
-                    >
-                      {(COUNTRIES as Country[])
-                        .filter((c) =>
-                          (c.name + c.dial + c.flag)
-                            .toLowerCase()
-                            .includes(countryQuery.toLowerCase())
-                        )
-                        .map((c, i) => (
-                          <option
-                            key={`${c.dial}-${i}`}
-                            value={c.dial}
-                            className="bg-slate-900"
-                          >
-                            {c.flag} {c.name} (+{c.dial})
-                          </option>
-                        ))}
-                    </select>
-                  </div>
-                )}
-              </div>
-
-              {/* Phone number */}
-              <div>
-                <label className="block text-xs text-slate-300/70 mb-1">
-                  Phone
-                </label>
-                <div className="flex gap-2">
-                  <div className="min-w-[110px] rounded-xl border border-white/15 px-3 py-2 text-slate-300/90">
-                    +{country.dial}
-                  </div>
-                  <input
-                    value={localNumber}
-                    onChange={(e) => setLocalNumber(e.target.value)}
-                    placeholder={country.dial === '977' ? '98XXXXXXXX' : 'Your number'}
-                    inputMode="numeric"
-                    className="flex-1 rounded-xl bg-transparent border border-white/15 px-3 py-2 placeholder:text-slate-400"
-                    aria-label="Local phone number"
-                  />
-                </div>
-              </div>
-
-              {/* Send OTP button */}
-              <button
-                onClick={sendPhoneOtp}
-                disabled={loading}
-                className="w-full px-4 py-3 rounded-2xl bg-amber-400 text-black font-semibold disabled:opacity-60"
-              >
-                {loading ? 'Sending…' : 'Send OTP'}
-              </button>
-
-              {/* Helper / Errors */}
-              <div className="mt-2 space-y-2">
-                <p className="text-[11px] text-slate-400">
-                  We’ll text a 6-digit code. Message & data rates may apply.
-                </p>
-                {msg && <p className="text-xs text-emerald-300">{msg}</p>}
-                {err && <p className="text-xs text-rose-300">{err}</p>}
-              </div>
-
-              {/* Code inputs */}
-              <div className="mt-3">
-                <label className="block text-xs text-slate-300/70 mb-1">
-                  Enter 6-digit code
-                </label>
-                <div className="flex gap-2" onPaste={onOtpPaste}>
-                  {otpCells.map((v, i) => (
-                    <input
-                      key={i}
-                      ref={(el) => {
-                        cellRefs.current[i] = el;
-                      }}
-                      value={v}
-                      onChange={(e) => onCellChange(i, e.target.value)}
-                      onKeyDown={(e) => onCellKeyDown(i, e)}
-                      inputMode="numeric"
-                      maxLength={1}
-                      className="w-10 h-12 text-center rounded-xl bg-transparent border border-white/15 placeholder:text-slate-400"
-                      aria-label={`Digit ${i + 1}`}
-                    />
+          {tab === 'phone' && (
+            <div>
+              <label className="block text-xs text-slate-300/70 mb-1">Phone</label>
+              <div className="flex gap-2">
+                <select
+                  value={country.dial}
+                  onChange={(e) => {
+                    const next = (COUNTRIES as Country[]).find(c => c.dial === e.target.value) || (COUNTRIES[0] as Country);
+                    setCountry(next);
+                  }}
+                  className="rounded-xl bg-transparent border border-white/15 px-3 py-2"
+                  aria-label="Select country code"
+                >
+                  {(COUNTRIES as Country[]).map((c, i) => (
+                    <option key={`${c.dial}-${i}`} value={c.dial} className="bg-slate-900">{c.flag} {c.name} (+{c.dial})</option>
                   ))}
-                </div>
-                <div className="mt-3 flex items-center gap-3">
-                  <button
-                    onClick={verifyPhoneOtp}
-                    disabled={loading}
-                    className="flex-1 px-4 py-3 rounded-2xl bg-amber-400 text-black font-semibold disabled:opacity-60"
-                  >
-                    {loading ? 'Verifying…' : 'Verify'}
-                  </button>
-                  <button
-                    onClick={resendOtp}
-                    disabled={cooldown > 0}
-                    className="px-3 py-3 rounded-2xl border border-white/15 disabled:opacity-60"
-                  >
-                    {cooldown > 0 ? `Resend in ${cooldown}s` : 'Resend'}
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* EMAIL FLOW */}
-          {channel === 'email' && (
-            <div className="mt-4 space-y-3">
-              <div>
-                <label className="block text-xs text-slate-300/70 mb-1">
-                  Email
-                </label>
+                </select>
                 <input
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="you@example.com"
-                  className="w-full rounded-xl bg-transparent border border-white/15 px-3 py-2 placeholder:text-slate-400"
-                  aria-label="Email address"
+                  ref={phoneInputRef}
+                  inputMode="tel"
+                  autoComplete="tel"
+                  value={phoneRaw}
+                  onChange={(e) => setPhoneRaw(e.target.value)}
+                  placeholder="98••••••••"
+                  className="flex-1 rounded-xl bg-transparent border border-white/15 px-3 py-2 outline-none"
+                  aria-label="Phone number"
                 />
               </div>
-              <button
-                onClick={sendEmailMagicLink}
-                disabled={loading}
-                className="w-full px-4 py-3 rounded-2xl bg-amber-400 text-black font-semibold disabled:opacity-60"
-              >
-                {loading ? 'Sending…' : 'Send Magic Link'}
-              </button>
-              {msg && <p className="text-xs text-emerald-300">{msg}</p>}
-              {err && <p className="text-xs text-rose-300">{err}</p>}
-              <p className="text-[11px] text-slate-400">
-                After you tap the link, you&apos;ll return here and we&apos;ll open
-                onboarding automatically.
-              </p>
+
+              {!otpSentTo ? (
+                <button onClick={sendOtp} disabled={loading || !phoneRaw.trim()} className="mt-4 w-full px-4 py-3 rounded-2xl bg-emerald-400 text-black font-semibold disabled:opacity-60">{loading ? 'Sending…' : 'Send OTP'}</button>
+              ) : (
+                <div className="mt-4">
+                  <label className="block text-xs text-slate-300/70 mb-1">Enter 6‑digit code sent to <b>{otpSentTo}</b></label>
+                  <input
+                    ref={otpInputRef}
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    value={otp}
+                    onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                    placeholder="••••••"
+                    className="w-full rounded-xl bg-transparent border border-white/15 px-3 py-2 outline-none tracking-widest text-center"
+                    aria-label="One-time code"
+                  />
+                  <div className="flex gap-2 mt-3">
+                    <button onClick={verifyOtp} disabled={loading || otp.length !== 6} className="flex-1 px-4 py-3 rounded-2xl bg-white text-black font-semibold disabled:opacity-60">Verify & Continue</button>
+                    <button onClick={() => { setOtpSentTo(null); setOtp(''); setMsg(null); setErr(null); }} className="px-4 py-3 rounded-2xl border border-white/15">Change number</button>
+                  </div>
+                </div>
+              )}
+
+              <p className="text-[11px] text-slate-400 mt-2">We never show whether a number exists—generic errors protect your privacy.</p>
             </div>
           )}
-        </div>
 
-        {/* Footer hint */}
-        <p className="mt-6 text-center text-[11px] text-slate-500">
-          By continuing, you agree to our Terms and Privacy.
-        </p>
+          {tab === 'email' && (
+            <div>
+              <label className="block text-xs text-slate-300/70 mb-1">Email</label>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@example.com"
+                className="w-full rounded-xl bg-transparent border border-white/15 px-3 py-2 outline-none"
+                aria-label="Email address"
+              />
+              <button onClick={sendMagicLink} disabled={loading || !email.trim()} className="mt-4 w-full px-4 py-3 rounded-2xl bg-amber-400 text-black font-semibold disabled:opacity-60">{loading ? 'Sending…' : 'Send Magic Link'}</button>
+              <p className="text-[11px] text-slate-400 mt-2">Tap the link in your email. You’ll return here and we’ll redirect you to onboarding.</p>
+            </div>
+          )}
+
+          {!!msg && <p className="mt-4 text-xs text-emerald-300">{msg}</p>}
+          {!!err && <p className="mt-2 text-xs text-rose-300">{err}</p>}
+        </div>
       </section>
     </main>
   );
 }
 
-/* ---------------- Utilities ---------------- */
+/** Fetch helpers */
 async function safeJson(res: Response): Promise<any> {
   const ct = res.headers.get('content-type') || '';
-  if (ct.includes('application/json')) {
-    try {
-      return await res.json();
-    } catch {
-      return {};
-    }
-  }
+  if (ct.includes('application/json')) { try { return await res.json(); } catch { return {}; } }
   const txt = await res.text().catch(() => '');
-  try {
-    return JSON.parse(txt);
-  } catch {
-    return { raw: txt };
-  }
+  try { return JSON.parse(txt); } catch { return { raw: txt }; }
 }
 function httpErr(res: Response, data: any) {
   return (data && (data.error || data.message || data.raw)) || `HTTP ${res.status}`;
-}
-function maskLocalForHint(local: string) {
-  const digits = (local || '').replace(/\D/g, '');
-  if (digits.length < 2) return '••••••••';
-  return `${digits.slice(0, 2)}••••••••`;
 }
