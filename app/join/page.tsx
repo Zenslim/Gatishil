@@ -1,4 +1,4 @@
-// app/join/page.tsx — Join with searchable Country Picker (uses your COUNTRIES only)
+// app/join/page.tsx — Join with crash-proof Country Picker (names + flags fixed, alignment polished)
 'use client';
 
 import { Suspense, useEffect, useMemo, useState } from 'react';
@@ -6,23 +6,40 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import OnboardingFlow from '@/components/OnboardingFlow';
 import { createClient } from '@supabase/supabase-js';
 
-// ✅ Use your canonical list. Ensure it exports an array of country-like objects.
+// Your canonical country list:
 import { COUNTRIES as RAW_COUNTRIES } from '@/app/data/countries';
 
 type RawCountry = Record<string, any>;
 type Country = { flag: string; name: string; dial: string };
 
-// Robust normalizer → handles mixed keys (name/label/country, dial/phone/code, flag/emoji).
-function normalizeCountry(c: RawCountry): Country {
-  const name = (c.name ?? c.label ?? c.country ?? '').toString();
-  const dial = String((c.dial ?? c.phone ?? c.code ?? '')).replace(/^\+/, '');
-  const flag = (c.flag ?? c.emoji ?? '').toString();
+// Minimal built-in safety net so the UI never crashes even if RAW_COUNTRIES is empty/badly shaped.
+const FALLBACK: Country[] = [
+  { flag: '🇳🇵', name: 'Nepal', dial: '977' },
+  { flag: '🇮🇳', name: 'India', dial: '91' },
+  { flag: '🇺🇸', name: 'United States', dial: '1' },
+  { flag: '🇦🇪', name: 'United Arab Emirates', dial: '971' },
+  { flag: '🇬🇧', name: 'United Kingdom', dial: '44' },
+];
+
+// Normalize many possible shapes (name/label/country, dial/phone/code, flag/emoji).
+function normalizeCountry(c: RawCountry): Country | null {
+  if (!c || typeof c !== 'object') return null;
+  const name = String(c.name ?? c.label ?? c.country ?? '').trim();
+  const dialRaw = c.dial ?? c.phone ?? c.code ?? '';
+  const dial = String(dialRaw).replace(/^\+/, '').trim();
+  const flag = String(c.flag ?? c.emoji ?? '🏳️').trim(); // placeholder if missing
+  if (!name || !dial) return null;
   return { name, dial, flag };
 }
 
-const COUNTRIES: Country[] = (RAW_COUNTRIES as RawCountry[])
-  .map(normalizeCountry)
-  .filter((c) => c.name && c.dial);
+function getSafeCountries(): Country[] {
+  const normalized = (Array.isArray(RAW_COUNTRIES) ? RAW_COUNTRIES : [])
+    .map(normalizeCountry)
+    .filter(Boolean) as Country[];
+  return normalized.length ? normalized : FALLBACK;
+}
+
+const COUNTRIES: Country[] = getSafeCountries();
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -60,9 +77,9 @@ function JoinPageInner() {
   const [phase, setPhase] = useState<Phase>('auth');
   const [channel, setChannel] = useState<Channel>('phone');
 
-  // Country picker
+  // Country picker state (always has a safe default)
   const defaultCountry =
-    COUNTRIES.find((c) => c.dial === '977') || COUNTRIES[0];
+    COUNTRIES.find((c) => c.dial === '977') || COUNTRIES[0] || { flag: '🏳️', name: 'Country', dial: '1' };
   const [country, setCountry] = useState<Country>(defaultCountry);
   const [showPicker, setShowPicker] = useState(false);
   const [query, setQuery] = useState('');
@@ -71,7 +88,7 @@ function JoinPageInner() {
   const [localNumber, setLocalNumber] = useState('');
   const e164 = useMemo(() => {
     const digits = (localNumber || '').replace(/\D/g, '');
-    return digits ? `+${country.dial}${digits}` : '';
+    return digits ? `+${(country?.dial ?? '1')}${digits}` : '';
   }, [country, localNumber]);
 
   const [otp, setOtp] = useState('');
@@ -273,7 +290,7 @@ function JoinPageInner() {
               <div>
                 <label className="block text-xs text-slate-300/70 mb-1">Phone</label>
 
-                {/* Mobile: stacked; md+: two columns (alignment fixed). */}
+                {/* Mobile: stacked; md+: two columns (alignment correct). */}
                 <div className="mt-1 grid grid-cols-1 gap-2 md:grid-cols-[minmax(11rem,14rem)_1fr] items-stretch">
                   <button
                     type="button"
@@ -282,9 +299,9 @@ function JoinPageInner() {
                     onClick={() => { setQuery(''); setShowPicker(true); }}
                   >
                     <div className="flex items-center gap-2">
-                      <span className="text-xl">{country.flag}</span>
-                      <span className="font-medium">{country.name}</span>
-                      <span className="opacity-70">( +{country.dial} )</span>
+                      <span className="text-xl">{country?.flag ?? '🏳️'}</span>
+                      <span className="font-medium">{country?.name ?? 'Country'}</span>
+                      <span className="opacity-70">( +{country?.dial ?? '1'} )</span>
                     </div>
                   </button>
 
@@ -298,7 +315,7 @@ function JoinPageInner() {
                 </div>
 
                 <div className="text-xs opacity-70 mt-1">
-                  Will send OTP to <code>{e164 || `+${country.dial}…`}</code>
+                  Will send OTP to <code>{e164 || `+${country?.dial ?? '1'}…`}</code>
                 </div>
               </div>
 
@@ -367,7 +384,7 @@ function JoinPageInner() {
         </div>
       </section>
 
-      {/* Country Picker Sheet */}
+      {/* Country Picker Sheet (full-screen on mobile, panel on desktop) */}
       {showPicker && (
         <div role="dialog" aria-modal="true" className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm">
           <div className="absolute inset-x-0 bottom-0 top-0 md:top-10 md:inset-x-1/2 md:-translate-x-1/2 md:w-[420px] rounded-t-2xl md:rounded-2xl bg-slate-900/95 border border-white/10 shadow-2xl overflow-hidden flex flex-col">
@@ -397,10 +414,7 @@ function JoinPageInner() {
                 .filter((c) => {
                   const q = query.trim().toLowerCase();
                   if (!q) return true;
-                  return (
-                    c.name.toLowerCase().includes(q) ||
-                    c.dial.includes(q.replace(/^\+/, ''))
-                  );
+                  return c.name.toLowerCase().includes(q) || c.dial.includes(q.replace(/^\+/, ''));
                 })
                 .map((c, idx) => (
                   <button
@@ -408,9 +422,9 @@ function JoinPageInner() {
                     className="w-full text-left flex items-center gap-4 px-4 py-3 rounded-xl hover:bg-white/5 focus:bg-white/10"
                     onClick={() => { setCountry(c); setShowPicker(false); }}
                   >
-                    <div className="text-2xl w-8 text-center">{c.flag}</div>
+                    <div className="text-2xl w-8 text-center">{c.flag || '🏳️'}</div>
                     <div className="flex-1">
-                      <div className="font-medium">{c.name}</div>
+                      <div className="font-medium">{c.name || 'Unknown'}</div>
                       <div className="text-xs opacity-70">+{c.dial}</div>
                     </div>
                   </button>
