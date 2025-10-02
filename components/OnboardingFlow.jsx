@@ -2,7 +2,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
+import { supabase } from "@/lib/supabaseClient"; // ✅ use your existing client
 import { STRINGS } from "@/app/onboard/strings";
 import WelcomeStep from "./onboard/WelcomeStep";
 import NameFaceStep from "./onboard/NameFaceStep";
@@ -11,11 +11,10 @@ import IkigaiStep from "./onboard/IkigaiStep";
 
 export default function OnboardingFlow({ lang = "en" }) {
   const t = STRINGS[lang] || STRINGS.en;
-  const supabase = createClientComponentClient();
 
   const STEP_ORDER = ["welcome", "nameFace", "roots", "ikigai"];
 
-  // Decide the initial step based on URL (?step=) or source (?src=join)
+  // Decide initial step from URL (?step=) or source (?src=join)
   const getInitialStep = () => {
     if (typeof window === "undefined") return STEP_ORDER[0];
     const qp = new URLSearchParams(window.location.search);
@@ -29,17 +28,29 @@ export default function OnboardingFlow({ lang = "en" }) {
   const [step, setStep] = useState(getInitialStep());
   const [authed, setAuthed] = useState(false);
 
-  // Auth gate: require OTP/Magic Link session
+  // Require OTP/Magic Link session
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => setAuthed(Boolean(data.session)));
-  }, [supabase]);
+    let mounted = true;
+    supabase.auth.getSession().then(({ data }) => {
+      if (!mounted) return;
+      setAuthed(Boolean(data?.session));
+    });
+    const { data: sub } = supabase.auth.onAuthStateChange((_e, session) => {
+      if (!mounted) return;
+      setAuthed(Boolean(session));
+    });
+    return () => {
+      mounted = false;
+      sub?.subscription?.unsubscribe?.();
+    };
+  }, []);
 
-  // Safe, ordered navigation + keeps query params (preserves src=join)
+  // Ordered navigation + keep query params (preserves src=join)
   const goTo = (next) => {
     const currIdx = STEP_ORDER.indexOf(step);
     const nextIdx = STEP_ORDER.indexOf(next);
-    if (nextIdx === -1) return;            // unknown step
-    if (nextIdx > currIdx + 1) return;     // prevent skipping ahead
+    if (nextIdx === -1) return;         // unknown step
+    if (nextIdx > currIdx + 1) return;  // prevent skipping ahead
     setStep(next);
     if (typeof window !== "undefined") {
       const qp = new URLSearchParams(window.location.search);
