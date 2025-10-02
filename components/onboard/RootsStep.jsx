@@ -1,18 +1,33 @@
-import { useEffect, useState } from "react";
+"use client";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { createClient } from "@supabase/supabase-js";
 import ChautariLocationPicker from "../ChautariLocationPicker";
 
 /**
- * RootsStep.jsx
- * Wrapper step that uses ChautariLocationPicker and persists to Supabase.
- *
- * Props:
- *  - supabase: Supabase client (required)
- *  - onNext?: optional callback after successful save
- *  - initialValue?: prefilled roots_json
+ * RootsStep.jsx — Self-sufficient
+ * - Auto-creates a Supabase browser client if none provided
+ * - Avoids calling `supabase.auth` when client is undefined
  */
-export default function RootsStep({ supabase, onNext, initialValue = null }) {
+export default function RootsStep({ supabase: supabaseProp, onNext, initialValue = null }) {
   const router = useRouter();
+  const supabaseRef = useRef(null);
+  if (!supabaseRef.current) {
+    if (supabaseProp) {
+      supabaseRef.current = supabaseProp;
+    } else if (typeof window !== "undefined" && process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+      supabaseRef.current = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+        { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } }
+      );
+      console.info("[RootsStep] Using internal Supabase client.");
+    } else {
+      console.warn("[RootsStep] No Supabase client available.");
+    }
+  }
+  const supabase = supabaseRef.current;
+
   const [value, setValue] = useState(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -24,9 +39,10 @@ export default function RootsStep({ supabase, onNext, initialValue = null }) {
     setSaving(true);
     setError("");
     try {
-      const { data: userRes, error: authErr } = await supabase.auth.getUser();
-      if (authErr || !userRes?.user?.id) throw new Error("Not signed in");
-      const userId = userRes.user.id;
+      if (!supabase) throw new Error("Supabase client unavailable");
+      const { data: session } = await supabase.auth.getSession();
+      const userId = session?.session?.user?.id;
+      if (!userId) throw new Error("Please sign in first.");
       const { error: upErr } = await supabase
         .from("profiles")
         .update({ roots_json: value })
