@@ -1,22 +1,38 @@
-import { useEffect, useMemo, useState } from "react";
+"use client";
+import { useEffect, useMemo, useState, useRef } from "react";
+import { createClient } from "@supabase/supabase-js";
 
 /**
- * ChautariLocationPicker.jsx
- * Progressive disclosure picker for Nepal (Province→District→Palika→Ward→Tole REQUIRED)
- * or Abroad (Country→City REQUIRED).
- *
- * Props:
- *  - supabase: Supabase client (required)
- *  - initialValue: an optional prefilled roots_json-like object
- *  - onChange(value|null): emits null until the REQUIRED final field is present
- *  - disabled: boolean
+ * ChautariLocationPicker.jsx (self-sufficient)
+ * - If a Supabase client isn't provided via props, it will create a browser client
+ *   using NEXT_PUBLIC_SUPABASE_URL + NEXT_PUBLIC_SUPABASE_ANON_KEY.
  */
 export default function ChautariLocationPicker({
-  supabase,
+  supabase: supabaseProp,
   initialValue = null,
   onChange = () => {},
   disabled = false,
 }) {
+  // Fallback Supabase client (browser) if not provided
+  const supabaseRef = useRef(null);
+  if (!supabaseRef.current) {
+    if (supabaseProp) {
+      supabaseRef.current = supabaseProp;
+    } else if (typeof window !== "undefined" && process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+      supabaseRef.current = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+        { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } }
+      );
+      // eslint-disable-next-line no-console
+      console.info("[ChautariLocationPicker] Using internal Supabase client.");
+    } else {
+      // eslint-disable-next-line no-console
+      console.warn("[ChautariLocationPicker] No Supabase client available.");
+    }
+  }
+  const supabase = supabaseRef.current;
+
   const [abroad, setAbroad] = useState(
     initialValue?.type === "city" ? true : false
   );
@@ -68,15 +84,15 @@ export default function ChautariLocationPicker({
     setWardId("");
     setToleId("");
     setToleText("");
-
     if (!provinceId || !supabase) { setDistricts([]); return; }
     let ignore = false;
     (async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("districts")
         .select("id,name")
         .eq("province_id", provinceId)
         .order("name");
+      if (error) console.error("districts load error", error);
       if (!ignore) setDistricts(data ?? []);
     })();
     return () => { ignore = true; };
@@ -90,11 +106,12 @@ export default function ChautariLocationPicker({
     if (!districtId || !supabase) { setLocalLevels([]); return; }
     let ignore = false;
     (async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("local_levels")
         .select("id,name")
         .eq("district_id", districtId)
         .order("name");
+      if (error) console.error("local_levels load error", error);
       if (!ignore) setLocalLevels(data ?? []);
     })();
     return () => { ignore = true; };
@@ -107,11 +124,12 @@ export default function ChautariLocationPicker({
     if (!localLevelId || !supabase) { setWards([]); return; }
     let ignore = false;
     (async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("wards")
         .select("id,ward_no")
         .eq("local_level_id", localLevelId)
         .order("ward_no");
+      if (error) console.error("wards load error", error);
       if (!ignore) setWards(data ?? []);
     })();
     return () => { ignore = true; };
@@ -123,11 +141,12 @@ export default function ChautariLocationPicker({
     if (!wardId || !supabase) { setToles([]); return; }
     let ignore = false;
     (async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("toles")
         .select("id,name,status")
         .eq("ward_id", wardId)
         .order("name");
+      if (error) console.error("toles load error", error);
       if (!ignore) setToles(data ?? []);
     })();
     return () => { ignore = true; };
@@ -140,25 +159,23 @@ export default function ChautariLocationPicker({
     if (!countryCode || !supabase) { setCities([]); return; }
     let ignore = false;
     (async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("cities")
         .select("id,name,status")
         .eq("country_code", countryCode)
         .order("name");
+      if (error) console.error("cities load error", error);
       if (!ignore) setCities(data ?? []);
     })();
     return () => { ignore = true; };
   }, [countryCode, supabase]);
 
-  // Toggle behavior
   const onToggleAbroad = (checked) => {
     setAbroad(checked);
-    // Clear both paths appropriately
     setProvinceId(""); setDistrictId(""); setLocalLevelId(""); setWardId(""); setToleId(""); setToleText("");
     setCountryCode(""); setCityId(""); setCityText("");
   };
 
-  // Compose label for summary and payload
   const summaryLabel = useMemo(() => {
     if (abroad) {
       const c = countries.find((x) => (x.code ?? x.name) === countryCode)?.name || "";
@@ -195,7 +212,6 @@ export default function ChautariLocationPicker({
       }
       return;
     }
-    // Nepal path
     const hasTole = (toleId && String(toleId).length > 0) || (toleText && toleText.trim().length > 0);
     if (provinceId && districtId && localLevelId && wardId && hasTole) {
       onChange({
@@ -218,8 +234,8 @@ export default function ChautariLocationPicker({
     summaryLabel, onChange
   ]);
 
-  // Add-missing handlers
   const handleAddTole = async (name) => {
+    if (!supabase) return;
     if (!name?.trim() || !wardId) return;
     const { data: userRes } = await supabase.auth.getUser();
     const userId = userRes?.user?.id ?? null;
@@ -231,13 +247,13 @@ export default function ChautariLocationPicker({
       setToleId(String(data[0].id));
       setToleText("");
     } else {
-      // fall back to text
       setToleId("");
       setToleText(name.trim());
     }
   };
 
   const handleAddCity = async (name) => {
+    if (!supabase) return;
     if (!name?.trim() || !countryCode) return;
     const { data: userRes } = await supabase.auth.getUser();
     const userId = userRes?.user?.id ?? null;
@@ -254,7 +270,6 @@ export default function ChautariLocationPicker({
     }
   };
 
-  // UI helpers
   const Select = ({ label, value, onChange, children, placeholder }) => (
     <div className="mb-3">
       <label className="block text-sm text-neutral-400 mb-1">{label}</label>
@@ -267,6 +282,9 @@ export default function ChautariLocationPicker({
         <option value="">{placeholder}</option>
         {children}
       </select>
+      {!children || (Array.isArray(children) && children.length === 0) ? (
+        <p className="text-xs text-neutral-500 mt-1">No options found. Check permissions or seed data.</p>
+      ) : null}
     </div>
   );
 
