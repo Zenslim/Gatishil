@@ -1,19 +1,21 @@
 // app/onboard/page.tsx
-'use client';
-import { useEffect, useState } from 'react';
-import { unstable_noStore as noStore } from 'next/cache';
-import { useRouter, useSearchParams } from 'next/navigation';
-import { supabase } from '@/lib/supabaseClient';
+"use client";
 
-export const dynamic = 'force-dynamic';
-export const fetchCache = 'force-no-store';
+import { useEffect, useState } from "react";
+import { unstable_noStore as noStore } from "next/cache";
+import { useSearchParams } from "next/navigation";
+import { supabase } from "@/lib/supabaseClient";
+import OnboardingFlow from "@/components/OnboardingFlow";
+
+export const dynamic = "force-dynamic";
+export const fetchCache = "force-no-store";
 
 async function waitForSession(maxMs = 15000) {
   const start = Date.now();
   while (Date.now() - start < maxMs) {
     const { data } = await supabase.auth.getSession();
     if (data?.session) return data.session;
-    await new Promise(r => setTimeout(r, 200));
+    await new Promise((r) => setTimeout(r, 200));
   }
   return null;
 }
@@ -21,15 +23,15 @@ async function waitForSession(maxMs = 15000) {
 export default function OnboardPage() {
   noStore();
 
-  const router = useRouter();
-  const searchParams = useSearchParams();          // ✅ keep the object
-  const src = searchParams.get('src') ?? 'unknown';// ✅ call method on it
+  const searchParams = useSearchParams();
+  const lang = (searchParams.get("lang") as "en" | "np") || "en";
 
   const [loading, setLoading] = useState(true);
   const [sessionOk, setSessionOk] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
+
     const sub = supabase.auth.onAuthStateChange((_evt, sess) => {
       if (!cancelled && sess) {
         setSessionOk(true);
@@ -63,7 +65,10 @@ export default function OnboardPage() {
     return (
       <main className="min-h-dvh flex flex-col items-center justify-center gap-3 bg-black text-white">
         <div className="text-slate-200">We couldn’t detect your session yet.</div>
-        <button onClick={() => window.location.reload()} className="px-4 py-2 rounded-xl bg-white text-black font-semibold">
+        <button
+          onClick={() => window.location.reload()}
+          className="px-4 py-2 rounded-xl bg-white text-black font-semibold"
+        >
           Reload and continue
         </button>
         <p className="text-xs text-slate-400">If this persists, try the link again.</p>
@@ -71,13 +76,10 @@ export default function OnboardPage() {
     );
   }
 
+  // ✅ Render the actual flow (it reads ?src=join and ?step= via its tiny router)
   return (
-    <main className="min-h-dvh bg-black text-white">
-      <section className="p-8">
-        <h1 className="text-3xl font-bold">Onboarding</h1>
-        <p className="mt-2 text-slate-300">src = {src}</p>
-        {/* your onboarding flow */}
-      </section>
+    <main className="min-h-dvh bg-white text-black">
+      <OnboardingFlow lang={lang} />
     </main>
   );
 }
