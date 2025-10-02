@@ -1,7 +1,7 @@
 /* styles/OnboardFX.module.css */
 
-/* CSS Modules require globals to be wrapped */
-:global(:root) {
+/* Scope design tokens to a local class (CSS Modules friendly) */
+.theme {
   --glow: 0 0 30px rgba(255,255,255,.18), 0 0 80px rgba(99,102,241,.18);
   --ring: 0 0 0 2px rgba(255,255,255,.1), 0 0 0 6px rgba(99,102,241,.08);
 }
