@@ -1,4 +1,3 @@
-// app/onboard/strings.ts
 export const STRINGS = {
   en: {
     welcome: {
