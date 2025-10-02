@@ -1,3 +1,4 @@
+// components/OnboardingFlow.jsx
 "use client";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
@@ -28,8 +29,8 @@ export default function OnboardingFlow({ lang = "en" }) {
   useEffect(() => {
     let mounted = true;
     supabase.auth.getSession().then(({ data }) => mounted && setAuthed(!!data?.session));
-    const { data: sub } = supabase.auth.onAuthStateChange((_e, session)=> mounted && setAuthed(!!session));
-    return () => { mounted=false; sub?.subscription?.unsubscribe?.(); };
+    const { data: sub } = supabase.auth.onAuthStateChange((_e, session) => mounted && setAuthed(!!session));
+    return () => { mounted = false; sub?.subscription?.unsubscribe?.(); };
   }, []);
 
   const goTo = (next) => {
@@ -40,15 +41,18 @@ export default function OnboardingFlow({ lang = "en" }) {
     window.history.replaceState(null,"",`?${qp.toString()}`);
   };
 
-  const stepIndex = useMemo(()=>STEP_ORDER.indexOf(step),[step]);
-  if (!authed) return (
-    <div className="mx-6 mt-6 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-gray-200">
-      Use OTP/Magic Link to sign in, then return here.
-    </div>
-  );
+  const stepIndex = useMemo(() => STEP_ORDER.indexOf(step), [step]);
+
+  if (!authed) {
+    return (
+      <div className="mx-6 mt-6 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-gray-200">
+        Use OTP/Magic Link to sign in, then return here.
+      </div>
+    );
+  }
 
   return (
-    <div className="relative">
+    <div className={styles.theme}>{/* <-- variables are scoped here */}
       <div className={styles.starfield} />
       <header className={`sticky top-0 z-10 ${styles.headerShadow}`}>
         <div className="mx-auto flex max-w-3xl items-center justify-between px-6 py-4">
