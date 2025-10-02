@@ -1,350 +1,211 @@
-import React, { useEffect, useState } from "react";
-import { createClient } from "@supabase/supabase-js";
-import { useRouter } from "next/router";
+/* JanmandalStep.jsx — five-orb soul-imprint after Roots
+   Saves to profiles: hands[], gifts[], fire[], heart[], journey (enum), vision (text)
+*/
+import React, { useMemo, useState, useEffect } from 'react'
+import { supabase } from '@/lib/supabaseClient'
+import { starterChips, whisperQs } from '@/lib/janmandalSeeds'
 
-/**
- * Janmandal (5 mahābhūta) soul-imprint onboarding
- * Earth/Hands = work that sustains you
- * Water/Gifts = skills that flow naturally
- * Fire/Passion = what makes you feel alive
- * Air/Heart   = needs/compassion you’re drawn to
- * Space/Journey = season (rooted/branching/sapling/searching) + optional vision
- *
- * Notes
- * - English copy placeholders; swap to Nepali globally later.
- * - Unlimited chips; users can choose from starters or add their own.
- * - Autosaves to profiles.{hands,gifts,fire,heart,journey,vision} if those columns exist.
- *   If your schema is different, adjust the `save()` field names below (no other code changes needed).
- */
+const Orb = ({label, icon, color, active, onClick}) => (
+  <button
+    onClick={onClick}
+    className={`rounded-full w-28 h-28 md:w-32 md:h-32 flex items-center justify-center shadow-lg transition-all duration-300
+      ${active ? 'ring-4 ring-amber-400 scale-105' : 'ring-2 ring-white/20'} 
+      ${color}`}
+    aria-label={label}
+  >
+    <span className="text-2xl">{icon}</span>
+  </button>
+)
 
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const SUPABASE_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+const Chip = ({text, onRemove}) => (
+  <span className="inline-flex items-center px-3 py-1 rounded-full bg-white/10 text-white mr-2 mb-2">
+    {text}
+    <button className="ml-2 text-white/70 hover:text-white" onClick={onRemove} aria-label={`remove ${text}`}>×</button>
+  </span>
+)
 
-const pick = (arr) => (arr && arr.length ? arr[Math.floor(Math.random() * arr.length)] : "");
+const TagInput = ({value, setValue, onAdd, placeholder}) => (
+  <div className="flex gap-2">
+    <input
+      value={value}
+      onChange={(e)=>setValue(e.target.value)}
+      onKeyDown={(e)=>{ if(e.key==='Enter' && value.trim()){ onAdd(value.trim()); setValue('') } }}
+      placeholder={placeholder}
+      className="w-full bg-white/10 text-white placeholder-white/60 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-amber-400"
+    />
+    <button
+      onClick={()=>{ if(value.trim()){ onAdd(value.trim()); setValue('') } }}
+      className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-medium"
+    >Add</button>
+  </div>
+)
 
-const PROMPTS = {
-  hands: [
-    "What work sustains you right now?",
-    "What are your hands busy with these days?",
-    "When you wake up, what do your hands first do?",
-    "What does your work give to others?",
-  ],
-  gifts: [
-    "What feels easy to you but hard for others?",
-    "What do people often call you for help with?",
-    "What natural gift do you carry?",
-    "What flows naturally like water for you?",
-  ],
-  fire: [
-    "What makes you lose track of time?",
-    "What makes you feel truly alive?",
-    "What lights up your face?",
-    "What pulls your heart without force?",
-  ],
-  heart: [
-    "What suffering around you burns your heart?",
-    "Who do you feel pulled to help?",
-    "What need do you see in your community?",
-    "What breaks your heart when you see it?",
-  ],
-  journey: [
-    "Which season are you in now — rooting, branching, learning, or searching?",
-    "What direction is calling you in this season?",
-  ],
-  affirmations: [
-    "This is your first Janmandal.",
-    "The light you gave now lives in our shared sky.",
-    "We see you — welcome to the Chautari.",
-  ],
-};
+const JourneyPicker = ({journey, setJourney, vision, setVision}) => (
+  <div className="space-y-3">
+    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      {['rooted','branching','sapling','searching'].map(opt => (
+        <button
+          key={opt}
+          onClick={()=>setJourney(opt)}
+          className={`px-3 py-3 rounded-xl border text-left transition
+            ${journey===opt ? 'bg-amber-500 text-black border-transparent' : 'border-white/20 hover:border-amber-400 text-white'}`}
+        >
+          <div className="font-semibold capitalize">{opt}</div>
+          <div className="text-sm opacity-80">
+            {opt==='rooted' && 'Settling, building base'}
+            {opt==='branching' && 'Expanding, taking new roles'}
+            {opt==='sapling' && 'Learning, growing skills'}
+            {opt==='searching' && 'Exploring, finding direction'}
+          </div>
+        </button>
+      ))}
+    </div>
+    {(journey==='branching'||journey==='sapling'||journey==='searching') && (
+      <input
+        value={vision}
+        onChange={(e)=>setVision(e.target.value)}
+        placeholder="Optional: a direction calling you (vision)"
+        className="w-full bg-white/10 text-white placeholder-white/60 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-amber-400"
+      />
+    )}
+  </div>
+)
 
-/* ---------------- Small inline Chips + Typeahead ---------------- */
-function TypeaheadChips({
-  mode = "multi",
-  value = [],
-  max = 999,
-  starters = [],
-  placeholder = "Type to add…",
-  onSearch, // async (q) => [name]
-  onChange, // (array) => void
-  onSuggest, // (text) => void
-}) {
-  const [q, setQ] = useState("");
-  const [list, setList] = useState([]);
-  const [open, setOpen] = useState(false);
+export default function JanmandalStep({ onDone }){
+  const [hands, setHands] = useState([])
+  const [gifts, setGifts] = useState([])
+  const [fire, setFire] = useState([])
+  const [heart, setHeart] = useState([])
+  const [journey, setJourney] = useState('')
+  const [vision, setVision] = useState('')
 
-  useEffect(() => {
-    if (!open) return;
-    const t = setTimeout(async () => {
-      const res = await (onSearch ? onSearch(q) : []);
-      setList(res || []);
-    }, 150);
-    return () => clearTimeout(t);
-  }, [q, open, onSearch]);
+  const [activePanel, setActivePanel] = useState('') // hands|gifts|fire|heart|journey
+  const [inputVal, setInputVal] = useState('')
 
-  const titleCase = (s) =>
-    s.toString().trim().toLowerCase().replace(/\s+/g, " ").split(" ").map((w) => (w ? w[0].toUpperCase() + w.slice(1) : "")).join(" ");
+  const [saving, setSaving] = useState(false)
+  const [affirm, setAffirm] = useState('')
 
-  const add = (item) => {
-    const v = titleCase(item);
-    if (!v) return;
-    if (mode === "single") {
-      onChange([v]);
-      setQ("");
-      setOpen(false);
-      return;
+  useEffect(()=>{
+    const lines = [
+      'यो तिम्रो पहिलो जनमण्डल हो।',
+      'तिमीले दिएको उज्यालो अब हाम्रो साझा आकाशमा मिसियो।',
+      'स्वागत छ चौतारीमा।'
+    ]
+    setAffirm(lines[Math.floor(Math.random()*lines.length)])
+  }, [])
+
+  const addTag = (kind, text) => {
+    const add = (arr, set)=> !arr.includes(text) && set([...arr, text])
+    if(kind==='hands') add(hands,setHands)
+    if(kind==='gifts') add(gifts,setGifts)
+    if(kind==='fire')  add(fire,setFire)
+    if(kind==='heart') add(heart,setHeart)
+  }
+  const removeTag = (kind, text) => {
+    const rm = (arr,set)=> set(arr.filter(x=>x!==text))
+    if(kind==='hands') rm(hands,setHands)
+    if(kind==='gifts') rm(gifts,setGifts)
+    if(kind==='fire')  rm(fire,setFire)
+    if(kind==='heart') rm(heart,setHeart)
+  }
+
+  const filled = hands.length + gifts.length + fire.length + heart.length + (journey?1:0) > 0
+
+  const save = async () => {
+    setSaving(true)
+    const { data: { user }, error: uerr } = await supabase.auth.getUser()
+    if(uerr || !user){ setSaving(false); alert('Please sign in again.'); return }
+    const payload = {
+      hands, gifts, fire, heart,
+      journey: journey || null,
+      vision: vision || null,
+      updated_at: new Date().toISOString()
     }
-    const set = new Set((value || []).map(titleCase));
-    if (set.has(v)) return;
-    if ((value || []).length >= max) return;
-    onChange([...(value || []), v]);
-    setQ("");
-    setOpen(false);
-  };
-
-  const remove = (idx) => {
-    const next = [...(value || [])];
-    next.splice(idx, 1);
-    onChange(next);
-  };
-
-  const showSuggest = q && (!list || list.length === 0);
+    const {error} = await supabase
+      .from('profiles')
+      .update(payload)
+      .eq('user_id', user.id)
+    setSaving(false)
+    if(error){ alert('Save failed: '+error.message); return }
+    // completion moment
+    onDone && onDone()
+  }
 
   return (
-    <div className="w-full">
-      {mode === "multi" && (
-        <div className="flex flex-wrap gap-2 mb-3">
-          {(value || []).map((v, i) => (
-            <span key={`${v}-${i}`} className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white text-black text-sm">
-              {v}
-              <button aria-label={`Remove ${v}`} className="text-black/70 hover:text-black" onClick={() => remove(i)}>×</button>
-            </span>
-          ))}
+    <div className="min-h-[80vh] w-full text-white relative px-4 md:px-6">
+      <div className="max-w-3xl mx-auto pt-6">
+        <h1 className="text-2xl md:text-3xl font-semibold text-center mb-2">Janmandal — Soul Imprint</h1>
+        <p className="text-center text-white/80 mb-8">Touch any orb. Whisper a few words. No pressure.</p>
+      </div>
+
+      <div className="max-w-4xl mx-auto grid grid-cols-3 grid-rows-3 gap-6 place-items-center">
+        <div className="col-start-2 row-start-1">
+          <Orb label="Fire" icon="🔥" color="bg-rose-600/50" active={fire.length>0 || activePanel==='fire'} onClick={()=>setActivePanel('fire')} />
+        </div>
+        <div className="col-start-1 row-start-2">
+          <Orb label="Gifts" icon="🎁" color="bg-sky-600/50" active={gifts.length>0 || activePanel==='gifts'} onClick={()=>setActivePanel('gifts')} />
+        </div>
+        <div className="col-start-3 row-start-2">
+          <Orb label="Heart" icon="❤️" color="bg-emerald-600/50" active={heart.length>0 || activePanel==='heart'} onClick={()=>setActivePanel('heart')} />
+        </div>
+        <div className="col-start-2 row-start-3">
+          <Orb label="Hands" icon="✋" color="bg-amber-600/50" active={hands.length>0 || activePanel==='hands'} onClick={()=>setActivePanel('hands')} />
+        </div>
+        <div className="col-start-2 row-start-2">
+          <Orb label="Journey" icon="🌱" color="bg-indigo-600/40" active={!!journey || activePanel==='journey'} onClick={()=>setActivePanel('journey')} />
+        </div>
+      </div>
+
+      {/* Active panel */}
+      {activePanel && (
+        <div className="max-w-3xl mx-auto mt-8 p-4 md:p-6 rounded-2xl bg-white/5 border border-white/10 backdrop-blur">
+          {activePanel!=='journey' ? (
+            <>
+              <div className="mb-2 text-sm opacity-80">{whisperQs[activePanel][ Math.floor(Math.random()*whisperQs[activePanel].length) ]}</div>
+              <div className="flex flex-wrap mb-3">
+                {starterChips[activePanel].map(ch => (
+                  <button
+                    key={ch}
+                    onClick={()=>addTag(activePanel, ch)}
+                    className="mr-2 mb-2 px-3 py-1 rounded-full border border-white/20 hover:border-amber-400"
+                  >{ch}</button>
+                ))}
+              </div>
+              <TagInput
+                value={inputVal}
+                setValue={setInputVal}
+                onAdd={(t)=>addTag(activePanel, t)}
+                placeholder="Type a word/phrase and press Enter…"
+              />
+              <div className="mt-4 flex flex-wrap">
+                {(activePanel==='hands'?hands:activePanel==='gifts'?gifts:activePanel==='fire'?fire:heart).map(ch => (
+                  <Chip key={ch} text={ch} onRemove={()=>removeTag(activePanel, ch)} />
+                ))}
+              </div>
+            </>
+          ) : (
+            <JourneyPicker journey={journey} setJourney={setJourney} vision={vision} setVision={setVision} />
+          )}
         </div>
       )}
 
-      <div className="relative">
-        <input
-          value={q}
-          onChange={(e) => { setQ(e.target.value); setOpen(true); }}
-          onFocus={() => setOpen(true)}
-          placeholder={placeholder}
-          className="w-full px-4 py-3 rounded-xl bg-white/5 text-white border border-white/20 outline-none focus:border-white/40"
-        />
-        {open && (
-          <div className="absolute left-0 right-0 mt-2 rounded-xl bg-[#0f0f14] border border-white/10 shadow-xl max-h-64 overflow-auto z-40">
-            {!q && starters?.length > 0 && (
-              <div className="p-2 flex flex-wrap gap-2">
-                {starters.map((s) => (
-                  <button key={s} className="px-3 py-1 rounded-full bg-white text-black text-sm" onClick={() => add(s)}>{s}</button>
-                ))}
-              </div>
-            )}
-            {!!q && (
-              <ul className="py-1">
-                {list.map((name) => (
-                  <li key={name}>
-                    <button className="w-full text-left px-4 py-2 hover:bg-white/5 text-white" onClick={() => add(name)}>{name}</button>
-                  </li>
-                ))}
-                {showSuggest && (
-                  <li className="px-4 py-2 text-white/70 text-sm">
-                    No match.{" "}
-                    <button className="underline underline-offset-2" onClick={() => onSuggest && onSuggest(q)}>
-                      Suggest “{q}”?
-                    </button>
-                  </li>
-                )}
-              </ul>
-            )}
+      {/* Completion strip */}
+      <div className="max-w-3xl mx-auto mt-10 text-center">
+        {filled ? (
+          <div className="animate-pulse">
+            <div className="text-lg md:text-xl mb-3">{affirm}</div>
+            <button
+              onClick={save}
+              disabled={saving}
+              className="px-6 py-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-semibold disabled:opacity-70"
+            >
+              {saving ? 'Saving…' : 'Proceed to Dashboard →'}
+            </button>
           </div>
+        ) : (
+          <div className="text-white/70">Touch at least one orb to continue (optional; even one word is enough).</div>
         )}
       </div>
     </div>
-  );
-}
-
-/* ---------------- Janmandal Step ---------------- */
-function Toast({ message }) {
-  if (!message) return null;
-  return <div className="fixed top-4 right-4 z-50 rounded-xl px-4 py-2 shadow-lg bg-black/80 text-white text-sm">{message}</div>;
-}
-
-export default function JanmandalStep() {
-  const router = useRouter();
-  const [user, setUser] = useState(null);
-  const [toast, setToast] = useState("");
-
-  const [hands, setHands] = useState([]);
-  const [gifts, setGifts] = useState([]);
-  const [fire, setFire]   = useState([]);
-  const [heart, setHeart] = useState([]);
-  const [journey, setJourney] = useState("");
-  const [vision, setVision]   = useState("");
-
-  const [starters, setStarters] = useState({ hands: [], gifts: [], fire: [], heart: [] });
-
-  const showToast = (msg) => { setToast(msg); clearTimeout(showToast._t); showToast._t = setTimeout(() => setToast(""), 1200); };
-
-  useEffect(() => {
-    (async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return router.replace("/join");
-      setUser(user);
-
-      // Load profile (if columns exist)
-      const { data: prof } = await supabase
-        .from("profiles")
-        .select("hands,gifts,fire,heart,journey,vision")
-        .eq("user_id", user.id)
-        .maybeSingle();
-
-      if (prof) {
-        setHands(prof.hands || []);
-        setGifts(prof.gifts || []);
-        setFire(prof.fire || []);
-        setHeart(prof.heart || []);
-        setJourney(prof.journey || "");
-        setVision(prof.vision || "");
-      }
-
-      // Optional: load starters from read-only suggestion tables if you created them
-      const tryLoad = async (table) => {
-        const { data, error } = await supabase.from(table).select("name").eq("active", true).order("popularity", { ascending: false }).limit(8);
-        return error ? [] : (data || []).map((r) => r.name);
-      };
-      const [hs, gs, fs, ht] = await Promise.all([
-        tryLoad("jm_hands"),
-        tryLoad("jm_gifts"),
-        tryLoad("jm_fire"),
-        tryLoad("jm_heart"),
-      ]);
-      setStarters({ hands: hs, gifts: gs, fire: fs, heart: ht });
-    })();
-  }, [router]);
-
-  const save = async (payload) => {
-    if (!user) return;
-    const { error } = await supabase.from("profiles").update(payload).eq("user_id", user.id);
-    if (!error) showToast("Saved.");
-  };
-
-  const Card = ({ title, subtitle, children }) => (
-    <div className="p-5 rounded-2xl bg-[#0b0b0f] text-white border border-white/10">
-      <div className="text-lg font-semibold mb-2">{title}</div>
-      {subtitle && <div className="text-white/70 text-sm mb-3">{subtitle}</div>}
-      {children}
-    </div>
-  );
-
-  const finish = () => {
-    const phrase = pick(PROMPTS.affirmations);
-    setToast(phrase || "Welcome.");
-    setTimeout(() => router.replace("/dashboard"), 800);
-  };
-
-  // Simple typeahead search using optional tables; if none, just echo starters
-  const search = async (kind, q) => {
-    const term = (q || "").trim();
-    const map = { hands: "jm_hands", gifts: "jm_gifts", fire: "jm_fire", heart: "jm_heart" };
-    const table = map[kind];
-    if (!table) return [];
-    if (!term) return starters[kind] || [];
-    const { data } = await supabase.from(table).select("name").eq("active", true).ilike("name", `${term}%`).order("popularity", { ascending: false }).limit(10);
-    return (data || []).map((r) => r.name);
-  };
-
-  const suggest = async (kind, value) => {
-    // Optional: if jm_suggestions table exists; otherwise no-op
-    try {
-      await supabase.from("jm_suggestions").insert({ kind, value });
-      showToast("Received your suggestion.");
-    } catch {}
-  };
-
-  return (
-    <div className="min-h-[70vh] px-4 pb-16 bg-[#050508]">
-      <div className="max-w-3xl mx-auto pt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
-
-        {/* Earth / Hands */}
-        <Card title="✋ Earth • Hands" subtitle={pick(PROMPTS.hands)}>
-          <TypeaheadChips
-            value={hands}
-            starters={starters.hands}
-            placeholder="Add work…"
-            onSearch={(q) => search("hands", q)}
-            onChange={(arr) => { setHands(arr); save({ hands: arr }); }}
-            onSuggest={(v) => suggest("hands", v)}
-          />
-        </Card>
-
-        {/* Water / Gifts */}
-        <Card title="🎁 Water • Gifts" subtitle={pick(PROMPTS.gifts)}>
-          <TypeaheadChips
-            value={gifts}
-            starters={starters.gifts}
-            placeholder="Add gift/skill…"
-            onSearch={(q) => search("gifts", q)}
-            onChange={(arr) => { setGifts(arr); save({ gifts: arr }); }}
-            onSuggest={(v) => suggest("gifts", v)}
-          />
-        </Card>
-
-        {/* Fire / Passion */}
-        <Card title="🔥 Fire • Passion" subtitle={pick(PROMPTS.fire)}>
-          <TypeaheadChips
-            value={fire}
-            starters={starters.fire}
-            placeholder="Add passion…"
-            onSearch={(q) => search("fire", q)}
-            onChange={(arr) => { setFire(arr); save({ fire: arr }); }}
-            onSuggest={(v) => suggest("fire", v)}
-          />
-        </Card>
-
-        {/* Air / Heart (needs/compassion) */}
-        <Card title="❤️ Air • Heart" subtitle={pick(PROMPTS.heart)}>
-          <TypeaheadChips
-            value={heart}
-            starters={starters.heart}
-            placeholder="Add need/compassion…"
-            onSearch={(q) => search("heart", q)}
-            onChange={(arr) => { setHeart(arr); save({ heart: arr }); }}
-            onSuggest={(v) => suggest("heart", v)}
-          />
-        </Card>
-
-        {/* Space / Journey */}
-        <Card title="🌱 Space • Journey" subtitle={pick(PROMPTS.journey)}>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            {["rooted","branching","sapling","searching"].map((k) => (
-              <label key={k} className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer ${journey===k ? "border-white" : "border-white/20 hover:border-white/40"}`}>
-                <input type="radio" name="journey" checked={journey===k} onChange={()=>{ setJourney(k); save({ journey: k }); }} />
-                <span className="capitalize">{k}</span>
-              </label>
-            ))}
-          </div>
-          {(journey==="branching"||journey==="sapling"||journey==="searching") && (
-            <div className="mt-3">
-              <input
-                value={vision}
-                onChange={(e)=>{ setVision(e.target.value); save({ vision: e.target.value }); }}
-                placeholder="Future direction…"
-                className="w-full px-3 py-2 rounded-lg bg-white/5 text-white border border-white/20"
-              />
-            </div>
-          )}
-        </Card>
-
-        <div className="md:col-span-2 flex justify-end">
-          <button onClick={finish} className="px-5 py-3 rounded-xl bg-white text-black font-medium hover:bg-white/90">
-            Proceed → Chautari
-          </button>
-        </div>
-      </div>
-
-      <Toast message={toast} />
-    </div>
-  );
+  )
 }
