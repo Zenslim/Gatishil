@@ -1,105 +1,87 @@
-// components/onboard/RootsStep.jsx
-"use client";
-import { useState } from "react";
-import styles from "@/styles/OnboardFX.module.css";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import ChautariLocationPicker from "../ChautariLocationPicker";
 
-export default function RootsStep({ t, onBack, onNext }) {
-  const [abroad, setAbroad] = useState(false);
-  const [province, setProvince] = useState("");
-  const [district, setDistrict] = useState("");
-  const [palika, setPalika] = useState("");
-  const [ward, setWard] = useState("");
-  const [tole, setTole] = useState("");
-  const [country, setCountry] = useState("");
-  const [city, setCity] = useState("");
+/**
+ * RootsStep.jsx
+ * Wrapper step that uses ChautariLocationPicker and persists to Supabase.
+ *
+ * Props:
+ *  - supabase: Supabase client (required)
+ *  - onNext?: optional callback after successful save
+ *  - initialValue?: prefilled roots_json
+ */
+export default function RootsStep({ supabase, onNext, initialValue = null }) {
+  const router = useRouter();
+  const [value, setValue] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
 
-  const cont = () => {
-    const roots = abroad
-      ? { abroad: true, country: country.trim(), city: city.trim() }
-      : {
-          abroad: false,
-          province: province.trim(),
-          district: district.trim(),
-          palika: palika.trim(),
-          ward: ward.trim(),
-          tole: tole.trim() || null
-        };
-    localStorage.setItem("onboard.roots", JSON.stringify(roots));
-    onNext(roots);
+  const canContinue = Boolean(value);
+
+  const handleContinue = async () => {
+    if (!canContinue) return;
+    setSaving(true);
+    setError("");
+    try {
+      const { data: userRes, error: authErr } = await supabase.auth.getUser();
+      if (authErr || !userRes?.user?.id) throw new Error("Not signed in");
+      const userId = userRes.user.id;
+      const { error: upErr } = await supabase
+        .from("profiles")
+        .update({ roots_json: value })
+        .eq("user_id", userId);
+      if (upErr) throw upErr;
+      if (onNext) onNext();
+      else router.push("/onboarding?step=3");
+    } catch (e) {
+      console.error(e);
+      setError(e?.message || "Failed to save roots");
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const inputClass =
-    "rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500";
-
   return (
-    <section className={`mx-auto max-w-xl rounded-2xl ${styles.card} px-6 pt-6 pb-8`}>
-      <div className="mb-5 flex items-center justify-between">
-        <button
-          onClick={onBack}
-          className="rounded-xl border border-white/10 px-3 py-2 text-sm text-gray-200 hover:bg-white/5"
-        >
-          ← Back
-        </button>
-        <div className="text-sm text-gray-400">2/3</div>
+    <div className="max-w-2xl mx-auto">
+      <div className="mb-6">
+        <h2 className="text-xl md:text-2xl font-semibold text-neutral-100">
+          Where do your roots touch the earth?
+        </h2>
+        <p className="text-neutral-400 text-sm">
+          Choose Nepal or Abroad. This anchors your presence in the Chautari.
+        </p>
       </div>
 
-      <h2 className="text-2xl font-semibold text-white">{t.roots.stepTitle}</h2>
-      <p className="mt-2 text-gray-300">{t.roots.hint}</p>
+      <ChautariLocationPicker
+        supabase={supabase}
+        initialValue={initialValue}
+        onChange={setValue}
+      />
 
-      <label className="mt-4 inline-flex items-center gap-3 text-gray-200">
-        <input type="checkbox" checked={abroad} onChange={(e) => setAbroad(e.target.checked)} />
-        <span>{t.roots.toggleAbroad}</span>
-      </label>
+      {error && <p className="text-red-400 text-sm mt-3">{error}</p>}
 
-      {!abroad ? (
-        <div className="mt-4 grid gap-3">
-          {[
-            [province, setProvince, t.roots.labels.province],
-            [district, setDistrict, t.roots.labels.district],
-            [palika, setPalika, t.roots.labels.palika],
-            [ward, setWard, t.roots.labels.ward],
-            [tole, setTole, t.roots.labels.tole]
-          ].map(([val, setVal, ph], i) => (
-            <input
-              key={i}
-              className={inputClass}
-              placeholder={ph}
-              value={val}
-              onChange={(e) => setVal(e.target.value)}
-            />
-          ))}
-        </div>
-      ) : (
-        <div className="mt-4 grid gap-3">
-          {[
-            [country, setCountry, t.roots.labels.country],
-            [city, setCity, t.roots.labels.city]
-          ].map(([val, setVal, ph], i) => (
-            <input
-              key={i}
-              className={inputClass}
-              placeholder={ph}
-              value={val}
-              onChange={(e) => setVal(e.target.value)}
-            />
-          ))}
-        </div>
-      )}
-
-      <div className="mt-8 flex items-center justify-between">
+      <div className="flex items-center justify-between mt-6">
         <button
-          onClick={onBack}
-          className="rounded-xl border border-white/10 px-4 py-2 text-gray-200 hover:bg-white/5"
+          type="button"
+          className="px-4 py-2 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200"
+          onClick={() => router.back()}
         >
-          {t.roots.cta.back}
+          Back
         </button>
         <button
-          onClick={cont}
-          className={`rounded-2xl bg-indigo-500 px-5 py-3 text-white hover:bg-indigo-400 ${styles.glowBtn}`}
+          type="button"
+          className={`px-4 py-2 rounded-lg ${canContinue ? "bg-indigo-600 hover:bg-indigo-500" : "bg-neutral-700 opacity-60"} text-white`}
+          onClick={handleContinue}
+          disabled={!canContinue || saving}
         >
-          {t.roots.cta.continue}
+          {saving ? "Saving…" : "Continue"}
         </button>
       </div>
-    </section>
+
+      <p className="text-xs text-neutral-500 mt-3">
+        Shared trust grows when every voice has verified roots.
+      </p>
+    </div>
   );
 }
