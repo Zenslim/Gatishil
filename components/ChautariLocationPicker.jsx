@@ -49,12 +49,13 @@ export default function ChautariLocationPicker({
     let ignore = false;
     (async () => {
       if (!supabase) return;
-      const { data: prov } = await supabase.from("provinces").select("id,name").order("id");
-      const { data: ctry } = await supabase.from("countries").select("code:name, name").order("name");
+      const { data: prov, error: provErr } = await supabase.from("provinces").select("id,name").order("id");
+      if (provErr) console.error("provinces load error", provErr);
+      const { data: ctry, error: cErr } = await supabase.from("countries").select("code,name").order("name");
+      if (cErr) console.error("countries load error", cErr);
       if (!ignore) {
         setProvinces(prov ?? []);
-        // countries table has columns: code (char2), name (text)
-        setCountries((ctry ?? []).map((r) => ({ code: r.code ?? r.name, name: r.name })));
+        setCountries((ctry ?? []).map((r) => ({ code: r.code, name: r.name })));
       }
     })();
     return () => { ignore = true; };
