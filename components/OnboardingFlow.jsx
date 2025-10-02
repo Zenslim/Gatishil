@@ -1,5 +1,6 @@
 // components/OnboardingFlow.jsx
 "use client";
+
 import { useEffect, useState } from "react";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import { STRINGS } from "@/app/onboard/strings";
@@ -12,23 +13,33 @@ export default function OnboardingFlow({ lang = "en" }) {
   const t = STRINGS[lang] || STRINGS.en;
   const supabase = createClientComponentClient();
 
-  const STEP_ORDER = ["welcome","nameFace","roots","ikigai"];
-  const urlStep = typeof window !== "undefined"
-    ? new URLSearchParams(window.location.search).get("step")
-    : null;
-  const initialStep = STEP_ORDER.includes(urlStep) ? urlStep : STEP_ORDER[0];
-  const [step, setStep] = useState(initialStep);
+  const STEP_ORDER = ["welcome", "nameFace", "roots", "ikigai"];
+
+  // Decide the initial step based on URL (?step=) or source (?src=join)
+  const getInitialStep = () => {
+    if (typeof window === "undefined") return STEP_ORDER[0];
+    const qp = new URLSearchParams(window.location.search);
+    const stepQ = qp.get("step");
+    const src = qp.get("src");
+    if (stepQ && STEP_ORDER.includes(stepQ)) return stepQ; // deep link
+    if (src === "join") return "welcome";                  // join flow
+    return STEP_ORDER[0];
+  };
+
+  const [step, setStep] = useState(getInitialStep());
   const [authed, setAuthed] = useState(false);
 
+  // Auth gate: require OTP/Magic Link session
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setAuthed(Boolean(data.session)));
   }, [supabase]);
 
+  // Safe, ordered navigation + keeps query params (preserves src=join)
   const goTo = (next) => {
     const currIdx = STEP_ORDER.indexOf(step);
     const nextIdx = STEP_ORDER.indexOf(next);
-    if (nextIdx === -1) return;       // unknown
-    if (nextIdx > currIdx + 1) return; // no skipping ahead
+    if (nextIdx === -1) return;            // unknown step
+    if (nextIdx > currIdx + 1) return;     // prevent skipping ahead
     setStep(next);
     if (typeof window !== "undefined") {
       const qp = new URLSearchParams(window.location.search);
@@ -48,14 +59,32 @@ export default function OnboardingFlow({ lang = "en" }) {
   return (
     <main className="mx-auto w-full max-w-3xl">
       {step === "welcome" && <WelcomeStep t={t} onNext={() => goTo("nameFace")} />}
+
       {step === "nameFace" && (
-        <NameFaceStep t={t} onBack={() => goTo("welcome")} onNext={() => goTo("roots")} />
+        <NameFaceStep
+          t={t}
+          onBack={() => goTo("welcome")}
+          onNext={() => goTo("roots")}
+        />
       )}
+
       {step === "roots" && (
-        <RootsStep t={t} onBack={() => goTo("nameFace")} onNext={() => goTo("ikigai")} />
+        <RootsStep
+          t={t}
+          onBack={() => goTo("nameFace")}
+          onNext={() => goTo("ikigai")}
+        />
       )}
+
       {step === "ikigai" && (
-        <IkigaiStep t={t} onBack={() => goTo("roots")} onFinish={() => alert(t.ikigai.done)} />
+        <IkigaiStep
+          t={t}
+          onBack={() => goTo("roots")}
+          onFinish={() => {
+            alert(t.ikigai.done);
+            // e.g., router.push("/dashboard")
+          }}
+        />
       )}
     </main>
   );
