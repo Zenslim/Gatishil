@@ -71,15 +71,26 @@ export default function OnboardingFlow({ lang = 'en' }: Props){
 
   if(step === 'entry'){
     return (
-      <div className="min-h-[80vh] text-white px-4 md:px-6 grid place-items-center">
-        <div className="mx-auto max-w-xl text-center">
-          <div className="text-6xl mb-4" aria-hidden>🌳</div>
-          <h1 className="text-2xl md:text-3xl font-semibold">Welcome to the Chauṭarī.</h1>
-          <p className="mt-2 text-white/80">Others are already sitting under the tree. Let’s introduce yourself.</p>
+      <div className="min-h-[80vh] flex items-center justify-center px-4">
+        <div className="w-full max-w-2xl text-center">
+          {/* tree illustration */}
+          <div className="text-6xl md:text-7xl mb-8 select-none" aria-hidden>🌳</div>
+
+          {/* title + subtitle */}
+          <h1 className="text-2xl md:text-3xl font-semibold mb-3">
+            Welcome to the Chauṭarī
+          </h1>
+          <p className="text-base md:text-lg text-white/80 mb-10">
+            Others are already sitting under the tree. Let’s introduce yourself.
+          </p>
+
+          {/* begin button */}
           <button
-            onClick={()=>go('name')}
-            className="mt-8 w-full rounded-2xl bg-amber-500 hover:bg-amber-400 text-black font-semibold px-6 py-3"
-          >Begin my circle</button>
+            onClick={() => go('name')}
+            className="w-full rounded-2xl bg-amber-500 hover:bg-amber-400 text-black font-semibold py-4 transition-colors"
+          >
+            Begin my circle
+          </button>
         </div>
       </div>
     )
