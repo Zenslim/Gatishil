@@ -109,12 +109,6 @@ function JoinClient() {
       const hasAccessToken = !!hash && hash.includes('access_token=');
       if (!hasAccessToken) return;
 
-      // wrong-host bounce, preserve hash (e.g., apex vs www)
-      if (SITE_URL && !origin.startsWith(SITE_URL)) {
-        window.location.replace(`${SITE_URL}/join${hash}`);
-        return;
-      }
-
       // wait for Supabase to hydrate the session from hash
       const session = await waitForSession();
       if (!session) return;
