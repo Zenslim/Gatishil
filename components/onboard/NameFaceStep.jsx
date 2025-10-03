@@ -1,14 +1,18 @@
-// components/onboard/NameFaceStep.jsx
 "use client";
 import Image from "next/image";
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
-import styles from "@/styles/OnboardFX.module.css";
+import OnboardCardLayout from "./OnboardCardLayout";
 import CameraCapture from "./CameraCapture";
 import ImageEditor from "./ImageEditor";
 
 const AVATAR_BUCKET = "avatars";
 
+/**
+ * Updated NameFaceStep — same logic, unified visuals
+ * - Removes dependency on css module card; uses OnboardCardLayout
+ * - Primary CTA uses DAO Yellow
+ */
 export default function NameFaceStep({ t, onBack, onNext }) {
   const [first, setFirst] = useState("");
   const [surname, setSurname] = useState("");
@@ -22,7 +26,7 @@ export default function NameFaceStep({ t, onBack, onNext }) {
   const [toast, setToast] = useState(null);
   const [allowContinue, setAllowContinue] = useState(false);
 
-  useEffect(() => { if (!toast) return; const id = setTimeout(()=>setToast(null), 1800); return ()=>clearTimeout(id); }, [toast]);
+  useEffect(() => { if (!toast) return; const id = setTimeout(() => setToast(null), 1800); return ()=>clearTimeout(id); }, [toast]);
 
   const pickFromGallery = (e) => {
     const f = e.target.files?.[0];
@@ -57,39 +61,39 @@ export default function NameFaceStep({ t, onBack, onNext }) {
       if (error) throw error;
       setToast("Saved.");
       setAllowContinue(true);
-      setEditorSrc(null);
-    } catch (e) {
-      console.error(e);
-      setToast("Upload failed.");
-      setAllowContinue(false);
+    } catch (err) {
+      console.error(err);
+      setToast(err?.message || "Photo upload failed. Please try another image.");
     } finally {
       setSaving(false);
     }
   };
 
   const continueNext = () => {
-    if (!(first.trim().length > 0 && allowContinue) || saving) return;
-    onNext({ name: first.trim(), surname: surname.trim() || null, photo_url: previewUrl });
+    if (!allowContinue || !first.trim()) return;
+    onNext?.({ name: first.trim(), surname: surname.trim() || null, photo_url: previewUrl });
   };
 
   const gateDisabled = !(first.trim().length > 0 && allowContinue) || saving;
 
   return (
-    <section className={`mx-auto max-w-xl rounded-2xl ${styles.card} px-6 pt-6 pb-8`}>
+    <OnboardCardLayout>
       <div className="mb-5 flex items-center justify-between">
-        <button onClick={onBack} className="rounded-xl border border-white/10 px-3 py-2 text-sm text-gray-200 hover:bg-white/5">← Back</button>
+        <button onClick={onBack} className="rounded-xl border border-white/20 bg-white/5 px-3 py-2 text-sm text-gray-200 hover:bg-white/10">← Back</button>
         <div className="text-sm text-gray-400">1/3</div>
       </div>
 
       {toast && <div className="mb-3 rounded-lg bg-emerald-500/15 px-3 py-2 text-sm text-emerald-300">{toast}</div>}
 
-      <h2 className="text-2xl font-semibold text-white">Show your face so people recognize you in the Chautari. <button onClick={()=>alert('Faces help real people connect. You control visibility.')} className="underline">Why?</button></h2>
+      <h2 className="text-2xl font-semibold text-white">Show your face so people recognize you in the Chauṭarī.{" "}
+        <button onClick={()=>alert(t?.nameface?.why ?? "Faces help real people connect. You control visibility.")} className="underline">Why?</button>
+      </h2>
 
       <div className="mt-6 grid gap-4">
         <label className="block">
-          <span className="text-sm font-medium text-gray-200">First name*</span>
+          <span className="text-sm font-medium text-gray-300">First name*</span>
           <input
-            className="mt-1 w-full rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            className="mt-1 w-full rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-yellow-500"
             placeholder="e.g., Nabin"
             value={first}
             onChange={(e)=>{ setFirst(e.target.value); }}
@@ -98,63 +102,59 @@ export default function NameFaceStep({ t, onBack, onNext }) {
         </label>
 
         <label className="block">
-          <span className="text-sm font-medium text-gray-200">Surname (optional)</span>
+          <span className="text-sm font-medium text-gray-300">Surname (optional)</span>
           <input
-            className="mt-1 w-full rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            className="mt-1 w-full rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-yellow-500"
             placeholder="e.g., Shrestha"
             value={surname}
-            onChange={(e)=>setSurname(e.target.value)}
+            onChange={(e)=>{ setSurname(e.target.value); }}
           />
         </label>
       </div>
 
-      <div className="mt-5">
-        <span className="text-sm font-medium text-gray-200">Your photo</span>
-        <div className="mt-2 flex items-center gap-4">
-          <div className="relative h-28 w-28 overflow-hidden rounded-full bg-white/5 ring-1 ring-white/10">
-            {previewUrl ? <Image src={previewUrl} alt="Preview" fill className="object-cover" /> :
-              <div className="flex h-full w-full items-center justify-center text-xs text-gray-500">1:1</div>}
-          </div>
-          <div className="flex flex-col gap-2">
-            <button onClick={()=>setShowCamera(true)} className="rounded-xl border border-white/10 px-3 py-2 text-sm text-gray-200 hover:bg-white/5">
-              Take a selfie
-            </button>
-            <label className="inline-flex cursor-pointer items-center justify-center rounded-xl border border-white/10 px-3 py-2 text-sm text-gray-200 hover:bg-white/5">
-              <input type="file" accept="image/*" onChange={pickFromGallery} className="hidden" />
-              Choose from gallery
-            </label>
-            {previewUrl && (
-              <button onClick={()=>{ setPreviewUrl(null); setAllowContinue(false); setSavedBlob(null); }} className="rounded-xl px-3 py-2 text-sm text-gray-300 hover:bg-white/5">
-                Retake
-              </button>
-            )}
-          </div>
+      {/* Photo area */}
+      <div className="mt-6 grid grid-cols-[140px_1fr] gap-4 items-start">
+        <div className="w-[140px] h-[140px] rounded-full bg-black/40 border border-white/10 grid place-items-center overflow-hidden">
+          {previewUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={previewUrl} alt="preview" className="w-full h-full object-cover" />
+          ) : (
+            <div className="text-sm text-gray-500">1:1</div>
+          )}
+        </div>
+        <div className="flex gap-3">
+          <button onClick={()=>setShowCamera(true)} className="rounded-xl border border-white/20 bg-white/5 px-4 py-2 text-white hover:bg-white/10">Take a selfie</button>
+          <label className="rounded-xl border border-white/20 bg-white/5 px-4 py-2 text-white hover:bg-white/10 cursor-pointer">
+            Choose from gallery
+            <input type="file" accept="image/*" onChange={pickFromGallery} className="hidden" />
+          </label>
         </div>
       </div>
 
-      <div className="mt-8 flex justify-end">
+      {/* Editor */}
+      {editorSrc && (
+        <ImageEditor
+          src={editorSrc}
+          onCancel={()=>setEditorSrc(null)}
+          onConfirm={(blob)=>{ setEditorSrc(null); confirmAndSave(blob); }}
+        />
+      )}
+      {showCamera && (
+        <CameraCapture
+          onCapture={(url)=>{ setShowCamera(false); setEditorSrc(url); }}
+          onCancel={()=>setShowCamera(false)}
+        />
+      )}
+
+      <div className="mt-8">
         <button
           onClick={continueNext}
           disabled={gateDisabled}
-          className={`w-full rounded-2xl ${gateDisabled ? "bg-indigo-500/40" : "bg-indigo-500 hover:bg-indigo-400"} px-5 py-3 text-white disabled:opacity-60`}
+          className={`w-full rounded-2xl ${gateDisabled ? "bg-yellow-600/60" : "bg-yellow-500 hover:bg-yellow-400"} px-5 py-3 text-black font-semibold disabled:opacity-60`}
         >
           {saving ? "Saving..." : (t?.nameFace?.cta?.continue ?? "Continue")}
         </button>
       </div>
-
-      {showCamera && (
-        <CameraCapture
-          onCapture={(url) => { setShowCamera(false); setEditorSrc(url); }}
-          onCancel={() => setShowCamera(false)}
-        />
-      )}
-      {editorSrc && (
-        <ImageEditor
-          src={editorSrc}
-          onRetake={() => { setEditorSrc(null); setShowCamera(true); }}
-          onConfirm={(blob) => confirmAndSave(blob)}
-        />
-      )}
-    </section>
+    </OnboardCardLayout>
   );
 }

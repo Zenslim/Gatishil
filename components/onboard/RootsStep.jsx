@@ -1,13 +1,11 @@
 "use client";
 import { useRef, useState } from "react";
 import { createClient } from "@supabase/supabase-js";
+import OnboardCardLayout from "./OnboardCardLayout";
 import ChautariLocationPicker from "../ChautariLocationPicker";
 
 /**
- * components/onboard/RootsStep.jsx — Self-sufficient step screen
- * - Creates a Supabase browser client if none is provided
- * - Saves to `profiles.roots_json`
- * - Calls onNext() after successful save; no internal routing here
+ * Unified RootsStep — same logic, unified visuals
  */
 export default function RootsStep({ supabase: supabaseProp, onNext, initialValue = null, onBack }) {
   const supabaseRef = useRef(null);
@@ -20,9 +18,6 @@ export default function RootsStep({ supabase: supabaseProp, onNext, initialValue
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
         { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } }
       );
-      console.info("[RootsStep] Using internal Supabase client.");
-    } else {
-      console.warn("[RootsStep] No Supabase client available.");
     }
   }
   const supabase = supabaseRef.current;
@@ -57,12 +52,23 @@ export default function RootsStep({ supabase: supabaseProp, onNext, initialValue
   };
 
   return (
-    <div className="mx-auto max-w-2xl">
+    <OnboardCardLayout>
+      <div className="mb-5 flex items-center justify-between">
+        <button
+          type="button"
+          className="rounded-xl border border-white/20 bg-white/5 px-3 py-2 text-sm text-gray-200 hover:bg-white/10"
+          onClick={() => (typeof onBack === "function" ? onBack() : null)}
+        >
+          ← Back
+        </button>
+        <div className="text-sm text-gray-400">2/3</div>
+      </div>
+
       <div className="mb-6">
-        <h2 className="text-xl md:text-2xl font-semibold text-neutral-100">
+        <h2 className="text-2xl md:text-3xl font-semibold text-white">
           Where do your roots touch the earth?
         </h2>
-        <p className="text-neutral-400 text-sm">
+        <p className="text-gray-400 text-sm">
           Choose Nepal or Abroad. This anchors your presence in the Chautari.
         </p>
       </div>
@@ -76,16 +82,12 @@ export default function RootsStep({ supabase: supabaseProp, onNext, initialValue
       {error && <p className="text-red-400 text-sm mt-3">{error}</p>}
 
       <div className="mt-6 flex items-center justify-between">
+        <div className="text-sm text-gray-400 italic">
+          Start above — we’ll build your path step by step.
+        </div>
         <button
           type="button"
-          className="px-4 py-2 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200"
-          onClick={() => (typeof onBack === "function" ? onBack() : null)}
-        >
-          Back
-        </button>
-        <button
-          type="button"
-          className={`px-4 py-2 rounded-lg ${canContinue ? "bg-indigo-600 hover:bg-indigo-500" : "bg-neutral-700 opacity-60"} text-white`}
+          className={`px-5 py-3 rounded-2xl ${canContinue ? "bg-yellow-500 hover:bg-yellow-400 text-black" : "bg-white/10 text-white/60"} font-semibold`}
           onClick={handleContinue}
           disabled={!canContinue || saving}
         >
@@ -93,9 +95,9 @@ export default function RootsStep({ supabase: supabaseProp, onNext, initialValue
         </button>
       </div>
 
-      <p className="mt-3 text-xs text-neutral-500">
+      <p className="mt-3 text-xs text-gray-500">
         Shared trust grows when every voice has verified roots.
       </p>
-    </div>
+    </OnboardCardLayout>
   );
 }
