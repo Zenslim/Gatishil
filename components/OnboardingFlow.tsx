@@ -75,6 +75,7 @@ export default function OnboardingFlow({ lang = 'en' }: Props){
     return (
       <div className="min-h-[80vh] text-white px-4 md:px-6 relative pb-24">
         <RootsStep
+          supabase={undefined as any}
           onNext={() => go('janmandal')}
           onBack={() => go('name')}
         />
