@@ -1,16 +1,15 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRef, useState } from "react";
 import { createClient } from "@supabase/supabase-js";
 import ChautariLocationPicker from "../ChautariLocationPicker";
 
 /**
- * RootsStep.jsx — Self-sufficient
- * - Auto-creates a Supabase browser client if none provided
- * - Avoids calling `supabase.auth` when client is undefined
+ * components/onboard/RootsStep.jsx — Self-sufficient step screen
+ * - Creates a Supabase browser client if none is provided
+ * - Saves to `profiles.roots_json`
+ * - Calls onNext() after successful save; no internal routing here
  */
-export default function RootsStep({ supabase: supabaseProp, onNext, initialValue = null }) {
-  const router = useRouter();
+export default function RootsStep({ supabase: supabaseProp, onNext, initialValue = null, onBack }) {
   const supabaseRef = useRef(null);
   if (!supabaseRef.current) {
     if (supabaseProp) {
@@ -28,14 +27,14 @@ export default function RootsStep({ supabase: supabaseProp, onNext, initialValue
   }
   const supabase = supabaseRef.current;
 
-  const [value, setValue] = useState(null);
+  const [value, setValue] = useState(initialValue);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
   const canContinue = Boolean(value);
 
   const handleContinue = async () => {
-    if (!canContinue) return;
+    if (!canContinue || saving) return;
     setSaving(true);
     setError("");
     try {
@@ -45,11 +44,10 @@ export default function RootsStep({ supabase: supabaseProp, onNext, initialValue
       if (!userId) throw new Error("Please sign in first.");
       const { error: upErr } = await supabase
         .from("profiles")
-        .update({ roots_json: value })
+        .update({ roots_json: value, updated_at: new Date().toISOString() })
         .eq("user_id", userId);
       if (upErr) throw upErr;
-      if (onNext) onNext();
-      else router.push("/onboarding?step=3");
+      if (typeof onNext === "function") onNext();
     } catch (e) {
       console.error(e);
       setError(e?.message || "Failed to save roots");
@@ -59,7 +57,7 @@ export default function RootsStep({ supabase: supabaseProp, onNext, initialValue
   };
 
   return (
-    <div className="max-w-2xl mx-auto">
+    <div className="mx-auto max-w-2xl">
       <div className="mb-6">
         <h2 className="text-xl md:text-2xl font-semibold text-neutral-100">
           Where do your roots touch the earth?
@@ -77,11 +75,11 @@ export default function RootsStep({ supabase: supabaseProp, onNext, initialValue
 
       {error && <p className="text-red-400 text-sm mt-3">{error}</p>}
 
-      <div className="flex items-center justify-between mt-6">
+      <div className="mt-6 flex items-center justify-between">
         <button
           type="button"
           className="px-4 py-2 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200"
-          onClick={() => router.back()}
+          onClick={() => (typeof onBack === "function" ? onBack() : null)}
         >
           Back
         </button>
@@ -95,7 +93,7 @@ export default function RootsStep({ supabase: supabaseProp, onNext, initialValue
         </button>
       </div>
 
-      <p className="text-xs text-neutral-500 mt-3">
+      <p className="mt-3 text-xs text-neutral-500">
         Shared trust grows when every voice has verified roots.
       </p>
     </div>
