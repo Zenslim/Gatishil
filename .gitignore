@@ -30,3 +30,4 @@ Thumbs.db
 !.vscode/extensions.json
 .idea/
 e_modules
+node_modules
