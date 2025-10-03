@@ -338,7 +338,7 @@ function EmailPane({
     try {
       const { error } = await supabase.auth.signInWithOtp({
         email,
-        options: { emailRedirectTo: `${SITE_URL || window.location.origin}/join` },
+        options: { emailRedirectTo: `${window.location.origin}/onboard?src=join` },
       });
       if (error) throw error;
       setMsg('Check your email and tap the magic link. You will return here.');
