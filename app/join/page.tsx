@@ -118,8 +118,10 @@ function JoinClient() {
       window.history.replaceState({}, '', clean.toString());
       if (!cancelled) router.replace('/onboard?src=ml');
     })();
-    return () => { cancelled = true; };
-  }, [router, SITE_URL]);
+    return () => {
+      cancelled = true;
+    };
+  }, [router]);
 
   // ---------- Actions: Phone OTP ----------
   async function sendOtp() {
