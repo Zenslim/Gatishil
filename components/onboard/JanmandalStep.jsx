@@ -92,6 +92,7 @@ function MotionOrb({ label, icon, active, filled, onClick, style }) {
 }
 
 export default function JanmandalStep({ onDone }){
+  const [activePanel, setActivePanel] = useState(null); // 'hands' | 'gifts' | 'fire' | 'heart' | 'journey' | null
   // keep your original state + hooks (hands,gifts,fire,heart,journey,vision,activePanel, inputVal, saving, affirm, etc.)
   // ... your existing state + effects remain ...
 
