@@ -1,9 +1,4 @@
 'use client'
-
-/**
- * components/OnboardingFlow.tsx — SKELETON ONLY (patched)
- * - Now passes required `t` prop to <NameFaceStep />
- */
 import React from 'react'
 import dynamic from 'next/dynamic'
 import { useRouter, useSearchParams } from 'next/navigation'
@@ -27,78 +22,49 @@ export default function OnboardingFlow({ lang = 'en' }: Props){
     router.push(`/onboard?${sp.toString()}`)
   }
 
-  // Minimal i18n bundle to satisfy NameFaceStep prop typing
   const t = {
+    welcome: {
+      title: 'Welcome to the Chauṭarī.',
+      subtitle: 'Others are already sitting under the tree. Let’s introduce yourself.',
+      begin: 'Begin my circle',
+      footer_privacy: 'You control what you share. Your face helps real people connect.',
+    },
     nameface: {
-      title: 'Name & Face',
       why: 'Faces help real people connect. You control visibility.',
-      first_name: 'First name',
-      surname: 'Surname (optional)',
-      take_selfie: 'Take a selfie',
-      choose_gallery: 'Choose from gallery',
-      continue: 'Continue',
-      back: 'Back',
-      saved: 'Saved.',
     }
   }
 
   if(step === 'entry'){
-    const tw = {
-      welcome: {
-        title: 'Welcome to the Chauṭarī.',
-        subtitle: 'Others are already sitting under the tree. Let’s introduce yourself.',
-        begin: 'Begin my circle',
-        footer_privacy: 'You control what you share. Your face helps real people connect.',
-      },
-    }
-
-    return (
-      <div className="min-h-[80vh] grid place-items-center px-4">
-        <WelcomeStep t={tw} onNext={() => go('name')} />
-      </div>
-    )
+    return <WelcomeStep t={t} onNext={() => go('name')} />
   }
 
   if(step === 'name'){
     return (
-      <div className="min-h-[80vh] text-white px-4 md:px-6 grid place-items-center">
-        <div className="w-full max-w-xl">
-          <div className="mb-4">
-            <h2 className="text-xl font-semibold">Name & Face</h2>
-            <div className="text-white/80 text-sm">
-              Show your face so people recognize you in the Chauṭarī.{` `}
-              <button onClick={()=>alert(t.nameface.why)} className="underline">Why?</button>
-            </div>
-          </div>
-          <NameFaceStep
-            t={t}
-            onBack={() => go('entry')}
-            onNext={() => go('roots')}
-          />
-        </div>
-      </div>
+      <NameFaceStep
+        t={t}
+        onBack={() => go('entry')}
+        onNext={() => go('roots')}
+      />
     )
   }
 
   if(step === 'roots'){
     return (
-      <div className="min-h-[80vh] text-white px-4 md:px-6 relative pb-24">
-        <RootsStep
-          supabase={undefined as any}
-          onNext={() => go('janmandal')}
-          onBack={() => go('name')}
-        />
-      </div>
+      <RootsStep
+        supabase={undefined as any}
+        onNext={() => go('janmandal')}
+        onBack={() => go('name')}
+      />
     )
   }
 
   if(step === 'janmandal'){
     return (
-      <div className="min-h-[80vh] text-white px-4 md:px-6 grid place-items-center">
+      <div className="min-h-[80vh] bg-neutral-950 grid place-items-center px-4 md:px-6">
         <JanmandalStep onDone={() => router.replace('/dashboard')} />
       </div>
     )
   }
 
-  return <div className="text-white p-6">Unknown step.</div>
+  return <div className="min-h-[80vh] bg-neutral-950 text-white p-6">Unknown step.</div>
 }
