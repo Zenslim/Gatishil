@@ -22,6 +22,45 @@ export default function OnboardingFlow({ lang = 'en' }: Props){
   const searchParams = useSearchParams()
   const step = (searchParams.get('step') ?? 'roots')
 
+  // Roots state and actions must be declared at top-level to respect React Hooks rules
+  const [rootsSelection, setRootsSelection] = useState<any>(null)
+  const [saving, setSaving] = useState(false)
+
+  const saveRootsAndContinue = useCallback(async () => {
+    if(!rootsSelection) { return }
+    setSaving(true)
+    const { data: { user }, error: uerr } = await supabase.auth.getUser()
+    if(uerr || !user){ setSaving(false); alert('Please sign in again.'); return }
+
+    const payload: any = {
+      updated_at: new Date().toISOString(),
+      roots_type: rootsSelection.type,
+      type: rootsSelection.type
+    }
+
+    if(rootsSelection.type === 'tole'){
+      payload.province_id = rootsSelection.province_id
+      payload.district_id = rootsSelection.district_id
+      payload.local_level_id = rootsSelection.local_level_id
+      payload.ward_id = rootsSelection.ward_id
+      payload.tole_id = rootsSelection.tole_id
+      payload.tole_text = rootsSelection.tole_text
+    } else if(rootsSelection.type === 'city'){
+      payload.country_code = rootsSelection.country_code
+      payload.city_id = rootsSelection.city_id
+      payload.city_text = rootsSelection.city_text
+    }
+
+    const { error } = await supabase
+      .from('profiles')
+      .update(payload)
+      .eq('user_id', user.id)
+
+    setSaving(false)
+    if(error){ alert('Save failed: '+error.message); return }
+    go('janmandal')
+  }, [rootsSelection])
+
   const go = (s: string) => {
     const sp = new URLSearchParams(searchParams.toString())
     sp.set('step', s)
@@ -30,43 +69,6 @@ export default function OnboardingFlow({ lang = 'en' }: Props){
   }
 
   if(step === 'roots'){
-    const [rootsSelection, setRootsSelection] = useState<any>(null)
-    const [saving, setSaving] = useState(false)
-
-    const saveRootsAndContinue = useCallback(async () => {
-      if(!rootsSelection) { return }
-      setSaving(true)
-      const { data: { user }, error: uerr } = await supabase.auth.getUser()
-      if(uerr || !user){ setSaving(false); alert('Please sign in again.'); return }
-
-      const payload: any = {
-        updated_at: new Date().toISOString(),
-        roots_type: rootsSelection.type, // optional shadow field
-        type: rootsSelection.type
-      }
-
-      if(rootsSelection.type === 'tole'){
-        payload.province_id = rootsSelection.province_id
-        payload.district_id = rootsSelection.district_id
-        payload.local_level_id = rootsSelection.local_level_id
-        payload.ward_id = rootsSelection.ward_id
-        payload.tole_id = rootsSelection.tole_id
-        payload.tole_text = rootsSelection.tole_text
-      } else if(rootsSelection.type === 'city'){
-        payload.country_code = rootsSelection.country_code
-        payload.city_id = rootsSelection.city_id
-        payload.city_text = rootsSelection.city_text
-      }
-
-      const { error } = await supabase
-        .from('profiles')
-        .update(payload)
-        .eq('user_id', user.id)
-
-      setSaving(false)
-      if(error){ alert('Save failed: '+error.message); return }
-      go('janmandal')
-    }, [rootsSelection])
     return (
       <div className="min-h-[80vh] text-white px-4 md:px-6 relative pb-24">
         <RootsStep onChange={setRootsSelection} />
