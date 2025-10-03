@@ -1,0 +1,32 @@
+nod# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+package-lock.json.lock
+
+# Next.js
+.next/
+out/
+.next-static/
+.vercel/
+
+# Env & local
+.env*
+!.env.example
+.DS_Store
+*.local
+
+# Build, coverage, misc
+dist/
+coverage/
+*.swp
+*.swo
+
+# OS/Editor
+Thumbs.db
+.vscode/*
+!.vscode/extensions.json
+.idea/
+e_modules

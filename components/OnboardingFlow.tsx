@@ -1,10 +1,9 @@
-/* components/OnboardingFlow.tsx — App Router compatible
-   - Accepts `lang` prop from app/onboard/page.tsx
-   - Uses useSearchParams from next/navigation
-   - Routes between ?step=roots and ?step=janmandal
-*/
 'use client'
 
+/* components/OnboardingFlow.tsx — App Router compatible
+   - No unsupported props passed to ChautariLocationPicker
+   - Adds sticky footer Continue → ?step=janmandal
+*/
 import React from 'react'
 import dynamic from 'next/dynamic'
 import { useRouter, useSearchParams } from 'next/navigation'
@@ -14,7 +13,7 @@ type Props = {
 }
 
 const JanmandalStep = dynamic(() => import('@/components/onboard/JanmandalStep'), { ssr: false })
-const RootsStep = dynamic(() => import('@/components/ChautariLocationPicker'), { ssr: false })
+const RootsStep: any = dynamic(() => import('@/components/ChautariLocationPicker'), { ssr: false })
 
 export default function OnboardingFlow({ lang = 'en' }: Props){
   const router = useRouter()
@@ -30,8 +29,23 @@ export default function OnboardingFlow({ lang = 'en' }: Props){
 
   if(step === 'roots'){
     return (
-      <div className="min-h-[80vh] text-white px-4 md:px-6">
-        <RootsStep onComplete={()=>go('janmandal')} lang={lang} />
+      <div className="min-h-[80vh] text-white px-4 md:px-6 relative pb-24">
+        <RootsStep />
+        <div className="fixed inset-x-0 bottom-0 z-10">
+          <div className="mx-auto max-w-3xl px-4 py-3">
+            <div className="rounded-2xl bg-black/70 backdrop-blur border border-white/10 p-3 flex items-center justify-between">
+              <div className="text-sm text-white/80">
+                When your roots look correct, continue.
+              </div>
+              <button
+                onClick={()=>go('janmandal')}
+                className="px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-semibold"
+              >
+                Continue →
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
     )
   }
