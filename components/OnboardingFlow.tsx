@@ -43,9 +43,18 @@ export default function OnboardingFlow({ lang = 'en' }: Props){
   }
 
   if(step === 'entry'){
+    const tw = {
+      welcome: {
+        title: 'Welcome to the Chauṭarī.',
+        subtitle: 'Others are already sitting under the tree. Let’s introduce yourself.',
+        begin: 'Begin my circle',
+        footer_privacy: 'You control what you share. Your face helps real people connect.',
+      },
+    }
+
     return (
       <div className="min-h-[80vh] grid place-items-center px-4">
-        <WelcomeStep onNext={() => go('name')} />
+        <WelcomeStep t={tw} onNext={() => go('name')} />
       </div>
     )
   }
