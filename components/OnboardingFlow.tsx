@@ -16,11 +16,12 @@ type Props = {
 
 const JanmandalStep = dynamic(() => import('@/components/onboard/JanmandalStep'), { ssr: false })
 const RootsStep: any = dynamic(() => import('@/components/ChautariLocationPicker'), { ssr: false })
+const NameFaceStep = dynamic(() => import('@/components/onboard/NameFaceStep'), { ssr: false })
 
 export default function OnboardingFlow({ lang = 'en' }: Props){
   const router = useRouter()
   const searchParams = useSearchParams()
-  const step = (searchParams.get('step') ?? 'roots')
+  const step = (searchParams.get('step') ?? 'entry')
 
   // Roots state and actions must be declared at top-level to respect React Hooks rules
   const [rootsSelection, setRootsSelection] = useState<any>(null)
@@ -66,6 +67,40 @@ export default function OnboardingFlow({ lang = 'en' }: Props){
     sp.set('step', s)
     if(!sp.get('src')) sp.set('src','join')
     router.push(`/onboard?${sp.toString()}`)
+  }
+
+  if(step === 'entry'){
+    return (
+      <div className="min-h-[80vh] text-white px-4 md:px-6 grid place-items-center">
+        <div className="mx-auto max-w-xl text-center">
+          <div className="text-6xl mb-4" aria-hidden>🌳</div>
+          <h1 className="text-2xl md:text-3xl font-semibold">Welcome to the Chauṭarī.</h1>
+          <p className="mt-2 text-white/80">Others are already sitting under the tree. Let’s introduce yourself.</p>
+          <button
+            onClick={()=>go('name')}
+            className="mt-8 w-full rounded-2xl bg-amber-500 hover:bg-amber-400 text-black font-semibold px-6 py-3"
+          >Begin my circle</button>
+        </div>
+      </div>
+    )
+  }
+
+  if(step === 'name'){
+    return (
+      <div className="min-h-[80vh] text-white px-4 md:px-6 grid place-items-center">
+        <div className="w-full max-w-xl">
+          <div className="mb-4">
+            <h2 className="text-xl font-semibold">Name & Face.</h2>
+            <div className="text-white/80 text-sm">Show your face so people recognize you in the Chauṭarī. <button onClick={()=>alert('Faces help real people connect. You control visibility.')} className="underline">Why?</button></div>
+          </div>
+          <NameFaceStep
+            t={{}}
+            onBack={()=>go('entry')}
+            onNext={()=>go('roots')}
+          />
+        </div>
+      </div>
+    )
   }
 
   if(step === 'roots'){

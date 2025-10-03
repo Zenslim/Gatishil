@@ -32,24 +32,24 @@ export default function NameFaceStep({ t, onBack, onNext }) {
   };
 
   const uploadAvatar = async (blob, uid) => {
-    const key = `u_${uid}_${Date.now()}.jpg`;
-    const up = await supabase.storage.from(AVATAR_BUCKET).upload(key, blob, { contentType: "image/jpeg" });
+    const key = `${uid}/${Date.now()}.webp`;
+    const up = await supabase.storage.from(AVATAR_BUCKET).upload(key, blob, { contentType: "image/webp" });
     if (up.error) throw up.error;
     return supabase.storage.from(AVATAR_BUCKET).getPublicUrl(up.data.path).data.publicUrl;
   };
 
-  const confirmAndSave = async (jpegBlob) => {
+  const confirmAndSave = async (imgBlob) => {
     setSaving(true);
     try {
-      const localUrl = URL.createObjectURL(jpegBlob);
+      const localUrl = URL.createObjectURL(imgBlob);
       setPreviewUrl(localUrl);
-      setSavedBlob(jpegBlob);
+      setSavedBlob(imgBlob);
 
       const { data } = await supabase.auth.getSession();
       const uid = data.session?.user?.id;
       if (!uid) throw new Error("No session");
 
-      const photo_url = await uploadAvatar(jpegBlob, uid);
+      const photo_url = await uploadAvatar(imgBlob, uid);
       const { error } = await supabase.from("profiles").upsert(
         { user_id: uid, name: first.trim(), surname: surname.trim() || null, photo_url },
         { onConflict: "user_id" }

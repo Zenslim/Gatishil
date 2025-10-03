@@ -91,7 +91,7 @@ export default function ImageEditor({ src, onConfirm, onRetake }) {
     ctx.fillStyle = "rgba(255,255,255,0.05)"; ctx.fillRect(0,0,dim,dim);
     ctx.globalCompositeOperation = "source-over";
 
-    c.toBlob((b) => onConfirm(b), "image/jpeg", 0.9);
+    c.toBlob((b) => onConfirm(b), "image/webp", 0.9);
   };
 
   return (
