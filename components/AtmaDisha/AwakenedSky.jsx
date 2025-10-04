@@ -1,33 +1,42 @@
 "use client";
-import React, { useEffect, useState } from "react";
+import React, { useEffect } from "react";
 import { createPortal } from "react-dom";
-import { motion } from "framer-motion";
+
+/**
+ * AwakenedSky v6.2
+ * - Planets rendered with pure CSS keyframes (no framer-motion).
+ * - Ultra-high z-index. Always visible even if motion is reduced.
+ * - Each img has onError fallback to a soft radial.
+ */
 
 const PLANETS = [
-  { src: "/planet/earth.png",   size: 150, dir: "leftUp",   delay: 0.00, dur: 34 },
-  { src: "/planet/moon.png",    size: 100, dir: "rightUp",  delay: 0.10, dur: 26 },
-  { src: "/planet/mars.png",    size: 130, dir: "leftDown", delay: 0.18, dur: 30 },
-  { src: "/planet/saturn.png",  size: 200, dir: "rightDown",delay: 0.25, dur: 38 },
-  { src: "/planet/jupiter.png", size: 220, dir: "up",       delay: 0.14, dur: 36 },
+  { src: "/planet/earth.png",   size: 180, cls: "p-left-up",  delay: "0s"   },
+  { src: "/planet/moon.png",    size: 120, cls: "p-right-up", delay: "0.12s"},
+  { src: "/planet/mars.png",    size: 160, cls: "p-left-down",delay: "0.2s" },
+  { src: "/planet/saturn.png",  size: 220, cls: "p-right-down",delay:"0.28s"},
+  { src: "/planet/jupiter.png", size: 240, cls: "p-up",       delay: "0.16s"},
 ];
 
-function pathFor(dir){
-  switch(dir){
-    case "leftUp":    return { x: ["0vw","-30vw","-60vw","-110vw"], y: ["0vh","-8vh","-18vh","-20vh"] };
-    case "rightUp":   return { x: ["0vw","20vw","50vw","110vw"],     y: ["0vh","-6vh","-14vh","-18vh"] };
-    case "leftDown":  return { x: ["0vw","-16vw","-48vw","-110vw"],  y: ["0vh","10vh","30vh","60vh"] };
-    case "rightDown": return { x: ["0vw","14vw","40vw","110vw"],     y: ["0vh","14vh","26vh","60vh"] };
-    case "up":        return { x: ["0vw","2vw","4vw","6vw"],         y: ["0vh","-20vh","-60vh","-110vh"] };
-    default:          return { x: ["0vw","0vw","0vw","0vw"],         y: ["0vh","0vh","0vh","0vh"] };
-  }
+function FallbackImg({ src, size, className }){
+  return (
+    <img
+      src={src}
+      alt="planet"
+      className={className}
+      style={{ width: size, height: size }}
+      onError={(e) => {
+        const el = e.currentTarget;
+        el.removeAttribute("src");
+        el.style.background = "radial-gradient(circle at 40% 40%, rgba(255,255,255,0.9), rgba(200,200,255,0.15) 60%, transparent 70%)";
+        el.style.borderRadius = "9999px";
+      }}
+      draggable={false}
+    />
+  );
 }
 
 export default function AwakenedSky({ onContinue }){
-  const [mounted, setMounted] = useState(false);
-  const reduceMotion = typeof window !== "undefined" && window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-
   useEffect(() => {
-    setMounted(true);
     const prevOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => { document.body.style.overflow = prevOverflow; };
@@ -35,7 +44,7 @@ export default function AwakenedSky({ onContinue }){
 
   if (typeof document === "undefined") return null;
   return createPortal(
-    <div className="fixed inset-0 w-[100dvw] h-[100dvh] text-white overflow-hidden z-[60]">
+    <div className="fixed inset-0 w-[100dvw] h-[100dvh] z-[99999] text-white overflow-hidden">
       {/* Headline */}
       <div className="absolute inset-x-0 top-[12vh] text-center px-4 z-[5]">
         <div className="text-2xl md:text-4xl font-semibold drop-shadow-[0_2px_6px_rgba(0,0,0,0.4)]">
@@ -44,57 +53,40 @@ export default function AwakenedSky({ onContinue }){
         <div className="opacity-80 mt-2">Walk it. Share it. Build with it.</div>
       </div>
 
-      {/* Planets layer (guaranteed visible) */}
-      <div className="fixed inset-0 z-[4]" style={{ contain: "layout style", willChange: "transform" }}>
+      {/* Planets layer */}
+      <div className="absolute inset-0 z-[4]">
         <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
-          {PLANETS.map((p, i) => {
-            const path = pathFor(p.dir);
-            if (reduceMotion) {
-              // Static fallback positions (still visible)
-              const endX = path.x[path.x.length - 2];
-              const endY = path.y[path.y.length - 2];
-              return (
-                <img
-                  key={i}
-                  src={p.src}
-                  alt="planet"
-                  className="absolute object-contain select-none"
-                  style={{ width: p.size, height: p.size, transform: `translate(${endX}, ${endY}) scale(1)`, opacity: mounted ? 1 : 0 }}
-                  draggable={false}
-                />
-              );
-            }
-            return (
-              <motion.img
-                key={i}
-                src={p.src}
-                alt="planet"
-                initial={{ x: path.x[0], y: path.y[0], scale: 0.85, opacity: 0.99 }}
-                animate={{ x: path.x, y: path.y, scale: [0.85, 1.07, 0.97, 1.02], opacity: 1 }}
-                transition={{ duration: p.dur, times: [0,0.33,0.67,1], delay: p.delay, ease: "linear", repeat: Infinity, repeatType: "mirror" }}
-                className="absolute object-contain select-none"
-                style={{ width: p.size, height: p.size, willChange: "transform", filter: "drop-shadow(0 0 24px rgba(255,255,255,0.12))" }}
-                draggable={false}
-              />
-            );
-          })}
+          {PLANETS.map((p, i) => (
+            <FallbackImg key={i} src={p.src} size={p.size} className={`absolute object-contain select-none planet ${p.cls}`} />
+          ))}
         </div>
       </div>
 
       {/* Footer */}
-      <div className="absolute inset-x-0 bottom-[10vh] text-center px-4 pointer-events-auto z-[5]">
+      <div className="absolute inset-x-0 bottom-[10vh] text-center px-4 z-[5]">
         <div className="opacity-85 mb-4">Breathe… your direction is clear.</div>
-        <motion.button
-          initial={{ scale: 1 }}
-          animate={{ scale: [1, 1.03, 1] }}
-          transition={{ duration: 2.4, repeat: Infinity, ease: "easeInOut" }}
-          whileHover={{ y: -2 }}
+        <button
           className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-500/90 hover:bg-emerald-500 text-black font-semibold shadow-lg"
           onClick={() => typeof onContinue === "function" ? onContinue() : null}
         >
           Continue
-        </motion.button>
+        </button>
       </div>
+
+      <style jsx>{`
+        .planet { opacity: 1; transform-origin: center; animation-duration: 36s; animation-iteration-count: infinite; animation-timing-function: linear; }
+        @media (prefers-reduced-motion: reduce) { .planet { animation: none; } }
+        .p-left-up   { animation-name: driftLeftUp;    animation-delay: 0s; }
+        .p-right-up  { animation-name: driftRightUp;   animation-delay: 0.12s; }
+        .p-left-down { animation-name: driftLeftDown;  animation-delay: 0.20s; }
+        .p-right-down{ animation-name: driftRightDown; animation-delay: 0.28s; }
+        .p-up        { animation-name: driftUp;        animation-delay: 0.16s; }
+        @keyframes driftLeftUp   { 0%{transform:translate(0,0) scale(.85)} 50%{transform:translate(-50vw,-14vh) scale(1.06)} 100%{transform:translate(-110vw,-20vh) scale(.98)} }
+        @keyframes driftRightUp  { 0%{transform:translate(0,0) scale(.85)} 50%{transform:translate( 36vw,-12vh) scale(1.05)} 100%{transform:translate( 110vw,-18vh) scale(1.00)} }
+        @keyframes driftLeftDown { 0%{transform:translate(0,0) scale(.85)} 50%{transform:translate(-32vw, 18vh) scale(1.04)} 100%{transform:translate(-110vw, 60vh) scale(.99)} }
+        @keyframes driftRightDown{ 0%{transform:translate(0,0) scale(.85)} 50%{transform:translate( 30vw, 20vh) scale(1.04)} 100%{transform:translate( 110vw, 60vh) scale(1.00)} }
+        @keyframes driftUp       { 0%{transform:translate(0,0) scale(.85)} 50%{transform:translate( 4vw, -26vh) scale(1.07)} 100%{transform:translate( 6vw, -110vh) scale(1.02)} }
+      `}</style>
     </div>,
     document.body
   );
