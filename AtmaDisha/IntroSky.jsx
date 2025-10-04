@@ -2,12 +2,9 @@
 import React, { useEffect } from "react";
 import { createPortal } from "react-dom";
 import { motion } from "framer-motion";
-import CelestialBackground from "./CelestialBackground";
 
 /**
- * IntroSky
- * - First impression: all 5 planets erupt from the center, zooming out like
- *   a ship exiting hyperspace. Fades into step 1 automatically.
+ * IntroSky (overlay only — background is global)
  */
 const PLANETS = [
   { src: "/planet/earth.png",   size: 120, delay: 0.00, dir: [-40,-18] },
@@ -27,8 +24,7 @@ export default function IntroSky({ onDone, duration = 2200 }){
 
   if (typeof document === "undefined") return null;
   return createPortal(
-    <div className="fixed inset-0 w-[100vw] h-[100vh] z-[9998] overflow-hidden text-white">
-      <CelestialBackground />
+    <div className="fixed inset-0 w-[100dvw] h-[100dvh] z-[9998] overflow-hidden text-white">
       <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none">
         {PLANETS.map((p, i) => (
           <motion.img
