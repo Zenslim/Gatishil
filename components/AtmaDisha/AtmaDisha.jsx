@@ -11,6 +11,8 @@ import { loadOptions, bundledOptions } from "@/lib/atmaOptions";
 let supabase = null;
 try { supabase = require("@/lib/supabaseClient").default ?? null; } catch (_) { supabase = null; }
 
+const hasDb = !!(supabase && typeof supabase.from === "function");
+
 const ELEMENTS = [
   { key: "occupation", id: "earth",   staticLabel: "Your ROLE in SOCIETY", whispers: ["What work anchors your day?"] },
   { key: "skill",      id: "moon",    staticLabel: "What you are GOOD AT", whispers: ["What do you do effortlessly?"] },
@@ -27,7 +29,27 @@ export default function AtmaDisha({ onDone }){
   const [lists, setLists] = useState(bundledOptions);
 
   useEffect(() => { if (searchParams?.get("forceBloom") === "1") setPhase("bloom"); }, [searchParams]);
-  useEffect(() => { (async () => { setLists(await loadOptions(supabase)); })(); }, []);
+  useEffect(() => {
+    let cancelled = false;
+
+    async function run() {
+      try {
+        if (hasDb) {
+          const loaded = await loadOptions(supabase);
+          if (!cancelled && loaded) setLists(loaded);
+        } else {
+          // No client in this environment → stay on bundledOptions
+          if (!cancelled) setLists(bundledOptions);
+        }
+      } catch (_) {
+        // Any error → stay on bundledOptions
+        if (!cancelled) setLists(bundledOptions);
+      }
+    }
+
+    run();
+    return () => { cancelled = true; };
+  }, [hasDb]);
 
   const active = ELEMENTS[step];
   const options = (lists[active.key] ?? []).length ? lists[active.key] : bundledOptions[active.key];
