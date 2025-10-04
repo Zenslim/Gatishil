@@ -8,15 +8,8 @@ import AnswerPanel from "./AnswerPanel";
 import MandalaBloom from "./MandalaBloom";
 import RootLines from "./RootLines";
 
-// If your project exposes a pre-configured supabase client at "@/lib/supabaseClient"
-// this import will work. If not, replace with your client path.
 let supabase = null;
-try {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  supabase = require("@/lib/supabaseClient").default ?? null;
-} catch (_) {
-  supabase = null;
-}
+try { supabase = require("@/lib/supabaseClient").default ?? null; } catch (_) { supabase = null; }
 
 const ELEMENTS = [
   { key: "occupation", id: "earth", label: "✋ Prithvi (Earth)", color: "#FBBF24",
@@ -25,7 +18,7 @@ const ELEMENTS = [
       "What is your current role in society?",
       "What’s your present profession?"
     ],
-    options: ["Farmer", "Teacher", "Student", "Craftsperson", "Engineer", "Healer", "Merchant", "Homemaker", "Driver", "Other"]
+    options: ["Farmer","Teacher","Student","Craftsperson","Engineer","Healer","Merchant","Homemaker","Driver","Laborer","Nurse","Doctor","Software Engineer","Designer","Artist","Musician","Police","Army","Civil Servant","Entrepreneur","Volunteer","Unemployed","Other"]
   },
   { key: "skill", id: "water", label: "🎁 Jal (Water)", color: "#67E8F9",
     whispers: [
@@ -33,7 +26,7 @@ const ELEMENTS = [
       "Which skills flow with least resistance?",
       "What do you excel at that helps others?"
     ],
-    options: ["Listening", "Teaching", "Organizing", "Design", "Coding", "Cooking", "Negotiation", "Caretaking", "Writing", "Other"]
+    options: ["Listening","Teaching","Organizing","Design","Coding","Cooking","Negotiation","Caretaking","Writing","Public Speaking","Photography","Carpentry","Farming","Healing","Finance","Sales","Research","Strategy","Community Building","Other"]
   },
   { key: "passion", id: "fire", label: "🔥 Agni (Fire)", color: "#FB923C",
     whispers: [
@@ -41,7 +34,7 @@ const ELEMENTS = [
       "What are you most excited to do daily?",
       "Which activity brings radiant joy?"
     ],
-    options: ["Storytelling", "Building", "Gardening", "Art", "Music", "Research", "Entrepreneurship", "Volunteering", "Meditation", "Other"]
+    options: ["Storytelling","Building","Gardening","Art","Music","Research","Entrepreneurship","Volunteering","Meditation","Teaching","Coding Projects","Sports & Movement","Reading","Travel","Other"]
   },
   { key: "compassion", id: "air", label: "❤️ Vayu (Air)", color: "#F472B6",
     whispers: [
@@ -49,7 +42,7 @@ const ELEMENTS = [
       "What lack in the world feels suffocating?",
       "What change does your community need?"
     ],
-    options: ["Children", "Elders", "Climate", "Health Access", "Corruption", "Education", "Poverty", "Women Safety", "Animal Care", "Other"]
+    options: ["Children","Elders","Climate","Health Access","Corruption","Education","Poverty","Women Safety","Animal Care","Disability Inclusion","Mental Health","Rural Access","Clean Water","Other"]
   },
   { key: "vision", id: "space", label: "🌱 Akash (Space)", color: "#C084FC",
     whispers: [
@@ -57,19 +50,19 @@ const ELEMENTS = [
       "What future goal calls today?",
       "What seeds are you planting?"
     ],
-    options: ["Village Learning Hub", "Clean Water for All", "Cooperative Farm", "Open Health Center", "Ethical Business", "Art Collective", "Research Lab", "Forest Restoration", "Other"]
+    options: ["Village Learning Hub","Clean Water for All","Cooperative Farm","Open Health Center","Ethical Business","Art Collective","Research Lab","Forest Restoration","Makerspace","Community Kitchen","Youth Club","Other"]
   },
 ];
 
 export default function AtmaDisha({ onDone }){
   const [step, setStep] = useState(0);
   const [answers, setAnswers] = useState({});
-  const [phase, setPhase] = useState("orbs"); // or "bloom"
+  const [phase, setPhase] = useState("orbs");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
   const active = ELEMENTS[step];
-  const allDone = useMemo(() => ELEMENTS.every(e => answers[e.key]), [answers]);
+  const allDone = ELEMENTS.every(e => !!answers[e.key]);
 
   useEffect(() => {
     if (allDone && phase === "orbs") {
@@ -79,33 +72,22 @@ export default function AtmaDisha({ onDone }){
   }, [allDone, phase]);
 
   async function persistToSupabase(payload){
-    if(!supabase){ return; } // allow running without client in preview
+    if(!supabase){ return; }
     try{
-      setSaving(true);
-      setError("");
-      // we assume a "profiles" table with the current authenticated user row
+      setSaving(true); setError("");
       const { data: user } = await supabase.auth.getUser();
       const user_id = user?.user?.id;
       if(!user_id){ setSaving(false); return; }
-      const { error } = await supabase
-        .from("profiles")
-        .update({ atmadisha_json: payload })
-        .eq("user_id", user_id);
-      if(error){ throw error; }
+      const { error } = await supabase.from("profiles").update({ atmadisha_json: payload }).eq("user_id", user_id);
+      if(error) throw error;
     }catch(err){
-      setError("Could not save to cloud yet. It will retry when you enter the Chauṭarī.");
-      // non-blocking
-    }finally{
-      setSaving(false);
-    }
+      setError("Could not save to cloud yet. We’ll retry on next screen.");
+    }finally{ setSaving(false); }
   }
 
   const next = async (value) => {
-    const updated = { ...answers, [active.key]: value };
-    setAnswers(updated);
-    if(step < ELEMENTS.length - 1){
-      setStep(step + 1);
-    }
+    setAnswers(prev => ({ ...prev, [active.key]: value }));
+    if(step < ELEMENTS.length - 1){ setStep(step + 1); }
   };
 
   const finish = async () => {
@@ -114,10 +96,8 @@ export default function AtmaDisha({ onDone }){
   };
 
   return (
-    <div className="relative w-full min-h-[80vh] text-white overflow-hidden rounded-2xl border border-neutral-800 shadow-2xl">
+    <div className="relative w-full min-h-screen bg-neutral-950 text-white overflow-hidden">
       <CelestialBackground />
-
-      {/* Root lines for already-answered orbs */}
       <RootLines answers={answers} />
 
       <div className="absolute inset-0 grid place-items-center p-4 md:p-8">
@@ -143,7 +123,7 @@ export default function AtmaDisha({ onDone }){
                 />
               </div>
               <div className="mt-3 text-emerald-300/80 text-sm h-5">
-                {!!answers[active.key] && <span>Saved • {ELEMENTS.indexOf(active)+1}/5</span>}
+                {!!answers[active.key] && <span>Saved • {step+1}/5</span>}
               </div>
             </motion.div>
           ) : (
