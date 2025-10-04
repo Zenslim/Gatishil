@@ -1,99 +1,183 @@
 "use client";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
-import { motion } from "framer-motion";
+
+/**
+ * AwakenedSky v6.6
+ * - Five planets start at CENTER: scale 0.2 -> 1.0 over 1.2s, then drift/ping–pong.
+ * - Pure JS (requestAnimationFrame), inline styles only (no CSS deps).
+ * - No debug outline/center dot; clean visuals.
+ * - Robust asset resolution: tries multiple filename candidates per planet; falls back to glow if all fail.
+ */
+
+const CANDIDATES = {
+  earth:   ["/planet/earth.png", "/planet/Earth.png", "/planet/earth.webp", "/planet/planet-earth.png"],
+  moon:    ["/planet/moon.png", "/planet/Moon.png", "/planet/moon.webp"],
+  mars:    ["/planet/mars.png", "/planet/Mars.png", "/planet/mars.webp"],
+  saturn:  ["/planet/saturn.png", "/planet/Saturn.png", "/planet/saturn.webp"],
+  jupiter: ["/planet/jupiter.png", "/planet/Jupiter.png", "/planet/jupiter.webp"],
+};
 
 const PLANETS = [
-  { src: "/planet/earth.png",   size: 150, dir: "leftUp",   delay: 0.00, dur: 34 },
-  { src: "/planet/moon.png",    size: 100, dir: "rightUp",  delay: 0.10, dur: 26 },
-  { src: "/planet/mars.png",    size: 130, dir: "leftDown", delay: 0.18, dur: 30 },
-  { src: "/planet/saturn.png",  size: 200, dir: "rightDown",delay: 0.25, dur: 38 },
-  { src: "/planet/jupiter.png", size: 220, dir: "up",       delay: 0.14, dur: 36 },
+  { key: "earth",   size: 180, dir: [-1.00, -0.35], speed: 36 },
+  { key: "moon",    size: 120, dir: [ 1.00, -0.30], speed: 34 },
+  { key: "mars",    size: 160, dir: [-0.70,  0.70], speed: 32 },
+  { key: "saturn",  size: 220, dir: [ 0.70,  0.70], speed: 30 },
+  { key: "jupiter", size: 240, dir: [ 0.20, -1.00], speed: 28 },
 ];
 
-function pathFor(dir){
-  switch(dir){
-    case "leftUp":    return { x: ["0vw","-30vw","-60vw","-110vw"], y: ["0vh","-8vh","-18vh","-20vh"] };
-    case "rightUp":   return { x: ["0vw","20vw","50vw","110vw"],     y: ["0vh","-6vh","-14vh","-18vh"] };
-    case "leftDown":  return { x: ["0vw","-16vw","-48vw","-110vw"],  y: ["0vh","10vh","30vh","60vh"] };
-    case "rightDown": return { x: ["0vw","14vw","40vw","110vw"],     y: ["0vh","14vh","26vh","60vh"] };
-    case "up":        return { x: ["0vw","2vw","4vw","6vw"],         y: ["0vh","-20vh","-60vh","-110vh"] };
-    default:          return { x: ["0vw","0vw","0vw","0vw"],         y: ["0vh","0vh","0vh","0vh"] };
-  }
+function resolveImage(candidates) {
+  return new Promise((resolve) => {
+    const tryNext = (i) => {
+      if (i >= candidates.length) return resolve(null);
+      const img = new Image();
+      img.onload = () => resolve(candidates[i]);
+      img.onerror = () => tryNext(i + 1);
+      img.src = candidates[i];
+    };
+    tryNext(0);
+  });
 }
 
-export default function AwakenedSky({ onContinue }){
-  const [mounted, setMounted] = useState(false);
-  const reduceMotion = typeof window !== "undefined" && window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+export default function AwakenedSky({ onContinue }) {
+  const rootRef = useRef(null);
+  const refs = useRef(PLANETS.map(() => React.createRef()));
 
+  // Prevent scroll while overlay is visible
   useEffect(() => {
-    setMounted(true);
-    const prevOverflow = document.body.style.overflow;
+    const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
-    return () => { document.body.style.overflow = prevOverflow; };
+    return () => { document.body.style.overflow = prev; };
+  }, []);
+
+  // Load best-available images, then animate
+  useEffect(() => {
+    let raf = 0;
+    let last = performance.now();
+    let start = last;
+
+    (async () => {
+      const resolved = await Promise.all(
+        PLANETS.map(p => resolveImage(CANDIDATES[p.key]))
+      );
+      PLANETS.forEach((p, i) => {
+        const el = refs.current[i].current;
+        if (!el) return;
+        const src = resolved[i];
+        if (src) {
+          el.src = src;
+        } else {
+          el.removeAttribute("src");
+          el.style.background = "radial-gradient(circle at 40% 40%, rgba(255,255,255,0.95), rgba(200,200,255,0.18) 60%, transparent 70%)";
+          el.style.borderRadius = "9999px";
+        }
+      });
+    })();
+
+    const state = PLANETS.map((p) => ({
+      ...p,
+      x: 0, y: 0,
+      vx: p.dir[0] * p.speed,
+      vy: p.dir[1] * p.speed,
+      phase: Math.random() * Math.PI * 2,
+      scale: 0.2, // start tiny
+    }));
+
+    const center = () => {
+      const r = rootRef.current?.getBoundingClientRect();
+      return r ? { cx: r.width / 2, cy: r.height / 2 } : { cx: window.innerWidth / 2, cy: window.innerHeight / 2 };
+    };
+    const bounds = () => {
+      const pad = 120;
+      const w = rootRef.current?.clientWidth ?? window.innerWidth;
+      const h = rootRef.current?.clientHeight ?? window.innerHeight;
+      return { left: -pad, top: -pad, right: w + pad, bottom: h + pad };
+    };
+
+    function tick(t) {
+      const dt = Math.min(0.05, (t - last) / 1000);
+      last = t;
+      const { cx, cy } = center();
+      const b = bounds();
+
+      const elapsed = (t - start) / 1000;
+      const burstDone = elapsed >= 1.2;
+
+      state.forEach((p, i) => {
+        if (!burstDone) {
+          const k = Math.min(1, elapsed / 1.2);
+          const ease = 1 - Math.pow(1 - k, 3);
+          p.scale = 0.2 + ease * 0.8;
+          const el = refs.current[i].current;
+          if (el) {
+            el.style.transform = `translate(${Math.round(cx)}px, ${Math.round(cy)}px) translate(-50%, -50%) scale(${p.scale})`;
+          }
+        } else {
+          p.phase += dt * 0.6;
+          const wobX = Math.sin(p.phase + i) * 12;
+          const wobY = Math.cos(p.phase * 0.9 + i) * 10;
+          p.x += p.vx * dt;
+          p.y += p.vy * dt;
+          if (p.x + cx < b.left || p.x + cx > b.right) p.vx *= -1;
+          if (p.y + cy < b.top  || p.y + cy > b.bottom) p.vy *= -1;
+          p.scale = 0.96 + Math.sin(t * 0.001 + i) * 0.04;
+          const el = refs.current[i].current;
+          if (el) {
+            el.style.transform = `translate(${Math.round(cx + p.x + wobX)}px, ${Math.round(cy + p.y + wobY)}px) translate(-50%, -50%) scale(${p.scale})`;
+          }
+        }
+      });
+
+      raf = requestAnimationFrame(tick);
+    }
+
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
   }, []);
 
   if (typeof document === "undefined") return null;
   return createPortal(
-    <div className="fixed inset-0 w-[100dvw] h-[100dvh] text-white overflow-hidden z-[60]">
+    <div style={{ position: "fixed", inset: 0, width: "100dvw", height: "100dvh", zIndex: 99999, color: "#fff", overflow: "hidden" }}>
+      {/* Planets Layer */}
+      <div ref={rootRef} style={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
+        {PLANETS.map((p, i) => (
+          <img
+            key={i}
+            ref={refs.current[i]}
+            alt="planet"
+            draggable={false}
+            style={{
+              position: "absolute",
+              left: "50%",
+              top: "50%",
+              transform: "translate(-50%, -50%) scale(0.2)",
+              width: p.size,
+              height: p.size,
+              objectFit: "contain",
+              willChange: "transform",
+              filter: "drop-shadow(0 0 22px rgba(255,255,255,0.14))",
+            }}
+          />
+        ))}
+      </div>
+
       {/* Headline */}
-      <div className="absolute inset-x-0 top-[12vh] text-center px-4 z-[5]">
-        <div className="text-2xl md:text-4xl font-semibold drop-shadow-[0_2px_6px_rgba(0,0,0,0.4)]">
+      <div style={{ position: "absolute", insetInline: 0, top: "12vh", textAlign: "center", paddingInline: "1rem", zIndex: 2 }}>
+        <div style={{ fontSize: "clamp(22px,4vw,44px)", fontWeight: 600, textShadow: "0 2px 6px rgba(0,0,0,0.4)" }}>
           Your Ātma Diśā — your <em>Reason for Being</em> — is awakened.
         </div>
-        <div className="opacity-80 mt-2">Walk it. Share it. Build with it.</div>
+        <div style={{ opacity: 0.8, marginTop: 8 }}>Walk it. Share it. Build with it.</div>
       </div>
 
-      {/* Planets layer (guaranteed visible) */}
-      <div className="fixed inset-0 z-[4]" style={{ contain: "layout style", willChange: "transform" }}>
-        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
-          {PLANETS.map((p, i) => {
-            const path = pathFor(p.dir);
-            if (reduceMotion) {
-              // Static fallback positions (still visible)
-              const endX = path.x[path.x.length - 2];
-              const endY = path.y[path.y.length - 2];
-              return (
-                <img
-                  key={i}
-                  src={p.src}
-                  alt="planet"
-                  className="absolute object-contain select-none"
-                  style={{ width: p.size, height: p.size, transform: `translate(${endX}, ${endY}) scale(1)`, opacity: mounted ? 1 : 0 }}
-                  draggable={false}
-                />
-              );
-            }
-            return (
-              <motion.img
-                key={i}
-                src={p.src}
-                alt="planet"
-                initial={{ x: path.x[0], y: path.y[0], scale: 0.85, opacity: 0.99 }}
-                animate={{ x: path.x, y: path.y, scale: [0.85, 1.07, 0.97, 1.02], opacity: 1 }}
-                transition={{ duration: p.dur, times: [0,0.33,0.67,1], delay: p.delay, ease: "linear", repeat: Infinity, repeatType: "mirror" }}
-                className="absolute object-contain select-none"
-                style={{ width: p.size, height: p.size, willChange: "transform", filter: "drop-shadow(0 0 24px rgba(255,255,255,0.12))" }}
-                draggable={false}
-              />
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Footer */}
-      <div className="absolute inset-x-0 bottom-[10vh] text-center px-4 pointer-events-auto z-[5]">
-        <div className="opacity-85 mb-4">Breathe… your direction is clear.</div>
-        <motion.button
-          initial={{ scale: 1 }}
-          animate={{ scale: [1, 1.03, 1] }}
-          transition={{ duration: 2.4, repeat: Infinity, ease: "easeInOut" }}
-          whileHover={{ y: -2 }}
-          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-500/90 hover:bg-emerald-500 text-black font-semibold shadow-lg"
+      {/* CTA */}
+      <div style={{ position: "absolute", insetInline: 0, bottom: "10vh", textAlign: "center", paddingInline: "1rem", zIndex: 2, pointerEvents: "auto" }}>
+        <div style={{ opacity: 0.85, marginBottom: 12 }}>Breathe… your direction is clear.</div>
+        <button
           onClick={() => typeof onContinue === "function" ? onContinue() : null}
+          style={{ padding: "10px 18px", borderRadius: 12, background: "rgba(16,185,129,0.9)", color: "#000", fontWeight: 700, boxShadow: "0 6px 16px rgba(0,0,0,0.35)" }}
         >
           Continue
-        </motion.button>
+        </button>
       </div>
     </div>,
     document.body
