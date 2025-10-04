@@ -8,7 +8,8 @@ type Props = { lang?: 'en' | 'np' }
 const WelcomeStep = dynamic(() => import('@/components/onboard/WelcomeStep'), { ssr: false })
 const NameFaceStep = dynamic(() => import('@/components/onboard/NameFaceStep'), { ssr: false })
 const RootsStep = dynamic(() => import('@/components/onboard/RootsStep'), { ssr: false })
-const JanmandalStep = dynamic(() => import('@/components/onboard/JanmandalStep'), { ssr: false })
+// REPLACED: JanmandalStep → AtmaDisha
+const AtmaDishaStep = dynamic(() => import('@/components/AtmaDisha/AtmaDisha'), { ssr: false })
 
 export default function OnboardingFlow({ lang = 'en' }: Props){
   const router = useRouter()
@@ -52,16 +53,16 @@ export default function OnboardingFlow({ lang = 'en' }: Props){
     return (
       <RootsStep
         supabase={undefined as any}
-        onNext={() => go('janmandal')}
+        onNext={() => go('atmadisha')}
         onBack={() => go('name')}
       />
     )
   }
 
-  if(step === 'janmandal'){
+  if(step === 'atmadisha'){
     return (
       <div className="min-h-[80vh] bg-neutral-950 grid place-items-center px-4 md:px-6">
-        <JanmandalStep onDone={() => router.replace('/dashboard')} />
+        <AtmaDishaStep onDone={() => router.replace('/dashboard')} />
       </div>
     )
   }
