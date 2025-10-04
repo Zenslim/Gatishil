@@ -1,14 +1,11 @@
 "use client";
-import React from "react";
+import React, { useEffect } from "react";
 import { createPortal } from "react-dom";
 import { motion } from "framer-motion";
 import CelestialBackground from "./CelestialBackground";
 
 /**
- * AwakenedSky (center zoom & radial drift)
- * - All planets spawn near center (slightly jittered), zoom out while traveling
- *   in different directions until offscreen, then mirror back.
- * - Rendered as a portal to guarantee full-bleed.
+ * AwakenedSky (full-bleed, center-origin, planets visible above stars)
  */
 const PLANETS = [
   { src: "/planet/earth.png",   size: 110, dir: "leftUp",   delay: 0.00, dur: 34 },
@@ -30,21 +27,27 @@ function pathFor(dir){
 }
 
 export default function AwakenedSky({ onContinue }){
+  useEffect(() => {
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = prevOverflow; };
+  }, []);
+
   if (typeof document === "undefined") return null;
   return createPortal(
-    <div className="fixed inset-0 w-[100vw] h-[100vh] text-white overflow-hidden z-[60]">
+    <div className="fixed inset-0 w-[100vw] h-[100vh] text-white overflow-hidden z-[9999]">
       <CelestialBackground />
 
-      {/* Headline */}
-      <div className="absolute inset-x-0 top-[12vh] text-center px-4">
+      {/* Headline above everything */}
+      <div className="absolute inset-x-0 top-[12vh] text-center px-4 z-[2]">
         <div className="text-2xl md:text-4xl font-semibold drop-shadow-[0_2px_6px_rgba(0,0,0,0.4)]">
           Your Ātma Diśā — your <em>Reason for Being</em> — is awakened.
         </div>
         <div className="opacity-80 mt-2">Walk it. Share it. Build with it.</div>
       </div>
 
-      {/* Center-origin planets */}
-      <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none">
+      {/* Planets layer above starfield */}
+      <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none z-[1]">
         {PLANETS.map((p, i) => {
           const path = pathFor(p.dir);
           return (
@@ -63,8 +66,8 @@ export default function AwakenedSky({ onContinue }){
         })}
       </div>
 
-      {/* Footer */}
-      <div className="absolute inset-x-0 bottom-[10vh] text-center px-4 pointer-events-auto">
+      {/* Footer CTA */}
+      <div className="absolute inset-x-0 bottom-[10vh] text-center px-4 pointer-events-auto z-[2]">
         <div className="opacity-85 mb-4">Breathe… your direction is clear.</div>
         <motion.button
           initial={{ scale: 1 }}
