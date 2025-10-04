@@ -16,7 +16,8 @@ export async function createRegOptions(userId: string, username: string) {
   const options = await generateRegistrationOptions({
     rpName: RP_NAME,
     rpID: RP_ID,
-    userID: userId,
+    // convert string to Uint8Array
+    userID: Buffer.from(userId, 'utf8'),
     userName: username,
     attestationType: 'none',
     authenticatorSelection: {
