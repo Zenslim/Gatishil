@@ -8,12 +8,11 @@ export default function PlanetBloom({ answers, onComplete }){
     return () => clearTimeout(t);
   }, [onComplete]);
 
-  const orbs = [
-    { r: 90, size: 26, color: "#FBBF24", delay: 0.0 },
-    { r: 90, size: 24, color: "#67E8F9", delay: 0.1 },
-    { r: 90, size: 24, color: "#FB923C", delay: 0.2 },
-    { r: 90, size: 24, color: "#F472B6", delay: 0.3 },
-    { r: 0,  size: 30, color: "#C084FC", delay: 0.4 }, // center pulse
+  const orbits = [
+    { rotate: 0,   delay: 0.0 },
+    { rotate: 72,  delay: 0.1 },
+    { rotate: 144, delay: 0.2 },
+    { rotate: 216, delay: 0.3 },
   ];
 
   return (
@@ -22,7 +21,6 @@ export default function PlanetBloom({ answers, onComplete }){
       <div className="opacity-80 mt-1">Five roots now guide your path.</div>
 
       <div className="relative mx-auto mt-8" style={{ width: 320, height: 320 }}>
-        {/* Center glow */}
         <motion.div
           initial={{ opacity: 0, scale: 0.6 }}
           animate={{ opacity: 1, scale: 1 }}
@@ -32,24 +30,17 @@ export default function PlanetBloom({ answers, onComplete }){
           <div className="w-28 h-28 rounded-full bg-white/10 border border-white/25 backdrop-blur" />
         </motion.div>
 
-        {/* Orbiters (no lines) */}
-        {orbs.slice(0,4).map((o, i) => (
+        {orbits.map((o, i) => (
           <motion.div
             key={i}
             initial={{ opacity: 0, scale: 0.5 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.7, delay: o.delay }}
             className="absolute inset-0"
-            style={{ transform: `rotate(${i*90}deg)` }}
+            style={{ transform: `rotate(${o.rotate}deg)` }}
           >
-            <div className="absolute left-1/2 top-1/2"
-                 style={{ transform: `translate(-50%, -${o.r}px)` }}>
-              <div className="rounded-full"
-                   style={{
-                     width: o.size, height: o.size,
-                     background: `radial-gradient(60% 60% at 35% 30%, ${o.color}, rgba(0,0,0,0.9) 60%)`,
-                     boxShadow: `0 0 28px ${o.color}66`
-                   }}/>
+            <div className="absolute left-1/2 top-1/2" style={{ transform: `translate(-50%, -95px)` }}>
+              <div className="w-6 h-6 rounded-full bg-white/40 blur-sm" />
             </div>
           </motion.div>
         ))}

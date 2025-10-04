@@ -2,7 +2,7 @@
 import React, { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 
-export default function QuestionRotator({ items = [], periodMs = 5000 }){
+export default function QuestionRotator({ items = [], periodMs = 4000 }){
   const [i, setI] = useState(0);
   useEffect(() => {
     const t = setInterval(() => setI(v => (v + 1) % items.length), periodMs);

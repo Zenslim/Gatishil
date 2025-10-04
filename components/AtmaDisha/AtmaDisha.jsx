@@ -2,45 +2,31 @@
 import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import CelestialBackground from "./CelestialBackground";
-import OrbScene from "./OrbScene";
-import ComboBox from "./ComboBox";
+import PlanetScene from "./PlanetScene";
+import QuestionRotator from "./QuestionRotator";
+import ComboBoxMulti from "./ComboBoxMulti";
 import PlanetBloom from "./PlanetBloom";
 
 let supabase = null;
 try { supabase = require("@/lib/supabaseClient").default ?? null; } catch (_) { supabase = null; }
 
 const ELEMENTS = [
-  { key: "occupation", id: "earth", label: "✋ Prithvi (Earth)", color: "#FBBF24",
-    whispers: ["What work anchors your day?","What is your current role in society?","What’s your present profession?"],
-    options: ["Farmer","Teacher","Student","Craftsperson","Engineer","Healer","Merchant","Homemaker","Driver","Laborer","Nurse","Doctor","Software Engineer","Designer","Artist","Musician","Police","Army","Civil Servant","Entrepreneur","Volunteer","Unemployed","Other"]
-  },
-  { key: "skill", id: "water", label: "🎁 Jal (Water)", color: "#67E8F9",
-    whispers: ["What do you do effortlessly?","Which skills flow with least resistance?","What do you excel at that helps others?"],
-    options: ["Listening","Teaching","Organizing","Design","Coding","Cooking","Negotiation","Caretaking","Writing","Public Speaking","Photography","Carpentry","Farming","Healing","Finance","Sales","Research","Strategy","Community Building","Other"]
-  },
-  { key: "passion", id: "fire", label: "🔥 Agni (Fire)", color: "#FB923C",
-    whispers: ["What lights your inner flame?","What are you most excited to do daily?","Which activity brings radiant joy?"],
-    options: ["Storytelling","Building","Gardening","Art","Music","Research","Entrepreneurship","Volunteering","Meditation","Teaching","Coding Projects","Sports & Movement","Reading","Travel","Other"]
-  },
-  { key: "compassion", id: "air", label: "❤️ Vayu (Air)", color: "#F472B6",
-    whispers: ["What injustice steals your breath?","What lack in the world feels suffocating?","What change does your community need?"],
-    options: ["Children","Elders","Climate","Health Access","Corruption","Education","Poverty","Women Safety","Animal Care","Disability Inclusion","Mental Health","Rural Access","Clean Water","Other"]
-  },
-  { key: "vision", id: "space", label: "🌱 Akash (Space)", color: "#C084FC",
-    whispers: ["What vision guides you?","What future goal calls today?","What seeds are you planting?"],
-    options: ["Village Learning Hub","Clean Water for All","Cooperative Farm","Open Health Center","Ethical Business","Art Collective","Research Lab","Forest Restoration","Makerspace","Community Kitchen","Youth Club","Other"]
-  },
+  { key: "occupation", id: "earth", planet: { name: "Earth", src: "/planet/earth.png", from: "bottom" }, title: "Your ROLE in SOCIETY", whispers: ["What work anchors your day?","What is your current role in society?","What’s your present profession?"], options: ["Farmer","Teacher","Student","Craftsperson","Engineer","Healer","Merchant","Homemaker","Driver","Laborer","Nurse","Doctor","Software Engineer","Designer","Artist","Musician","Police","Army","Civil Servant","Entrepreneur","Volunteer","Unemployed","Other"] },
+  { key: "skill", id: "moon", planet: { name: "Moon", src: "/planet/moon.png", from: "left" }, title: "What you are GOOD AT", whispers: ["What do you do effortlessly?","Which skills flow with least resistance?","What do you excel at that helps others?"], options: ["Listening","Teaching","Organizing","Design","Coding","Cooking","Negotiation","Caretaking","Writing","Public Speaking","Photography","Carpentry","Farming","Healing","Finance","Sales","Research","Strategy","Community Building","Other"] },
+  { key: "passion", id: "mars", planet: { name: "Mars", src: "/planet/mars.png", from: "top" }, title: "What you LOVE to do", whispers: ["What lights your inner flame?","What are you most excited to do daily?","Which activity brings radiant joy?"], options: ["Storytelling","Building","Gardening","Art","Music","Research","Entrepreneurship","Volunteering","Meditation","Teaching","Coding Projects","Sports & Movement","Reading","Travel","Other"] },
+  { key: "compassion", id: "saturn", planet: { name: "Saturn", src: "/planet/saturn.png", from: "right" }, title: "What WORLD NEEDS", whispers: ["What injustice steals your breath?","What lack in the world feels suffocating?","What change does your community need?"], options: ["Children","Elders","Climate","Health Access","Corruption","Education","Poverty","Women Safety","Animal Care","Disability Inclusion","Mental Health","Rural Access","Clean Water","Other"] },
+  { key: "vision", id: "jupiter", planet: { name: "Jupiter", src: "/planet/jupiter.png", from: "depth" }, title: "Your VISION & GOALS", whispers: ["What vision guides you?","What future goal calls today?","What seeds are you planting?"], options: ["Village Learning Hub","Clean Water for All","Cooperative Farm","Open Health Center","Ethical Business","Art Collective","Research Lab","Forest Restoration","Makerspace","Community Kitchen","Youth Club","Other"] },
 ];
 
 export default function AtmaDisha({ onDone }){
   const [step, setStep] = useState(0);
   const [answers, setAnswers] = useState({});
-  const [phase, setPhase] = useState("orbs"); // "orbs" | "bloom"
+  const [phase, setPhase] = useState("orbs");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
   const active = ELEMENTS[step];
-  const allDone = ELEMENTS.every(e => !!answers[e.key]);
+  const allDone = ELEMENTS.every(e => Array.isArray(answers[e.key]) && answers[e.key].length > 0);
 
   useEffect(() => {
     if(allDone && phase==="orbs"){
@@ -49,28 +35,28 @@ export default function AtmaDisha({ onDone }){
     }
   }, [allDone, phase]);
 
-  async function persistToSupabase(payload){
+  async function persist(payload){
     if(!supabase) return;
     try{
       setSaving(true); setError("");
       const { data: user } = await supabase.auth.getUser();
-      const user_id = user?.user?.id;
-      if(!user_id){ setSaving(false); return; }
-      const { error } = await supabase.from("profiles").update({ atmadisha_json: payload }).eq("user_id", user_id);
+      const uid = user?.user?.id;
+      if(!uid){ setSaving(false); return; }
+      const { error } = await supabase.from("profiles").update({ atmadisha_json: payload }).eq("user_id", uid);
       if(error) throw error;
     }catch(err){
       setError("We’ll sync this to your profile shortly.");
     }finally{ setSaving(false); }
   }
 
-  const next = async (val) => {
-    if(!val) return;
-    setAnswers(prev => ({ ...prev, [active.key]: val }));
+  const next = async (vals) => {
+    if(!vals || vals.length === 0) return;
+    setAnswers(prev => ({ ...prev, [active.key]: vals }));
     if(step < ELEMENTS.length - 1) setStep(step + 1);
   };
 
   const finish = async () => {
-    await persistToSupabase(answers);
+    await persist(answers);
     if(typeof onDone === "function") onDone();
   };
 
@@ -88,16 +74,15 @@ export default function AtmaDisha({ onDone }){
               transition={{ duration: 0.35 }}
               className="w-full max-w-3xl mx-auto text-center"
             >
-              <OrbScene element={active} index={step} total={ELEMENTS.length} whispers={active.whispers} />
+              <PlanetScene element={active} index={step} total={ELEMENTS.length} />
+              <div className="mt-6 text-lg md:text-xl opacity-90 min-h-[3rem]">
+                <QuestionRotator items={[active.title, ...active.whispers]} periodMs={4000} />
+              </div>
               <div className="mt-5">
-                <ComboBox
-                  options={active.options}
-                  placeholder="Search or type your answer…"
-                  onSubmit={next}
-                />
+                <ComboBoxMulti options={active.options} placeholder="Search or type your answer…" onSubmit={next} />
               </div>
               <div className="mt-4 text-emerald-300/80 text-sm h-5">
-                {!!answers[active.key] && <span>Saved • {step+1}/5</span>}
+                {Array.isArray(answers[active.key]) && answers[active.key].length > 0 ? <span>Saved • {step+1}/5</span> : null}
               </div>
             </motion.div>
           ) : (

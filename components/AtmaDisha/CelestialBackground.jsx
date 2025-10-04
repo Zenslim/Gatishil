@@ -34,14 +34,9 @@ export default function CelestialBackground(){
         @keyframes twinkle { 0%,100%{opacity:.25; transform:scale(1)} 50%{opacity:.9; transform:scale(1.2)} }
         @keyframes driftY { 0%{ transform: translateY(0px) } 100%{ transform: translateY(-160px) } }
         @keyframes nebulaPan { 0%{ transform: translate(-12%, -10%) scale(1.1) } 100%{ transform: translate(10%, 8%) scale(1.1) } }
-        @keyframes swirl { 0%{ transform: rotate(0deg) } 100%{ transform: rotate(360deg) } }
       `}</style>
-
-      {/* Edge-to-edge parallax */}
       <StarsLayer count={160} speed={100} opacity={0.7} />
       <StarsLayer count={110} speed={140} blur={1} opacity={0.5} />
-
-      {/* Slow nebula tint */}
       <div
         className="absolute -inset-1 opacity-[0.18] mix-blend-screen pointer-events-none"
         style={{
