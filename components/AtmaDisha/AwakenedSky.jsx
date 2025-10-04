@@ -1,14 +1,14 @@
 "use client";
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { motion } from "framer-motion";
 
 const PLANETS = [
-  { src: "/planet/earth.png",   size: 130, dir: "leftUp",   delay: 0.00, dur: 34 },
-  { src: "/planet/moon.png",    size: 84,  dir: "rightUp",  delay: 0.10, dur: 26 },
-  { src: "/planet/mars.png",    size: 108, dir: "leftDown", delay: 0.18, dur: 30 },
-  { src: "/planet/saturn.png",  size: 170, dir: "rightDown",delay: 0.25, dur: 38 },
-  { src: "/planet/jupiter.png", size: 190, dir: "up",       delay: 0.14, dur: 36 },
+  { src: "/planet/earth.png",   size: 150, dir: "leftUp",   delay: 0.00, dur: 34 },
+  { src: "/planet/moon.png",    size: 100, dir: "rightUp",  delay: 0.10, dur: 26 },
+  { src: "/planet/mars.png",    size: 130, dir: "leftDown", delay: 0.18, dur: 30 },
+  { src: "/planet/saturn.png",  size: 200, dir: "rightDown",delay: 0.25, dur: 38 },
+  { src: "/planet/jupiter.png", size: 220, dir: "up",       delay: 0.14, dur: 36 },
 ];
 
 function pathFor(dir){
@@ -23,7 +23,11 @@ function pathFor(dir){
 }
 
 export default function AwakenedSky({ onContinue }){
+  const [mounted, setMounted] = useState(false);
+  const reduceMotion = typeof window !== "undefined" && window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
   useEffect(() => {
+    setMounted(true);
     const prevOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => { document.body.style.overflow = prevOverflow; };
@@ -33,28 +37,43 @@ export default function AwakenedSky({ onContinue }){
   return createPortal(
     <div className="fixed inset-0 w-[100dvw] h-[100dvh] text-white overflow-hidden z-[60]">
       {/* Headline */}
-      <div className="absolute inset-x-0 top-[12vh] text-center px-4 z-[2]">
+      <div className="absolute inset-x-0 top-[12vh] text-center px-4 z-[5]">
         <div className="text-2xl md:text-4xl font-semibold drop-shadow-[0_2px_6px_rgba(0,0,0,0.4)]">
           Your Ātma Diśā — your <em>Reason for Being</em> — is awakened.
         </div>
         <div className="opacity-80 mt-2">Walk it. Share it. Build with it.</div>
       </div>
 
-      {/* Planets layer */}
-      <div className="fixed inset-0 pointer-events-none z-[1]">
+      {/* Planets layer (guaranteed visible) */}
+      <div className="fixed inset-0 z-[4]" style={{ contain: "layout style", willChange: "transform" }}>
         <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
           {PLANETS.map((p, i) => {
             const path = pathFor(p.dir);
+            if (reduceMotion) {
+              // Static fallback positions (still visible)
+              const endX = path.x[path.x.length - 2];
+              const endY = path.y[path.y.length - 2];
+              return (
+                <img
+                  key={i}
+                  src={p.src}
+                  alt="planet"
+                  className="absolute object-contain select-none"
+                  style={{ width: p.size, height: p.size, transform: `translate(${endX}, ${endY}) scale(1)`, opacity: mounted ? 1 : 0 }}
+                  draggable={false}
+                />
+              );
+            }
             return (
               <motion.img
                 key={i}
                 src={p.src}
                 alt="planet"
-                initial={{ x: path.x[0], y: path.y[0], scale: 0.8, opacity: 0.98 }}
-                animate={{ x: path.x, y: path.y, scale: [0.8, 1.06, 0.96, 1.02], opacity: 1 }}
+                initial={{ x: path.x[0], y: path.y[0], scale: 0.85, opacity: 0.99 }}
+                animate={{ x: path.x, y: path.y, scale: [0.85, 1.07, 0.97, 1.02], opacity: 1 }}
                 transition={{ duration: p.dur, times: [0,0.33,0.67,1], delay: p.delay, ease: "linear", repeat: Infinity, repeatType: "mirror" }}
-                className="absolute object-contain select-none drop-shadow-[0_0_34px_rgba(255,255,255,0.14)]"
-                style={{ width: p.size, height: p.size }}
+                className="absolute object-contain select-none"
+                style={{ width: p.size, height: p.size, willChange: "transform", filter: "drop-shadow(0 0 24px rgba(255,255,255,0.12))" }}
                 draggable={false}
               />
             );
@@ -63,7 +82,7 @@ export default function AwakenedSky({ onContinue }){
       </div>
 
       {/* Footer */}
-      <div className="absolute inset-x-0 bottom-[10vh] text-center px-4 pointer-events-auto z-[2]">
+      <div className="absolute inset-x-0 bottom-[10vh] text-center px-4 pointer-events-auto z-[5]">
         <div className="opacity-85 mb-4">Breathe… your direction is clear.</div>
         <motion.button
           initial={{ scale: 1 }}
