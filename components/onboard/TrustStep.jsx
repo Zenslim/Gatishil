@@ -1,48 +1,145 @@
-export default function TrustStep({ onNext }) {
-  const [creating, setCreating] = useState(false);
+'use client';
 
-  async function handleCreatePasskey() {
-    setCreating(true);
-    try {
-      const opts = await fetch("/api/webauthn/options").then(r => r.json());
-      const cred = await navigator.credentials.create({ publicKey: opts });
-      await fetch("/api/webauthn/verify", {
-        method: "POST",
-        body: JSON.stringify(cred),
-        headers: { "Content-Type": "application/json" }
+import React, { useEffect, useState } from 'react';
+import { startRegistration } from '@simplewebauthn/browser';
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import { createLocalPin, hasLocalPin } from '@/lib/localPin';
+
+export default function TrustStep({ onDone }){
+  const supabase = createClientComponentClient();
+  const [supported, setSupported] = useState<boolean | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [pin, setPin] = useState('');
+
+  useEffect(() => {
+    (async () => {
+      try{
+        const ok = await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
+        setSupported(ok);
+      }catch{
+        setSupported(false);
+      }
+    })();
+  }, []);
+
+  const doPasskey = async () => {
+    setBusy(true); setErr(null); setMsg(null);
+    try{
+      const { data: { user } } = await supabase.auth.getUser();
+      if(!user) throw new Error('Sign-in required');
+      const username = user.email || user.id;
+
+      const r1 = await fetch('/api/webauthn/authn/options', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: user.id, username })
       });
-      toast.success("Your voice is now sealed to this device 🌿");
-      onNext();
-    } catch (e) {
-      console.error(e);
-      toast.error("Couldn’t create passkey. You can use OTP next time.");
-      onNext();
-    } finally {
-      setCreating(false);
+      if(!r1.ok) throw new Error('Failed to get options');
+      const options = await r1.json();
+
+      const att = await startRegistration(options);
+
+      const r2 = await fetch('/api/webauthn/authn/verify', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: user.id, response: att })
+      });
+      const j2 = await r2.json();
+      if(!r2.ok || !j2.ok) throw new Error(j2.error || 'Verification failed');
+
+      setMsg('🌿 Your voice is now sealed to this device.');
+      setTimeout(() => onDone?.(), 800);
+    }catch(e:any){
+      setErr(e?.message || 'Passkey setup failed');
+    }finally{
+      setBusy(false);
     }
-  }
+  };
+
+  const doPin = async () => {
+    setBusy(true); setErr(null); setMsg(null);
+    try{
+      if(!/^[0-9]{4}$/.test(pin)) throw new Error('Enter a 4-digit PIN');
+      await createLocalPin(pin);
+      setMsg('🌿 Your voice is now sealed to this device.');
+      setTimeout(() => onDone?.(), 800);
+    }catch(e:any){
+      setErr(e?.message || 'Could not create PIN');
+    }finally{
+      setBusy(false);
+    }
+  };
 
   return (
-    <div className="flex flex-col items-center justify-center h-screen text-center px-6">
-      <h1 className="text-3xl font-bold mb-4">🌳 Welcome under the tree</h1>
-      <p className="text-gray-300 mb-8 max-w-md">
-        You’ve spoken your <b>name</b>, shared your <b>roots</b>, and offered your <b>skills</b>.
-        <br/><br/>
-        Now, shall we <b>seal your voice</b> to this device?
-      </p>
-      <button
-        disabled={creating}
-        onClick={handleCreatePasskey}
-        className="bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-3 rounded-xl text-lg font-medium transition"
-      >
-        {creating ? "Creating Passkey..." : "Yes, create my passkey 🔐"}
-      </button>
-      <button
-        onClick={onNext}
-        className="mt-4 text-gray-400 underline hover:text-gray-200"
-      >
-        Not now → I’ll use OTP next time
-      </button>
+    <div className="min-h-[80vh] bg-neutral-950 text-white grid place-items-center p-6">
+      <div className="w-full max-w-xl p-6 rounded-2xl bg-black/40 border border-white/10">
+        <div className="text-4xl mb-2">🌳</div>
+        <h2 className="text-2xl font-semibold">Welcome under the tree</h2>
+        <p className="text-white/70 mt-2">
+          You’ve shared your name, roots, and skills. Now, let’s seal your voice to this device so it recognizes you every time you return.
+        </p>
+
+        {supported === null ? (
+          <p className="mt-6 text-sm text-white/60">Checking your device capabilities…</p>
+        ) : supported ? (
+          <div className="mt-6">
+            <button
+              onClick={doPasskey}
+              disabled={busy}
+              className="w-full py-3 rounded-xl bg-emerald-500 hover:bg-emerald-600 disabled:opacity-60"
+            >
+              {busy ? 'Creating…' : 'Create Passkey 🔐'}
+            </button>
+            <p className="mt-3 text-xs text-white/60">
+              Your secret stays on your device. Passkeys make your Chautarī visits effortless.
+            </p>
+          </div>
+        ) : (
+          <div className="mt-6">
+            {hasLocalPin() ? (
+              <p className="text-sm text-emerald-300">A device PIN already exists.</p>
+            ) : (
+              <div className="space-y-3">
+                <label className="block">
+                  <span className="text-sm text-gray-300">Create a 4‑digit PIN 🔑</span>
+                  <input
+                    type="password"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    maxLength={4}
+                    value={pin}
+                    onChange={(e)=>setPin(e.target.value.replace(/\D/g,''))}
+                    className="mt-1 w-full rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    placeholder="••••"
+                  />
+                </label>
+                <button
+                  onClick={doPin}
+                  disabled={busy}
+                  className="w-full py-3 rounded-xl bg-emerald-500 hover:bg-emerald-600 disabled:opacity-60"
+                >
+                  {busy ? 'Saving…' : 'Create PIN'}
+                </button>
+              </div>
+            )}
+            <p className="mt-3 text-xs text-white/60">
+              The PIN never leaves your device. We encrypt a secret locally to recognize you later.
+            </p>
+          </div>
+        )}
+
+        {msg && <p className="mt-4 text-emerald-400">{msg}</p>}
+        {err && <p className="mt-4 text-red-400">{err}</p>}
+
+        <div className="mt-6">
+          <button
+            onClick={()=>onDone?.()}
+            className="w-full py-3 rounded-xl border border-white/20 hover:bg-white/10"
+          >
+            Not now → Use OTP next time
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

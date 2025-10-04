@@ -1,0 +1,11 @@
+// 1) Import
++ const TrustStep = dynamic(() => import('@/components/onboard/TrustStep'), { ssr: false })
+
+// 2) At Ātma Diśā completion, go to 'trust' instead of dashboard
+- <AtmaDishaStep onDone={() => router.replace('/dashboard')} />
++ <AtmaDishaStep onDone={() => go('trust')} />
+
+// 3) Add a new step block
++ if(step === 'trust'){
++   return <TrustStep onDone={() => router.replace('/dashboard')} />
++ }
