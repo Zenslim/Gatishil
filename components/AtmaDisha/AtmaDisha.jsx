@@ -1,46 +1,122 @@
 "use client";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-
-import CelestialBackground from "@/components/CelestialBackground";
-import PlanetScene from "@/components/PlanetScene";
-import QuestionRotator from "@/components/QuestionRotator";
-import ComboBoxMulti from "@/components/ComboBoxMulti";
-import IntroSky from "@/components/IntroSky";
-import AwakenedSky from "@/components/AwakenedSky";
-
+import IntroSky from "../IntroSky";        // components/IntroSky.jsx (relative from /components/AtmaDisha)
+import AwakenedSky from "../AwakenedSky";  // components/AwakenedSky.jsx
 import { loadOptions, bundledOptions } from "@/lib/atmaOptions";
-
 
 let supabase = null;
 try { supabase = require("@/lib/supabaseClient").default ?? null; } catch (_) { supabase = null; }
 
-const ELEMENTS = [
-  { key: "occupation", id: "earth", planet: { name: "Earth", src: "/planet/earth.png", from: "bottom" }, staticLabel: "Your ROLE in SOCIETY", whispers: ["What work anchors your day?","What is your current role in society?","What’s your present profession?"] },
-  { key: "skill",      id: "moon",  planet: { name: "Moon",  src: "/planet/moon.png",  from: "left"   }, staticLabel: "What you are GOOD AT",  whispers: ["What do you do effortlessly?","Which skills flow with least resistance?","What do you excel at that helps others?"] },
-  { key: "passion",    id: "mars",  planet: { name: "Mars",  src: "/planet/mars.png",  from: "top"    }, staticLabel: "What you LOVE to do",  whispers: ["What lights your inner flame?","What are you most excited to do daily?","Which activity brings radiant joy?"] },
-  { key: "compassion", id: "saturn",planet: { name: "Saturn",src: "/planet/saturn.png",from: "right"  }, staticLabel: "What WORLD NEEDS",     whispers: ["What injustice steals your breath?","What lack in the world feels suffocating?","What change does your community need?"] },
-  { key: "vision",     id: "jupiter",planet:{ name: "Jupiter",src:"/planet/jupiter.png",from: "depth" }, staticLabel: "Your VISION & GOALS", whispers: ["What vision guides you?","What future goal calls today?","What seeds are you planting?"] },
-];
+/** ----- Local lightweight visuals and inputs ----- */
 
-/** Simple error boundary so questions render even if PlanetScene fails */
-class OrbsBoundary extends React.Component {
-  constructor(props){ super(props); this.state = { hasError: false, err: null }; }
-  static getDerivedStateFromError(err){ return { hasError: true, err }; }
-  componentDidCatch(err, info){ console.error("Orbs crashed:", err, info); }
-  render(){
-    if(this.state.hasError){
-      return (
-        <div className="w-full max-w-3xl mx-auto text-center p-4">
-          <div className="text-amber-300 mb-3">Visuals failed to load — showing questions only.</div>
-          {this.props.fallback}
-        </div>
-      );
-    }
-    return this.props.children;
-  }
+// Starry background (no external deps)
+function StarField() {
+  const stars = useMemo(() => Array.from({ length: 140 }, () => ({
+    x: Math.random() * 100,
+    y: Math.random() * 100,
+    s: Math.random() * 2 + 0.5,
+    o: Math.random() * 0.7 + 0.2,
+  })), []);
+  return (
+    <div className="absolute inset-0 -z-10 bg-black">
+      <div className="absolute inset-0" style={{background:"radial-gradient(1200px 600px at 50% 110%, rgba(16,185,129,0.10), transparent 60%)"}} />
+      {stars.map((st, i) => (
+        <div key={i}
+          className="absolute rounded-full"
+          style={{
+            left: `${st.x}vw`, top: `${st.y}vh`,
+            width: st.s, height: st.s, opacity: st.o,
+            background: "white", boxShadow: "0 0 8px rgba(255,255,255,0.6)"
+          }}
+        />
+      ))}
+    </div>
+  );
 }
 
+// Local QuestionRotator
+function LocalQuestionRotator({ items = [], periodMs = 4000 }) {
+  const [i, setI] = useState(0);
+  useEffect(() => {
+    if (!items.length) return;
+    const t = setInterval(() => setI(v => (v + 1) % items.length), periodMs);
+    return () => clearInterval(t);
+  }, [items, periodMs]);
+  if (!items.length) return null;
+  return (
+    <motion.div key={i}
+      initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}
+      transition={{ duration: 0.3 }}
+      className="text-lg md:text-xl opacity-90"
+    >
+      {items[i]}
+    </motion.div>
+  );
+}
+
+// Local ComboBoxMulti: enter text, press Enter to add; shows chips; Submit button
+function LocalComboBoxMulti({ options = [], placeholder, onSubmit }) {
+  const [val, setVal] = useState("");
+  const [chips, setChips] = useState([]);
+  const normalized = useMemo(() => options?.map(o => (typeof o === "string" ? o : o?.label ?? "")), [options]);
+
+  function addChip(text) {
+    const t = (text || "").trim();
+    if (!t) return;
+    if (!chips.includes(t)) setChips(prev => [...prev, t]);
+  }
+  function removeChip(t) { setChips(prev => prev.filter(x => x !== t)); }
+
+  return (
+    <div className="w-full">
+      <div className="flex flex-wrap gap-2 mb-3 justify-center">
+        {chips.map(c => (
+          <span key={c} className="px-3 py-1 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-400/30">
+            {c}
+            <button className="ml-2 text-emerald-200/80" onClick={() => removeChip(c)}>×</button>
+          </span>
+        ))}
+      </div>
+      <input
+        value={val}
+        onChange={e => setVal(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            addChip(val);
+            setVal("");
+          }
+        }}
+        list="atma-hints"
+        placeholder={placeholder || "Search or type your answer…"}
+        className="w-full max-w-xl mx-auto px-4 py-3 rounded-lg bg-white/5 border border-white/15 outline-none focus:ring-2 focus:ring-emerald-400/40"
+      />
+      <datalist id="atma-hints">
+        {normalized.slice(0, 50).map((o, idx) => <option key={idx} value={o} />)}
+      </datalist>
+      <div className="mt-3 text-center">
+        <button
+          onClick={() => chips.length ? onSubmit?.(chips) : null}
+          className="px-4 py-2 rounded-md bg-emerald-400 text-black font-semibold shadow"
+        >
+          Save & Continue
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** ----- Flow data ----- */
+const ELEMENTS = [
+  { key: "occupation", id: "earth",   staticLabel: "Your ROLE in SOCIETY", whispers: ["What work anchors your day?","What is your current role in society?","What’s your present profession?"] },
+  { key: "skill",      id: "moon",    staticLabel: "What you are GOOD AT", whispers: ["What do you do effortlessly?","Which skills flow with least resistance?","What do you excel at that helps others?"] },
+  { key: "passion",    id: "mars",    staticLabel: "What you LOVE to do", whispers: ["What lights your inner flame?","What are you most excited to do daily?","Which activity brings radiant joy?"] },
+  { key: "compassion", id: "saturn",  staticLabel: "What WORLD NEEDS",    whispers: ["What injustice steals your breath?","What lack in the world feels suffocating?","What change does your community need?"] },
+  { key: "vision",     id: "jupiter", staticLabel: "Your VISION & GOALS",  whispers: ["What vision guides you?","What future goal calls today?","What seeds are you planting?"] },
+];
+
+/** ----- Main component ----- */
 export default function AtmaDisha({ onDone }) {
   const [step, setStep] = useState(0);
   const [answers, setAnswers] = useState({});
@@ -49,7 +125,7 @@ export default function AtmaDisha({ onDone }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
-  // Safety: even if IntroSky misbehaves, move on.
+  // Safety: advance from intro even if anything hiccups
   useEffect(() => {
     if (phase === "intro") {
       const t = setTimeout(() => setPhase("orbs"), 2600);
@@ -57,7 +133,7 @@ export default function AtmaDisha({ onDone }) {
     }
   }, [phase]);
 
-  // Load dynamic options
+  // Load dynamic options from Supabase if available
   useEffect(() => { (async () => { setLists(await loadOptions(supabase)); })(); }, []);
 
   const active = ELEMENTS[step];
@@ -77,7 +153,9 @@ export default function AtmaDisha({ onDone }) {
       const { data: user } = await supabase.auth.getUser();
       const uid = user?.user?.id;
       if (!uid) { setSaving(false); return; }
-      const { error } = await supabase.from("profiles").update({ atmadisha_json: payload }).eq("user_id", uid);
+      const { error } = await supabase.from("profiles")
+        .update({ atmadisha_json: payload })
+        .eq("user_id", uid);
       if (error) throw error;
     } catch {
       setError("We’ll sync this to your profile shortly.");
@@ -99,54 +177,44 @@ export default function AtmaDisha({ onDone }) {
 
   return (
     <div className="relative w-full min-h-screen bg-black text-white overflow-hidden">
-      <CelestialBackground />
+      <StarField />
 
-      {/* Intro layer (low z), will be hidden after phase switch */}
+      {/* Intro layer */}
       <div className={phase === "intro" ? "absolute inset-0 z-[10]" : "hidden"}>
         <IntroSky onDone={() => setPhase("orbs")} />
       </div>
 
-      {/* Orbs/questions layer (always mounted, higher z) */}
+      {/* Orbs + questions layer */}
       <div className={phase !== "bloom" ? "absolute inset-0 z-[20] grid place-items-center p-4 md:p-8" : "hidden"}>
-        <OrbsBoundary
-          fallback={
-            <>
-              <div className="text-lg md:text-xl opacity-90 min-h-[3rem]">{active?.staticLabel}</div>
-              <div className="mt-4">
-                <QuestionRotator items={active?.whispers ?? []} periodMs={4000} />
-              </div>
-              <div className="mt-5">
-                <ComboBoxMulti options={options} placeholder="Search or type your answer…" onSubmit={next} />
-              </div>
-            </>
-          }
-        >
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={`${phase}-${active?.id}`}
-              initial={{ opacity: 0, scale: 0.96 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.98 }}
-              transition={{ duration: 0.35 }}
-              className="w-full max-w-3xl mx-auto text-center"
-            >
-              <div className="sr-only">Step {step + 1} of {ELEMENTS.length}</div>
-              <PlanetScene element={active} index={step} total={ELEMENTS.length} label={active.staticLabel} />
-              <div className="mt-6 text-lg md:text-xl opacity-90 min-h-[3rem]">
-                <QuestionRotator items={active.whispers} periodMs={4000} />
-              </div>
-              <div className="mt-5">
-                <ComboBoxMulti options={options} placeholder="Search or type your answer…" onSubmit={next} />
-              </div>
-              <div className="mt-4 text-emerald-300/80 text-sm h-5">
-                {Array.isArray(answers[active.key]) && answers[active.key].length > 0 ? <span>Saved • {step + 1}/{ELEMENTS.length}</span> : null}
-              </div>
-            </motion.div>
-          </AnimatePresence>
-        </OrbsBoundary>
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={`${phase}-${active?.id}`}
+            initial={{ opacity: 0, scale: 0.96 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.98 }}
+            transition={{ duration: 0.35 }}
+            className="w-full max-w-3xl mx-auto text-center"
+          >
+            <div className="text-sm text-white/70 mb-2">Step {step + 1} of {ELEMENTS.length} • {active?.staticLabel}</div>
+
+            {/* (Planet visuals were removed for reliability) */}
+
+            <div className="mt-2 min-h-[3rem]">
+              <LocalQuestionRotator items={active?.whispers ?? []} periodMs={4000} />
+            </div>
+
+            <div className="mt-5">
+              <LocalComboBoxMulti options={options} placeholder="Search or type your answer…" onSubmit={next} />
+            </div>
+
+            <div className="mt-4 text-emerald-300/80 text-sm h-5">
+              {Array.isArray(answers[active.key]) && answers[active.key].length > 0 ? <span>Saved • {step + 1}/{ELEMENTS.length}</span> : null}
+            </div>
+          </motion.div>
+        </AnimatePresence>
       </div>
 
-      {/* Bloom/finale layer (highest z) */}
+      {/* Finale */}
       <div className={phase === "bloom" ? "absolute inset-0 z-[30] grid place-items-center p-4 md:p-8" : "hidden"}>
         <AwakenedSky onContinue={finish} />
         <div className="mt-4 text-sm opacity-85 text-center">
@@ -154,7 +222,7 @@ export default function AtmaDisha({ onDone }) {
         </div>
       </div>
 
-      {/* Tiny debug HUD (remove after confirm) */}
+      {/* Tiny HUD for debugging */}
       <div className="fixed bottom-2 left-2 text-xs text-white/70 z-[50] pointer-events-none">
         phase: {phase} • step: {step + 1}/{ELEMENTS.length}
       </div>
