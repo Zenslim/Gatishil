@@ -10,16 +10,18 @@ const NameFaceStep = dynamic(() => import('@/components/onboard/NameFaceStep'), 
 const RootsStep = dynamic(() => import('@/components/onboard/RootsStep'), { ssr: false })
 // REPLACED: JanmandalStep → AtmaDisha
 const AtmaDishaStep = dynamic(() => import('@/components/AtmaDisha/AtmaDisha'), { ssr: false })
+// 🌿 NEW: Trust Step (Ask for Passkey or PIN after introductions)
+const TrustStep = dynamic(() => import('@/components/onboard/TrustStep'), { ssr: false })
 
-export default function OnboardingFlow({ lang = 'en' }: Props){
+export default function OnboardingFlow({ lang = 'en' }: Props) {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const step = (searchParams.get('step') ?? 'entry')
+  const step = searchParams.get('step') ?? 'entry'
 
   const go = (s: string) => {
     const sp = new URLSearchParams(searchParams.toString())
     sp.set('step', s)
-    if(!sp.get('src')) sp.set('src','join')
+    if (!sp.get('src')) sp.set('src', 'join')
     router.push(`/onboard?${sp.toString()}`)
   }
 
@@ -32,14 +34,14 @@ export default function OnboardingFlow({ lang = 'en' }: Props){
     },
     nameface: {
       why: 'Faces help real people connect. You control visibility.',
-    }
+    },
   }
 
-  if(step === 'entry'){
+  if (step === 'entry') {
     return <WelcomeStep t={t} onNext={() => go('name')} />
   }
 
-  if(step === 'name'){
+  if (step === 'name') {
     return (
       <NameFaceStep
         t={t}
@@ -49,7 +51,7 @@ export default function OnboardingFlow({ lang = 'en' }: Props){
     )
   }
 
-  if(step === 'roots'){
+  if (step === 'roots') {
     return (
       <RootsStep
         supabase={undefined as any}
@@ -59,13 +61,24 @@ export default function OnboardingFlow({ lang = 'en' }: Props){
     )
   }
 
-  if(step === 'atmadisha'){
+  if (step === 'atmadisha') {
     return (
       <div className="min-h-[80vh] bg-neutral-950 grid place-items-center px-4 md:px-6">
-        <AtmaDishaStep onDone={() => router.replace('/dashboard')} />
+        {/* After Ātma Diśā completes, proceed to Trust Step */}
+        <AtmaDishaStep onDone={() => go('trust')} />
       </div>
     )
   }
 
-  return <div className="min-h-[80vh] bg-neutral-950 text-white p-6">Unknown step.</div>
+  if (step === 'trust') {
+    return (
+      <TrustStep onDone={() => router.replace('/dashboard')} />
+    )
+  }
+
+  return (
+    <div className="min-h-[80vh] bg-neutral-950 text-white p-6">
+      Unknown step.
+    </div>
+  )
 }
