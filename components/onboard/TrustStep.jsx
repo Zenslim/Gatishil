@@ -5,67 +5,73 @@ import { startRegistration } from '@simplewebauthn/browser';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import { createLocalPin, hasLocalPin } from '@/lib/localPin';
 
-export default function TrustStep({ onDone }){
+export default function TrustStep({ onDone }) {
   const supabase = createClientComponentClient();
-  const [supported, setSupported] = useState<boolean | null>(null);
+  const [supported, setSupported] = useState(null);
   const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState<string | null>(null);
-  const [err, setErr] = useState<string | null>(null);
+  const [msg, setMsg] = useState(null);
+  const [err, setErr] = useState(null);
   const [pin, setPin] = useState('');
 
   useEffect(() => {
     (async () => {
-      try{
+      try {
         const ok = await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
         setSupported(ok);
-      }catch{
+      } catch {
         setSupported(false);
       }
     })();
   }, []);
 
   const doPasskey = async () => {
-    setBusy(true); setErr(null); setMsg(null);
-    try{
+    setBusy(true);
+    setErr(null);
+    setMsg(null);
+    try {
       const { data: { user } } = await supabase.auth.getUser();
-      if(!user) throw new Error('Sign-in required');
+      if (!user) throw new Error('Sign-in required');
       const username = user.email || user.id;
 
       const r1 = await fetch('/api/webauthn/authn/options', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId: user.id, username })
       });
-      if(!r1.ok) throw new Error('Failed to get options');
+      if (!r1.ok) throw new Error('Failed to get options');
       const options = await r1.json();
 
       const att = await startRegistration(options);
 
       const r2 = await fetch('/api/webauthn/authn/verify', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId: user.id, response: att })
       });
       const j2 = await r2.json();
-      if(!r2.ok || !j2.ok) throw new Error(j2.error || 'Verification failed');
+      if (!r2.ok || !j2.ok) throw new Error(j2.error || 'Verification failed');
 
       setMsg('🌿 Your voice is now sealed to this device.');
       setTimeout(() => onDone?.(), 800);
-    }catch(e:any){
+    } catch (e) {
       setErr(e?.message || 'Passkey setup failed');
-    }finally{
+    } finally {
       setBusy(false);
     }
   };
 
   const doPin = async () => {
-    setBusy(true); setErr(null); setMsg(null);
-    try{
-      if(!/^[0-9]{4}$/.test(pin)) throw new Error('Enter a 4-digit PIN');
+    setBusy(true);
+    setErr(null);
+    setMsg(null);
+    try {
+      if (!/^[0-9]{4}$/.test(pin)) throw new Error('Enter a 4-digit PIN');
       await createLocalPin(pin);
       setMsg('🌿 Your voice is now sealed to this device.');
       setTimeout(() => onDone?.(), 800);
-    }catch(e:any){
+    } catch (e) {
       setErr(e?.message || 'Could not create PIN');
-    }finally{
+    } finally {
       setBusy(false);
     }
   };
@@ -101,14 +107,14 @@ export default function TrustStep({ onDone }){
             ) : (
               <div className="space-y-3">
                 <label className="block">
-                  <span className="text-sm text-gray-300">Create a 4‑digit PIN 🔑</span>
+                  <span className="text-sm text-gray-300">Create a 4-digit PIN 🔑</span>
                   <input
                     type="password"
                     inputMode="numeric"
                     pattern="[0-9]*"
                     maxLength={4}
                     value={pin}
-                    onChange={(e)=>setPin(e.target.value.replace(/\D/g,''))}
+                    onChange={(e) => setPin(e.target.value.replace(/\\D/g, ''))}
                     className="mt-1 w-full rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-emerald-500"
                     placeholder="••••"
                   />
@@ -133,7 +139,7 @@ export default function TrustStep({ onDone }){
 
         <div className="mt-6">
           <button
-            onClick={()=>onDone?.()}
+            onClick={() => onDone?.()}
             className="w-full py-3 rounded-xl border border-white/20 hover:bg-white/10"
           >
             Not now → Use OTP next time
