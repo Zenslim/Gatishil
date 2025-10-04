@@ -6,24 +6,30 @@ import PlanetScene from "./PlanetScene";
 import QuestionRotator from "./QuestionRotator";
 import ComboBoxMulti from "./ComboBoxMulti";
 import AwakenedSky from "./AwakenedSky";
+import { loadOptions, bundledOptions } from "@/lib/atmaOptions";
 
 let supabase = null;
 try { supabase = require("@/lib/supabaseClient").default ?? null; } catch (_) { supabase = null; }
 
 const ELEMENTS = [
-  { key: "occupation", id: "earth", planet: { name: "Earth", src: "/planet/earth.png", from: "bottom" }, staticLabel: "Your ROLE in SOCIETY", whispers: ["What work anchors your day?","What is your current role in society?","What’s your present profession?"], options: ["Farmer","Teacher","Student","Craftsperson","Engineer","Healer","Merchant","Homemaker","Driver","Laborer","Nurse","Doctor","Software Engineer","Designer","Artist","Musician","Police","Army","Civil Servant","Entrepreneur","Volunteer","Unemployed","Other"] },
-  { key: "skill", id: "moon", planet: { name: "Moon", src: "/planet/moon.png", from: "left" }, staticLabel: "What you are GOOD AT", whispers: ["What do you do effortlessly?","Which skills flow with least resistance?","What do you excel at that helps others?"], options: ["Listening","Teaching","Organizing","Design","Coding","Cooking","Negotiation","Caretaking","Writing","Public Speaking","Photography","Carpentry","Farming","Healing","Finance","Sales","Research","Strategy","Community Building","Other"] },
-  { key: "passion", id: "mars", planet: { name: "Mars", src: "/planet/mars.png", from: "top" }, staticLabel: "What you LOVE to do", whispers: ["What lights your inner flame?","What are you most excited to do daily?","Which activity brings radiant joy?"], options: ["Storytelling","Building","Gardening","Art","Music","Research","Entrepreneurship","Volunteering","Meditation","Teaching","Coding Projects","Sports & Movement","Reading","Travel","Other"] },
-  { key: "compassion", id: "saturn", planet: { name: "Saturn", src: "/planet/saturn.png", from: "right" }, staticLabel: "What WORLD NEEDS", whispers: ["What injustice steals your breath?","What lack in the world feels suffocating?","What change does your community need?"], options: ["Children","Elders","Climate","Health Access","Corruption","Education","Poverty","Women Safety","Animal Care","Disability Inclusion","Mental Health","Rural Access","Clean Water","Other"] },
-  { key: "vision", id: "jupiter", planet: { name: "Jupiter", src: "/planet/jupiter.png", from: "depth" }, staticLabel: "Your VISION & GOALS", whispers: ["What vision guides you?","What future goal calls today?","What seeds are you planting?"], options: ["Village Learning Hub","Clean Water for All","Cooperative Farm","Open Health Center","Ethical Business","Art Collective","Research Lab","Forest Restoration","Makerspace","Community Kitchen","Youth Club","Other"] },
+  { key: "occupation", id: "earth", planet: { name: "Earth", src: "/planet/earth.png", from: "bottom" }, staticLabel: "Your ROLE in SOCIETY", whispers: ["What work anchors your day?","What is your current role in society?","What’s your present profession?"] },
+  { key: "skill", id: "moon", planet: { name: "Moon", src: "/planet/moon.png", from: "left" }, staticLabel: "What you are GOOD AT", whispers: ["What do you do effortlessly?","Which skills flow with least resistance?","What do you excel at that helps others?"] },
+  { key: "passion", id: "mars", planet: { name: "Mars", src: "/planet/mars.png", from: "top" }, staticLabel: "What you LOVE to do", whispers: ["What lights your inner flame?","What are you most excited to do daily?","Which activity brings radiant joy?"] },
+  { key: "compassion", id: "saturn", planet: { name: "Saturn", src: "/planet/saturn.png", from: "right" }, staticLabel: "What WORLD NEEDS", whispers: ["What injustice steals your breath?","What lack in the world feels suffocating?","What change does your community need?"] },
+  { key: "vision", id: "jupiter", planet: { name: "Jupiter", src: "/planet/jupiter.png", from: "depth" }, staticLabel: "Your VISION & GOALS", whispers: ["What vision guides you?","What future goal calls today?","What seeds are you planting?"] },
 ];
 
 export default function AtmaDisha({ onDone }){
   const [step, setStep] = useState(0);
   const [answers, setAnswers] = useState({});
-  const [phase, setPhase] = useState("orbs"); // or 'bloom'
+  const [phase, setPhase] = useState("orbs"); // 'orbs' | 'bloom'
+  const [lists, setLists] = useState(bundledOptions);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    (async () => { setLists(await loadOptions(supabase)); })();
+  }, []);
 
   const active = ELEMENTS[step];
   const allDone = ELEMENTS.every(e => Array.isArray(answers[e.key]) && answers[e.key].length > 0);
@@ -60,6 +66,10 @@ export default function AtmaDisha({ onDone }){
     if(typeof onDone === "function") onDone();
   };
 
+  // Map current key to options
+  const currentKey = active.key;
+  const options = lists[currentKey] ?? bundledOptions[currentKey];
+
   return (
     <div className="relative w-full min-h-screen bg-black text-white overflow-hidden">
       <CelestialBackground />
@@ -79,7 +89,7 @@ export default function AtmaDisha({ onDone }){
                 <QuestionRotator items={active.whispers} periodMs={4000} />
               </div>
               <div className="mt-5">
-                <ComboBoxMulti options={active.options} placeholder="Search or type your answer…" onSubmit={next} />
+                <ComboBoxMulti options={options} placeholder="Search or type your answer…" onSubmit={next} />
               </div>
               <div className="mt-4 text-emerald-300/80 text-sm h-5">
                 {Array.isArray(answers[active.key]) && answers[active.key].length > 0 ? <span>Saved • {step+1}/5</span> : null}
