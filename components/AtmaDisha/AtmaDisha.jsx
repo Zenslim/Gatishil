@@ -5,6 +5,7 @@ import CelestialBackground from "./CelestialBackground";
 import PlanetScene from "./PlanetScene";
 import QuestionRotator from "./QuestionRotator";
 import ComboBoxMulti from "./ComboBoxMulti";
+import IntroSky from "./IntroSky";
 import AwakenedSky from "./AwakenedSky";
 import { loadOptions, bundledOptions } from "@/lib/atmaOptions";
 
@@ -22,14 +23,12 @@ const ELEMENTS = [
 export default function AtmaDisha({ onDone }){
   const [step, setStep] = useState(0);
   const [answers, setAnswers] = useState({});
-  const [phase, setPhase] = useState("orbs"); // 'orbs' | 'bloom'
+  const [phase, setPhase] = useState("intro"); // 'intro' -> 'orbs' -> 'bloom'
   const [lists, setLists] = useState(bundledOptions);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
-  useEffect(() => {
-    (async () => { setLists(await loadOptions(supabase)); })();
-  }, []);
+  useEffect(() => { (async () => { setLists(await loadOptions(supabase)); })(); }, []);
 
   const active = ELEMENTS[step];
   const allDone = ELEMENTS.every(e => Array.isArray(answers[e.key]) && answers[e.key].length > 0);
@@ -66,16 +65,20 @@ export default function AtmaDisha({ onDone }){
     if(typeof onDone === "function") onDone();
   };
 
-  // Map current key to options
-  const currentKey = active.key;
-  const options = lists[currentKey] ?? bundledOptions[currentKey];
+  const options = (lists[active.key] ?? []).length ? lists[active.key] : bundledOptions[active.key];
 
   return (
     <div className="relative w-full min-h-screen bg-black text-white overflow-hidden">
+      {/* Single global background */}
       <CelestialBackground />
+
       <div className="absolute inset-0 grid place-items-center p-4 md:p-8">
         <AnimatePresence mode="wait">
-          {phase === "orbs" ? (
+          {phase === "intro" ? (
+            <motion.div key="intro" className="w-full">
+              <IntroSky onDone={() => setPhase("orbs")} />
+            </motion.div>
+          ) : phase === "orbs" ? (
             <motion.div
               key={active.id}
               initial={{ opacity: 0, scale: 0.96 }}
@@ -84,6 +87,8 @@ export default function AtmaDisha({ onDone }){
               transition={{ duration: 0.35 }}
               className="w-full max-w-3xl mx-auto text-center"
             >
+              <div className="sr-only">Step {step+1} of 5</div>
+              <div className="mb-2" />
               <PlanetScene element={active} index={step} total={ELEMENTS.length} label={active.staticLabel} />
               <div className="mt-6 text-lg md:text-xl opacity-90 min-h-[3rem]">
                 <QuestionRotator items={active.whispers} periodMs={4000} />
@@ -96,14 +101,7 @@ export default function AtmaDisha({ onDone }){
               </div>
             </motion.div>
           ) : (
-            <motion.div
-              key="bloom"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.6 }}
-              className="w-full mx-auto text-center"
-            >
+            <motion.div key="bloom" className="w-full text-center">
               <AwakenedSky onContinue={finish} />
               <div className="mt-4 text-sm opacity-85">
                 {saving ? "Syncing your Ātma Diśā…" : error ? error : ""}

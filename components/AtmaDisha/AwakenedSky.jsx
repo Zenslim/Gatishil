@@ -1,52 +1,88 @@
 "use client";
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { motion } from "framer-motion";
-import CelestialBackground from "./CelestialBackground";
 
-/**
- * AwakenedSky rendered in a PORTAL to <body> to escape any parent padding.
- * This guarantees true edge-to-edge on mobile (like PasaGuthi).
- */
 const PLANETS = [
-  { src: "/planet/earth.png", size: 110, x: ["-20vw","20vw","60vw","120vw"], y: ["18vh","12vh","22vh","20vh"],  scale: [0.95,1.06,1.0,1.05], delay: 0.0, duration: 36 },
-  { src: "/planet/moon.png",  size: 72,  x: ["120vw","82vw","38vw","-20vw"], y: ["36vh","40vh","34vh","38vh"],  scale: [0.96,1.02,0.98,1.03], delay: 0.2, duration: 28 },
-  { src: "/planet/mars.png",  size: 86,  x: ["10vw","16vw","20vw","12vw"],  y: ["-20vh","28vh","62vh","120vh"], scale: [0.92,1.05,0.97,1.03], delay: 0.12, duration: 32 },
-  { src: "/planet/saturn.png",size: 140, x: ["72vw","75vw","72vw","70vw"],  y: ["120vh","92vh","42vh","-20vh"], scale: [0.94,1.04,0.98,1.02], delay: 0.25, duration: 40 },
-  { src: "/planet/jupiter.png", size: 150, x: ["-22vw","24vw","78vw","122vw"], y: ["82vh","64vh","12vh","-16vh"], scale: [0.93,1.07,0.99,1.04], delay: 0.18, duration: 38 },
+  { src: "/planet/earth.png",   size: 150, dir: "leftUp",   delay: 0.00, dur: 34 },
+  { src: "/planet/moon.png",    size: 100, dir: "rightUp",  delay: 0.10, dur: 26 },
+  { src: "/planet/mars.png",    size: 130, dir: "leftDown", delay: 0.18, dur: 30 },
+  { src: "/planet/saturn.png",  size: 200, dir: "rightDown",delay: 0.25, dur: 38 },
+  { src: "/planet/jupiter.png", size: 220, dir: "up",       delay: 0.14, dur: 36 },
 ];
 
+function pathFor(dir){
+  switch(dir){
+    case "leftUp":    return { x: ["0vw","-30vw","-60vw","-110vw"], y: ["0vh","-8vh","-18vh","-20vh"] };
+    case "rightUp":   return { x: ["0vw","20vw","50vw","110vw"],     y: ["0vh","-6vh","-14vh","-18vh"] };
+    case "leftDown":  return { x: ["0vw","-16vw","-48vw","-110vw"],  y: ["0vh","10vh","30vh","60vh"] };
+    case "rightDown": return { x: ["0vw","14vw","40vw","110vw"],     y: ["0vh","14vh","26vh","60vh"] };
+    case "up":        return { x: ["0vw","2vw","4vw","6vw"],         y: ["0vh","-20vh","-60vh","-110vh"] };
+    default:          return { x: ["0vw","0vw","0vw","0vw"],         y: ["0vh","0vh","0vh","0vh"] };
+  }
+}
+
 export default function AwakenedSky({ onContinue }){
+  const [mounted, setMounted] = useState(false);
+  const reduceMotion = typeof window !== "undefined" && window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  useEffect(() => {
+    setMounted(true);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = prevOverflow; };
+  }, []);
+
   if (typeof document === "undefined") return null;
   return createPortal(
-    <div className="fixed inset-0 w-[100vw] h-[100vh] text-white overflow-hidden z-[60]">
-      <CelestialBackground />
-
+    <div className="fixed inset-0 w-[100dvw] h-[100dvh] text-white overflow-hidden z-[60]">
       {/* Headline */}
-      <div className="absolute inset-x-0 top-[12vh] text-center px-4">
+      <div className="absolute inset-x-0 top-[12vh] text-center px-4 z-[5]">
         <div className="text-2xl md:text-4xl font-semibold drop-shadow-[0_2px_6px_rgba(0,0,0,0.4)]">
           Your Ātma Diśā — your <em>Reason for Being</em> — is awakened.
         </div>
         <div className="opacity-80 mt-2">Walk it. Share it. Build with it.</div>
       </div>
 
-      {/* Drifting planets with breathe zoom */}
-      {PLANETS.map((p, i) => (
-        <motion.img
-          key={i}
-          src={p.src}
-          alt="planet"
-          initial={{ x: p.x[0], y: p.y[0], scale: p.scale[0], opacity: 0.9 }}
-          animate={{ x: p.x, y: p.y, scale: p.scale, opacity: 1 }}
-          transition={{ duration: p.duration, times: [0,0.33,0.67,1], delay: p.delay, ease: "linear", repeat: Infinity, repeatType: "mirror" }}
-          className="absolute object-contain pointer-events-none select-none"
-          style={{ width: p.size, height: p.size, filter: "drop-shadow(0 0 34px rgba(255,255,255,0.14))" }}
-          draggable={false}
-        />
-      ))}
+      {/* Planets layer (guaranteed visible) */}
+      <div className="fixed inset-0 z-[4]" style={{ contain: "layout style", willChange: "transform" }}>
+        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
+          {PLANETS.map((p, i) => {
+            const path = pathFor(p.dir);
+            if (reduceMotion) {
+              // Static fallback positions (still visible)
+              const endX = path.x[path.x.length - 2];
+              const endY = path.y[path.y.length - 2];
+              return (
+                <img
+                  key={i}
+                  src={p.src}
+                  alt="planet"
+                  className="absolute object-contain select-none"
+                  style={{ width: p.size, height: p.size, transform: `translate(${endX}, ${endY}) scale(1)`, opacity: mounted ? 1 : 0 }}
+                  draggable={false}
+                />
+              );
+            }
+            return (
+              <motion.img
+                key={i}
+                src={p.src}
+                alt="planet"
+                initial={{ x: path.x[0], y: path.y[0], scale: 0.85, opacity: 0.99 }}
+                animate={{ x: path.x, y: path.y, scale: [0.85, 1.07, 0.97, 1.02], opacity: 1 }}
+                transition={{ duration: p.dur, times: [0,0.33,0.67,1], delay: p.delay, ease: "linear", repeat: Infinity, repeatType: "mirror" }}
+                className="absolute object-contain select-none"
+                style={{ width: p.size, height: p.size, willChange: "transform", filter: "drop-shadow(0 0 24px rgba(255,255,255,0.12))" }}
+                draggable={false}
+              />
+            );
+          })}
+        </div>
+      </div>
 
       {/* Footer */}
-      <div className="absolute inset-x-0 bottom-[10vh] text-center px-4 pointer-events-auto">
+      <div className="absolute inset-x-0 bottom-[10vh] text-center px-4 pointer-events-auto z-[5]">
         <div className="opacity-85 mb-4">Breathe… your direction is clear.</div>
         <motion.button
           initial={{ scale: 1 }}
