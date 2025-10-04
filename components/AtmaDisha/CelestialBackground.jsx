@@ -2,11 +2,6 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
-/**
- * CelestialBackground (portal + dynamic three import)
- * - Loads three.js only on client via dynamic import.
- * - If import fails, quietly renders nothing (avoid breaking build).
- */
 export default function CelestialBackground() {
   const [mounted, setMounted] = useState(false);
   const mountRef = useRef(null);
@@ -19,12 +14,7 @@ export default function CelestialBackground() {
 
     (async () => {
       let THREE;
-      try {
-        THREE = await import("three");
-      } catch (e) {
-        console.warn("[CelestialBackground] three import failed:", e);
-        return;
-      }
+      try { THREE = await import("three"); } catch { return; }
 
       scene = new THREE.Scene();
       camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
@@ -38,33 +28,29 @@ export default function CelestialBackground() {
 
       const starTexture = new THREE.TextureLoader().load("/textures/star-glow.png");
 
-      const starCount = 1000;
+      const starCount = 900;
       starsGeometry = new THREE.BufferGeometry();
       const positions = new Float32Array(starCount * 3);
       const alphas = new Float32Array(starCount);
-      const colors = new Float32Array(starCount * 3);
 
       for (let i = 0; i < starCount; i++) {
         positions[i * 3 + 0] = (Math.random() - 0.5) * 200;
         positions[i * 3 + 1] = (Math.random() - 0.5) * 200;
         positions[i * 3 + 2] = (Math.random() - 0.5) * 200;
         alphas[i] = Math.random();
-        colors[i * 3 + 0] = 0.8;
-        colors[i * 3 + 1] = 0.8;
-        colors[i * 3 + 2] = 1.0;
       }
       starsGeometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
       starsGeometry.setAttribute("alpha", new THREE.BufferAttribute(alphas, 1));
-      starsGeometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
 
       const starsMaterial = new THREE.PointsMaterial({
         map: starTexture,
         size: 2.0,
         transparent: true,
         depthWrite: false,
-        blending: THREE.AdditiveBlending,
-        vertexColors: true,
+        blending: (await import("three")).AdditiveBlending,
         sizeAttenuation: true,
+        color: 0xffffff,
+        opacity: 0.95,
       });
 
       stars = new THREE.Points(starsGeometry, starsMaterial);
@@ -86,33 +72,15 @@ export default function CelestialBackground() {
       document.addEventListener("mousemove", handleMouse);
       document.addEventListener("touchmove", handleTouch, { passive: true });
 
-      const clock = new THREE.Clock();
       let stop = false;
       const animate = () => {
         if (stop) return;
         requestAnimationFrame(animate);
-
-        const elapsed = clock.getElapsedTime();
         stars.rotation.y += 0.0007;
         stars.rotation.x += 0.0002;
-
-        const alphaAttr = starsGeometry.getAttribute("alpha");
-        const colorAttr = starsGeometry.getAttribute("color");
-        const hueShift = (elapsed * 0.02) % 1;
-        for (let i = 0; i < starCount; i++) {
-          const base = (Math.sin(elapsed * 0.5 + i) + 1) / 2;
-          alphaAttr.setX(i, 0.5 + base * 0.5);
-          const h = (hueShift + i * 0.0005) % 1;
-          const c = new THREE.Color(); c.setHSL(h, 0.5, 0.8);
-          colorAttr.setXYZ(i, c.r, c.g, c.b);
-        }
-        alphaAttr.needsUpdate = true;
-        colorAttr.needsUpdate = true;
-
         camera.position.x += (targetX - camera.position.x) * 0.04;
         camera.position.y += (targetY - camera.position.y) * 0.04;
         camera.lookAt(scene.position);
-
         renderer.render(scene, camera);
       };
       animate();
@@ -132,8 +100,7 @@ export default function CelestialBackground() {
         if (mountRef.current && renderer?.domElement && mountRef.current.contains(renderer.domElement)) {
           mountRef.current.removeChild(renderer.domElement);
         }
-        renderer?.dispose();
-        starsGeometry?.dispose();
+        renderer?.dispose(); starsGeometry?.dispose();
       };
     })();
 
@@ -144,7 +111,18 @@ export default function CelestialBackground() {
   return createPortal(
     <div
       ref={mountRef}
-      style={{ position: "fixed", inset: 0, width: "100vw", height: "100vh", zIndex: 0, pointerEvents: "none" }}
+      style={{
+        position: "fixed",
+        inset: 0,
+        width: "100%",
+        height: "100%",
+        // Use dynamic viewport units to avoid iOS/Android bars; also set solid black
+        maxWidth: "100dvw",
+        maxHeight: "100dvh",
+        backgroundColor: "#000",
+        zIndex: 0,
+        pointerEvents: "none",
+      }}
     />,
     document.body
   );

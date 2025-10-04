@@ -2,10 +2,9 @@
 import React, { useEffect } from "react";
 import { createPortal } from "react-dom";
 import { motion } from "framer-motion";
-import CelestialBackground from "./CelestialBackground";
 
 /**
- * AwakenedSky (full-bleed, center-origin, planets visible above stars)
+ * AwakenedSky (overlay only — background is global)
  */
 const PLANETS = [
   { src: "/planet/earth.png",   size: 110, dir: "leftUp",   delay: 0.00, dur: 34 },
@@ -35,10 +34,8 @@ export default function AwakenedSky({ onContinue }){
 
   if (typeof document === "undefined") return null;
   return createPortal(
-    <div className="fixed inset-0 w-[100vw] h-[100vh] text-white overflow-hidden z-[9999]">
-      <CelestialBackground />
-
-      {/* Headline above everything */}
+    <div className="fixed inset-0 w-[100dvw] h-[100dvh] text-white overflow-hidden z-[9999]">
+      {/* Headline */}
       <div className="absolute inset-x-0 top-[12vh] text-center px-4 z-[2]">
         <div className="text-2xl md:text-4xl font-semibold drop-shadow-[0_2px_6px_rgba(0,0,0,0.4)]">
           Your Ātma Diśā — your <em>Reason for Being</em> — is awakened.
@@ -46,27 +43,29 @@ export default function AwakenedSky({ onContinue }){
         <div className="opacity-80 mt-2">Walk it. Share it. Build with it.</div>
       </div>
 
-      {/* Planets layer above starfield */}
-      <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none z-[1]">
-        {PLANETS.map((p, i) => {
-          const path = pathFor(p.dir);
-          return (
-            <motion.img
-              key={i}
-              src={p.src}
-              alt="planet"
-              initial={{ x: path.x[0], y: path.y[0], scale: 0.75, opacity: 0.95 }}
-              animate={{ x: path.x, y: path.y, scale: [0.75, 1.05, 0.96, 1.02], opacity: 1 }}
-              transition={{ duration: p.dur, times: [0,0.33,0.67,1], delay: p.delay, ease: "linear", repeat: Infinity, repeatType: "mirror" }}
-              className="absolute object-contain select-none drop-shadow-[0_0_34px_rgba(255,255,255,0.14)]"
-              style={{ width: p.size, height: p.size }}
-              draggable={false}
-            />
-          );
-        })}
+      {/* Planets layer */}
+      <div className="fixed inset-0 pointer-events-none z-[1]">
+        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
+          {PLANETS.map((p, i) => {
+            const path = pathFor(p.dir);
+            return (
+              <motion.img
+                key={i}
+                src={p.src}
+                alt="planet"
+                initial={{ x: path.x[0], y: path.y[0], scale: 0.75, opacity: 0.95 }}
+                animate={{ x: path.x, y: path.y, scale: [0.75, 1.05, 0.96, 1.02], opacity: 1 }}
+                transition={{ duration: p.dur, times: [0,0.33,0.67,1], delay: p.delay, ease: "linear", repeat: Infinity, repeatType: "mirror" }}
+                className="absolute object-contain select-none drop-shadow-[0_0_34px_rgba(255,255,255,0.14)]"
+                style={{ width: p.size, height: p.size }}
+                draggable={false}
+              />
+            );
+          })}
+        </div>
       </div>
 
-      {/* Footer CTA */}
+      {/* Footer */}
       <div className="absolute inset-x-0 bottom-[10vh] text-center px-4 pointer-events-auto z-[2]">
         <div className="opacity-85 mb-4">Breathe… your direction is clear.</div>
         <motion.button
