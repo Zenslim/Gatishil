@@ -1,60 +1,214 @@
-// lib/atmaOptions.ts
-// Fetch option lists from Supabase (table: atma_options).
-// Fallback to bundled rich lists if table missing.
-
-import type { SupabaseClient } from "@supabase/supabase-js";
-
-export type AtmaKey = "occupation" | "skill" | "passion" | "compassion" | "vision";
-export type OptionsMap = Record<AtmaKey, string[]>;
-
-export const bundledOptions: OptionsMap = {
+// lib/atmaOptions.ts — Five-table loader (Occupation, Skill, Passion, Compassion, Vision)
+// Works with existing AtmaDisha.jsx import.
+export const bundledOptions = {
   occupation: [
-    "Farmer","Teacher","Student","Craftsperson","Engineer","Healer","Merchant","Homemaker","Driver","Laborer","Nurse",
-    "Doctor","Software Engineer","Designer","Artist","Musician","Police","Army","Civil Servant","Entrepreneur",
-    "Volunteer","Journalist","Lawyer","Social Worker","Accountant","Architect","Plumber","Electrician","Mechanic",
-    "Photographer","Filmmaker","Product Manager","Data Analyst","Researcher","Shopkeeper","Tour Guide","Chef","Barista",
-    "Fisher","Forester","Tailor","Weaver","Mason","Security Guard","Delivery Rider","Other"
-  ],
+  "Farmer",
+  "Teacher",
+  "Student",
+  "Engineer",
+  "Doctor",
+  "Nurse",
+  "Healer",
+  "Craftsperson",
+  "Artist",
+  "Musician",
+  "Writer",
+  "Journalist",
+  "Photographer",
+  "Filmmaker",
+  "Designer",
+  "Architect",
+  "Social Worker",
+  "Volunteer",
+  "Entrepreneur",
+  "Researcher",
+  "Scientist",
+  "Programmer",
+  "Data Analyst",
+  "Mechanic",
+  "Driver",
+  "Tailor",
+  "Weaver",
+  "Mason",
+  "Carpenter",
+  "Electrician",
+  "Plumber",
+  "Security Guard",
+  "Delivery Rider",
+  "Shopkeeper",
+  "Chef",
+  "Cook",
+  "Waiter",
+  "Tour Guide",
+  "NGO Worker",
+  "Civil Servant",
+  "Police Officer",
+  "Soldier",
+  "Politician",
+  "Lawyer",
+  "Judge",
+  "Priest / Monk",
+  "Other"
+],
   skill: [
-    "Listening","Teaching","Organizing","Design","Coding","Cooking","Negotiation","Caretaking","Writing","Public Speaking",
-    "Photography","Carpentry","Farming","Healing","Finance","Sales","Research","Strategy","Community Building",
-    "Facilitation","Mentoring","Conflict Resolution","Event Planning","Grant Writing","UX Research","Storytelling",
-    "Marketing","Social Media","Data Analysis","Translation","Fundraising","Rapid Prototyping","Legal Drafting","Other"
-  ],
+  "Listening",
+  "Teaching",
+  "Facilitation",
+  "Organizing",
+  "Negotiation",
+  "Teamwork",
+  "Public Speaking",
+  "Writing",
+  "Storytelling",
+  "Translation",
+  "Design",
+  "Drawing",
+  "Singing",
+  "Music Composition",
+  "Cooking",
+  "Crafting",
+  "Gardening",
+  "Farming",
+  "Coding",
+  "Problem Solving",
+  "Critical Thinking",
+  "Data Analysis",
+  "Accounting",
+  "Fundraising",
+  "Marketing",
+  "Photography",
+  "Video Editing",
+  "Research",
+  "Mentoring",
+  "Counseling",
+  "Rapid Prototyping",
+  "Carpentry",
+  "Tailoring",
+  "Legal Drafting",
+  "Project Management",
+  "Other"
+],
   passion: [
-    "Storytelling","Building","Gardening","Art","Music","Research","Entrepreneurship","Volunteering","Meditation","Teaching",
-    "Coding Projects","Sports & Movement","Reading","Travel","Journalism","Open Source","Climate Action","Poetry",
-    "Photography Walks","Hiking","Mental Health Advocacy","Community Radio","Theatre","Dance","Crafts","Cooking Experiments",
-    "Language Learning","Local History","Other"
-  ],
+  "Storytelling",
+  "Building",
+  "Gardening",
+  "Traveling",
+  "Teaching",
+  "Learning",
+  "Art",
+  "Music",
+  "Theatre",
+  "Dance",
+  "Language Learning",
+  "Writing",
+  "Photography",
+  "Filmmaking",
+  "Volunteering",
+  "Meditation",
+  "Yoga",
+  "Cooking",
+  "Design",
+  "Technology",
+  "Innovation",
+  "Entrepreneurship",
+  "Social Justice",
+  "Community Radio",
+  "Environmental Protection",
+  "Animal Care",
+  "Sports",
+  "Adventure",
+  "Research",
+  "Craftsmanship",
+  "Other"
+],
   compassion: [
-    "Children","Elders","Climate","Health Access","Corruption","Education","Poverty","Women Safety","Animal Care",
-    "Disability Inclusion","Mental Health","Rural Access","Clean Water","Fair Wages","Digital Literacy","Waste Management",
-    "Road Safety","Small Farmers","Public Transport","Open Governance","Justice for Migrant Workers","Other"
-  ],
+  "Children",
+  "Elders",
+  "Women Safety",
+  "Climate",
+  "Environment",
+  "Forests",
+  "Water Access",
+  "Health Access",
+  "Mental Health",
+  "Education",
+  "Poverty",
+  "Unemployment",
+  "Small Farmers",
+  "Animal Welfare",
+  "Justice for Migrant Workers",
+  "Public Transport",
+  "Open Governance",
+  "Corruption Reform",
+  "Peace & Nonviolence",
+  "Clean Energy",
+  "Cultural Revival",
+  "Spiritual Growth",
+  "Inclusivity",
+  "Community Healing",
+  "Disaster Relief",
+  "Human Rights",
+  "Other"
+],
   vision: [
-    "Village Learning Hub","Clean Water for All","Cooperative Farm","Open Health Center","Ethical Business","Art Collective",
-    "Research Lab","Forest Restoration","Makerspace","Community Kitchen","Youth Club","Local Transport Coop",
-    "Open Data for Municipality","Repair Café Network","Community Garden Corridors","Citizen Journalism Desk",
-    "Women-led Enterprise Fund","Skilling Bootcamps","Senior Companionship Program","Accessible Playgrounds",
-    "Neighbourhood Disaster Team","Circular Economy Bazaar","Other"
-  ],
+  "Village Learning Hub",
+  "Community Kitchen",
+  "Open Health Center",
+  "Cooperative Farm",
+  "Renewable Energy Network",
+  "Local Artisan Market",
+  "Circular Economy Bazaar",
+  "Repair Café Network",
+  "Ethical Business",
+  "Digital Guthi Network",
+  "Youth Skill Academy",
+  "Women Leadership Hub",
+  "Sustainable Tourism Circuit",
+  "Zero-Waste Village",
+  "Clean Water for All",
+  "Organic School Meals",
+  "Affordable Housing Movement",
+  "Community Radio Station",
+  "Public Transparency Portal",
+  "Cultural Heritage Revival",
+  "Forest Restoration Project",
+  "Community-Owned Renewable Grid",
+  "Other"
+]
+} as const;
+
+type Lists = {
+  occupation: string[];
+  skill: string[];
+  passion: string[];
+  compassion: string[];
+  vision: string[];
 };
 
-export async function loadOptions(supabase: SupabaseClient | null): Promise<OptionsMap> {
-  if (!supabase) return bundledOptions;
+function normalize(rows: any[]): string[] {
+  return (rows || [])
+    .map((r: any) => (typeof r?.label === 'string' ? r.label.trim() : ''))
+    .filter(Boolean);
+}
+
+export async function loadOptions(supabase: any): Promise<Lists> {
+  if(!supabase) return bundledOptions;
   try {
-    const { data, error } = await supabase.from("atma_options").select("key,label").order("label");
-    if (error || !data) return bundledOptions;
-    const map: OptionsMap = { occupation: [], skill: [], passion: [], compassion: [], vision: [] };
-    for (const row of data) {
-      const k = row.key as AtmaKey;
-      if (map[k] && typeof row.label === "string") map[k].push(row.label);
-    }
-    // Ensure non-empty
-    (Object.keys(map) as AtmaKey[]).forEach(k => { if (map[k].length === 0) map[k] = bundledOptions[k]; });
-    return map;
-  } catch {
+    const tables = ['Occupation','Skill','Passion','Compassion','Vision'] as const;
+    const results = await Promise.all(
+      tables.map(t => supabase.from(t).select('label').order('label', { ascending: true }))
+    );
+
+    const [occ, skl, pas, com, vis] = results.map((r:any) => normalize(r?.data));
+    const lists: Lists = {
+      occupation: occ.length ? occ : bundledOptions.occupation,
+      skill: skl.length ? skl : bundledOptions.skill,
+      passion: pas.length ? pas : bundledOptions.passion,
+      compassion: com.length ? com : bundledOptions.compassion,
+      vision: vis.length ? vis : bundledOptions.vision,
+    };
+    return lists;
+  } catch (e) {
     return bundledOptions;
   }
 }
