@@ -3,15 +3,12 @@ import React, { useEffect } from "react";
 import { createPortal } from "react-dom";
 import { motion } from "framer-motion";
 
-/**
- * AwakenedSky (overlay only — background is global)
- */
 const PLANETS = [
-  { src: "/planet/earth.png",   size: 110, dir: "leftUp",   delay: 0.00, dur: 34 },
-  { src: "/planet/moon.png",    size: 72,  dir: "rightUp",  delay: 0.10, dur: 26 },
-  { src: "/planet/mars.png",    size: 86,  dir: "leftDown", delay: 0.18, dur: 30 },
-  { src: "/planet/saturn.png",  size: 140, dir: "rightDown",delay: 0.25, dur: 38 },
-  { src: "/planet/jupiter.png", size: 150, dir: "up",       delay: 0.14, dur: 36 },
+  { src: "/planet/earth.png",   size: 130, dir: "leftUp",   delay: 0.00, dur: 34 },
+  { src: "/planet/moon.png",    size: 84,  dir: "rightUp",  delay: 0.10, dur: 26 },
+  { src: "/planet/mars.png",    size: 108, dir: "leftDown", delay: 0.18, dur: 30 },
+  { src: "/planet/saturn.png",  size: 170, dir: "rightDown",delay: 0.25, dur: 38 },
+  { src: "/planet/jupiter.png", size: 190, dir: "up",       delay: 0.14, dur: 36 },
 ];
 
 function pathFor(dir){
@@ -34,7 +31,7 @@ export default function AwakenedSky({ onContinue }){
 
   if (typeof document === "undefined") return null;
   return createPortal(
-    <div className="fixed inset-0 w-[100dvw] h-[100dvh] text-white overflow-hidden z-[9999]">
+    <div className="fixed inset-0 w-[100dvw] h-[100dvh] text-white overflow-hidden z-[60]">
       {/* Headline */}
       <div className="absolute inset-x-0 top-[12vh] text-center px-4 z-[2]">
         <div className="text-2xl md:text-4xl font-semibold drop-shadow-[0_2px_6px_rgba(0,0,0,0.4)]">
@@ -53,8 +50,8 @@ export default function AwakenedSky({ onContinue }){
                 key={i}
                 src={p.src}
                 alt="planet"
-                initial={{ x: path.x[0], y: path.y[0], scale: 0.75, opacity: 0.95 }}
-                animate={{ x: path.x, y: path.y, scale: [0.75, 1.05, 0.96, 1.02], opacity: 1 }}
+                initial={{ x: path.x[0], y: path.y[0], scale: 0.8, opacity: 0.98 }}
+                animate={{ x: path.x, y: path.y, scale: [0.8, 1.06, 0.96, 1.02], opacity: 1 }}
                 transition={{ duration: p.dur, times: [0,0.33,0.67,1], delay: p.delay, ease: "linear", repeat: Infinity, repeatType: "mirror" }}
                 className="absolute object-contain select-none drop-shadow-[0_0_34px_rgba(255,255,255,0.14)]"
                 style={{ width: p.size, height: p.size }}

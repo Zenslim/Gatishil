@@ -3,15 +3,12 @@ import React, { useEffect } from "react";
 import { createPortal } from "react-dom";
 import { motion } from "framer-motion";
 
-/**
- * IntroSky (overlay only — background is global)
- */
 const PLANETS = [
-  { src: "/planet/earth.png",   size: 120, delay: 0.00, dir: [-40,-18] },
-  { src: "/planet/moon.png",    size: 80,  delay: 0.05, dir: [ 32,-16] },
-  { src: "/planet/mars.png",    size: 96,  delay: 0.08, dir: [-24, 26] },
-  { src: "/planet/saturn.png",  size: 150, delay: 0.10, dir: [ 28, 22] },
-  { src: "/planet/jupiter.png", size: 170, delay: 0.06, dir: [  2,-32] },
+  { src: "/planet/earth.png",   size: 140, delay: 0.00, dir: [-40,-18] },
+  { src: "/planet/moon.png",    size: 90,  delay: 0.05, dir: [ 32,-16] },
+  { src: "/planet/mars.png",    size: 110, delay: 0.08, dir: [-24, 26] },
+  { src: "/planet/saturn.png",  size: 170, delay: 0.10, dir: [ 28, 22] },
+  { src: "/planet/jupiter.png", size: 190, delay: 0.06, dir: [  2,-32] },
 ];
 
 export default function IntroSky({ onDone, duration = 2200 }){
@@ -24,7 +21,7 @@ export default function IntroSky({ onDone, duration = 2200 }){
 
   if (typeof document === "undefined") return null;
   return createPortal(
-    <div className="fixed inset-0 w-[100dvw] h-[100dvh] z-[9998] overflow-hidden text-white">
+    <div className="fixed inset-0 w-[100dvw] h-[100dvh] z-[50] overflow-hidden text-white">
       <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none">
         {PLANETS.map((p, i) => (
           <motion.img
@@ -32,7 +29,7 @@ export default function IntroSky({ onDone, duration = 2200 }){
             src={p.src}
             alt="planet"
             initial={{ x: 0, y: 0, scale: 0.2, opacity: 0 }}
-            animate={{ x: [`${0}vw`, `${p.dir[0]}vw`], y: [`${0}vh`, `${p.dir[1]}vh`], scale: [0.2, 1.0], opacity: [0, 1] }}
+            animate={{ x: [`${0}vw`, `${p.dir[0]}vw`], y: [`${0}vh`, `${p.dir[1]}vh`], scale: [0.2, 1.05], opacity: [0, 1] }}
             transition={{ duration: 1.6, delay: p.delay, ease: [0.22, 1, 0.36, 1] }}
             className="absolute object-contain select-none drop-shadow-[0_0_34px_rgba(255,255,255,0.14)]"
             style={{ width: p.size, height: p.size }}
