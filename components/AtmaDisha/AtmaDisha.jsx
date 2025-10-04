@@ -21,7 +21,7 @@ const ELEMENTS = [
 export default function AtmaDisha({ onDone }){
   const [step, setStep] = useState(0);
   const [answers, setAnswers] = useState({});
-  const [phase, setPhase] = useState("orbs");
+  const [phase, setPhase] = useState("orbs"); // or 'bloom'
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -76,7 +76,6 @@ export default function AtmaDisha({ onDone }){
             >
               <PlanetScene element={active} index={step} total={ELEMENTS.length} label={active.staticLabel} />
               <div className="mt-6 text-lg md:text-xl opacity-90 min-h-[3rem]">
-                {/* Whispers only */}
                 <QuestionRotator items={active.whispers} periodMs={4000} />
               </div>
               <div className="mt-5">
@@ -95,7 +94,10 @@ export default function AtmaDisha({ onDone }){
               transition={{ duration: 0.6 }}
               className="w-full mx-auto text-center"
             >
-              <AwakenedSky onComplete={finish} />
+              <AwakenedSky onContinue={finish} />
+              <div className="mt-4 text-sm opacity-85">
+                {saving ? "Syncing your Ātma Diśā…" : error ? error : ""}
+              </div>
             </motion.div>
           )}
         </AnimatePresence>
