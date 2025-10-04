@@ -68,11 +68,12 @@ export default function AtmaDisha({ onDone }){
   const options = (lists[active.key] ?? []).length ? lists[active.key] : bundledOptions[active.key];
 
   return (
-    <div className="relative w-full min-h-screen bg-black text-white overflow-hidden">
-      {/* Single global background */}
+    <div className="relative w-full min-h-screen text-white overflow-hidden">
+      {/* Global starfield below everything */}
       <CelestialBackground />
 
-      <div className="absolute inset-0 grid place-items-center p-4 md:p-8">
+      {/* Content wrapper sits above starfield */}
+      <div className="absolute inset-0 grid place-items-center p-4 md:p-8 z-[1]">
         <AnimatePresence mode="wait">
           {phase === "intro" ? (
             <motion.div key="intro" className="w-full">
@@ -87,8 +88,6 @@ export default function AtmaDisha({ onDone }){
               transition={{ duration: 0.35 }}
               className="w-full max-w-3xl mx-auto text-center"
             >
-              <div className="sr-only">Step {step+1} of 5</div>
-              <div className="mb-2" />
               <PlanetScene element={active} index={step} total={ELEMENTS.length} label={active.staticLabel} />
               <div className="mt-6 text-lg md:text-xl opacity-90 min-h-[3rem]">
                 <QuestionRotator items={active.whispers} periodMs={4000} />

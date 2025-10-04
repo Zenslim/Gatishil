@@ -31,16 +31,12 @@ export default function CelestialBackground() {
       const starCount = 900;
       starsGeometry = new THREE.BufferGeometry();
       const positions = new Float32Array(starCount * 3);
-      const alphas = new Float32Array(starCount);
-
       for (let i = 0; i < starCount; i++) {
         positions[i * 3 + 0] = (Math.random() - 0.5) * 200;
         positions[i * 3 + 1] = (Math.random() - 0.5) * 200;
         positions[i * 3 + 2] = (Math.random() - 0.5) * 200;
-        alphas[i] = Math.random();
       }
       starsGeometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
-      starsGeometry.setAttribute("alpha", new THREE.BufferAttribute(alphas, 1));
 
       const starsMaterial = new THREE.PointsMaterial({
         map: starTexture,
@@ -116,11 +112,11 @@ export default function CelestialBackground() {
         inset: 0,
         width: "100%",
         height: "100%",
-        // Use dynamic viewport units to avoid iOS/Android bars; also set solid black
         maxWidth: "100dvw",
         maxHeight: "100dvh",
         backgroundColor: "#000",
-        zIndex: 0,
+        // Push behind all app content; overlays can sit above with positive z
+        zIndex: -1,
         pointerEvents: "none",
       }}
     />,
