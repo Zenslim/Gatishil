@@ -5,12 +5,11 @@ import CelestialBackground from "./CelestialBackground";
 import PlanetScene from "./PlanetScene";
 import QuestionRotator from "./QuestionRotator";
 import ComboBoxMulti from "./ComboBoxMulti";
-import PlanetBloom from "./PlanetBloom";
+import AwakenedSky from "./AwakenedSky";
 
 let supabase = null;
 try { supabase = require("@/lib/supabaseClient").default ?? null; } catch (_) { supabase = null; }
 
-// NOTE: 'title' has been removed as requested. Each step has a staticLabel used under the planet.
 const ELEMENTS = [
   { key: "occupation", id: "earth", planet: { name: "Earth", src: "/planet/earth.png", from: "bottom" }, staticLabel: "Your ROLE in SOCIETY", whispers: ["What work anchors your day?","What is your current role in society?","What’s your present profession?"], options: ["Farmer","Teacher","Student","Craftsperson","Engineer","Healer","Merchant","Homemaker","Driver","Laborer","Nurse","Doctor","Software Engineer","Designer","Artist","Musician","Police","Army","Civil Servant","Entrepreneur","Volunteer","Unemployed","Other"] },
   { key: "skill", id: "moon", planet: { name: "Moon", src: "/planet/moon.png", from: "left" }, staticLabel: "What you are GOOD AT", whispers: ["What do you do effortlessly?","Which skills flow with least resistance?","What do you excel at that helps others?"], options: ["Listening","Teaching","Organizing","Design","Coding","Cooking","Negotiation","Caretaking","Writing","Public Speaking","Photography","Carpentry","Farming","Healing","Finance","Sales","Research","Strategy","Community Building","Other"] },
@@ -77,6 +76,7 @@ export default function AtmaDisha({ onDone }){
             >
               <PlanetScene element={active} index={step} total={ELEMENTS.length} label={active.staticLabel} />
               <div className="mt-6 text-lg md:text-xl opacity-90 min-h-[3rem]">
+                {/* Whispers only */}
                 <QuestionRotator items={active.whispers} periodMs={4000} />
               </div>
               <div className="mt-5">
@@ -93,12 +93,9 @@ export default function AtmaDisha({ onDone }){
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.6 }}
-              className="w-full max-w-4xl mx-auto text-center"
+              className="w-full mx-auto text-center"
             >
-              <PlanetBloom answers={answers} onComplete={finish} />
-              <div className="mt-4 text-sm opacity-85">
-                {saving ? "Syncing your Ātma Diśā…" : error ? error : "Breathe… your direction is clear."}
-              </div>
+              <AwakenedSky onComplete={finish} />
             </motion.div>
           )}
         </AnimatePresence>
