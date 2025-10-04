@@ -1,13 +1,16 @@
 "use client";
 import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import CelestialBackground from "../CelestialBackground";          // ⬅ if needed, adjust path
-import PlanetScene from "../PlanetScene";                            // ⬅
-import QuestionRotator from "../QuestionRotator";                    // ⬅
-import ComboBoxMulti from "../ComboBoxMulti";                        // ⬅
-import IntroSky from "../IntroSky";                                  // ⬅ we moved IntroSky out of portal earlier
-import AwakenedSky from "../AwakenedSky";                            // ⬅
+
+import CelestialBackground from "@/components/CelestialBackground";
+import PlanetScene from "@/components/PlanetScene";
+import QuestionRotator from "@/components/QuestionRotator";
+import ComboBoxMulti from "@/components/ComboBoxMulti";
+import IntroSky from "@/components/IntroSky";
+import AwakenedSky from "@/components/AwakenedSky";
+
 import { loadOptions, bundledOptions } from "@/lib/atmaOptions";
+
 
 let supabase = null;
 try { supabase = require("@/lib/supabaseClient").default ?? null; } catch (_) { supabase = null; }
