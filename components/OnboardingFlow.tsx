@@ -1,70 +1,84 @@
-'use client';
+'use client'
+import React from 'react'
+import dynamic from 'next/dynamic'
+import { useRouter, useSearchParams } from 'next/navigation'
 
-import React, { useEffect } from 'react';
-import dynamic from 'next/dynamic';
-import { useRouter, useSearchParams } from 'next/navigation';
+type Props = { lang?: 'en' | 'np' }
 
-type Props = { lang?: 'en' | 'np' };
-
-const WelcomeStep   = dynamic(() => import('@/components/onboard/WelcomeStep'),   { ssr: false });
-const NameFaceStep  = dynamic(() => import('@/components/onboard/NameFaceStep'),  { ssr: false });
-const RootsStep     = dynamic(() => import('@/components/onboard/RootsStep'),     { ssr: false });
-const AtmaDishaStep = dynamic(() => import('@/components/AtmaDisha/AtmaDisha'),   { ssr: false });
-const TrustStep     = dynamic(() => import('@/components/onboard/TrustStep'),     { ssr: false });
-
-const VALID_STEPS = ['entry', 'name', 'roots', 'atma', 'trust'] as const;
-type Step = typeof VALID_STEPS[number];
+const WelcomeStep = dynamic(() => import('@/components/onboard/WelcomeStep'), { ssr: false })
+const NameFaceStep = dynamic(() => import('@/components/onboard/NameFaceStep'), { ssr: false })
+const RootsStep = dynamic(() => import('@/components/onboard/RootsStep'), { ssr: false })
+// REPLACED: JanmandalStep → AtmaDisha
+const AtmaDishaStep = dynamic(() => import('@/components/AtmaDisha/AtmaDisha'), { ssr: false })
+// 🌿 NEW: Trust Step (Ask for Passkey or PIN after introductions)
+const TrustStep = dynamic(() => import('@/components/onboard/TrustStep'), { ssr: false })
 
 export default function OnboardingFlow({ lang = 'en' }: Props) {
-  const router = useRouter();
-  const searchParams = useSearchParams();
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const step = searchParams.get('step') ?? 'entry'
 
-  const rawStep = searchParams.get('step');
-  const step: Step = (VALID_STEPS.includes((rawStep || '') as Step) ? rawStep : 'entry') as Step;
-
-  const go = (s: Step) => {
-    const sp = new URLSearchParams(searchParams.toString());
-    sp.set('step', s);
-    if (!sp.get('src')) sp.set('src', 'join');
-    router.push(`/onboard?${sp.toString()}`);
-  };
-
-  const t = lang;
-  const onNext = (s: string) => go((s as Step) || 'entry');
-
-  const backMap: Record<Step, Step | null> = {
-    entry: null,
-    name:  'entry',
-    roots: 'name',
-    atma:  'roots',
-    trust: 'atma',
-  };
-
-  const onBack = () => {
-    const prev = backMap[step];
-    if (prev) go(prev);
-    else router.push('/');
-  };
-
-  // Normalize ugly URLs like ?step=undefined / ?step=null / ?step=foo → ?step=entry
-  useEffect(() => {
-    const raw = searchParams.get('step');
-    const valid = raw && VALID_STEPS.includes(raw as Step);
-    if (!valid) {
-      const sp = new URLSearchParams(searchParams.toString());
-      sp.set('step', 'entry');
-      if (!sp.get('src')) sp.set('src', 'join');
-      router.replace(`/onboard?${sp.toString()}`);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // run once on mount to clean the URL
-
-  switch (step) {
-    case 'entry': return <WelcomeStep   t={t} onNext={onNext} onBack={onBack} />;
-    case 'name':  return <NameFaceStep  t={t} onNext={onNext} onBack={onBack} />;
-    case 'roots': return <RootsStep     t={t} onNext={onNext} onBack={onBack} />;
-    case 'atma':  return <AtmaDishaStep t={t} onNext={onNext} onBack={onBack} />;
-    case 'trust': return <TrustStep     t={t} onNext={onNext} onBack={onBack} />;
-    default:      return <WelcomeStep   t={t} onNext={onNext} onBack={onBack} />;
+  const go = (s: string) => {
+    const sp = new URLSearchParams(searchParams.toString())
+    sp.set('step', s)
+    if (!sp.get('src')) sp.set('src', 'join')
+    router.push(`/onboard?${sp.toString()}`)
   }
+
+  const t = {
+    welcome: {
+      title: 'Welcome to the Chauṭarī.',
+      subtitle: 'Others are already sitting under the tree. Let’s introduce yourself.',
+      begin: 'Begin my circle',
+      footer_privacy: 'You control what you share. Your face helps real people connect.',
+    },
+    nameface: {
+      why: 'Faces help real people connect. You control visibility.',
+    },
+  }
+
+  if (step === 'entry') {
+    return <WelcomeStep t={t} onNext={() => go('name')} />
+  }
+
+  if (step === 'name') {
+    return (
+      <NameFaceStep
+        t={t}
+        onBack={() => go('entry')}
+        onNext={() => go('roots')}
+      />
+    )
+  }
+
+  if (step === 'roots') {
+    return (
+      <RootsStep
+        supabase={undefined as any}
+        onNext={() => go('atmadisha')}
+        onBack={() => go('name')}
+      />
+    )
+  }
+
+  if (step === 'atmadisha') {
+    return (
+      <div className="min-h-[80vh] bg-neutral-950 grid place-items-center px-4 md:px-6">
+        {/* After Ātma Diśā completes, proceed to Trust Step */}
+        <AtmaDishaStep onDone={() => go('trust')} />
+      </div>
+    )
+  }
+
+  if (step === 'trust') {
+    return (
+      <TrustStep onDone={() => router.replace('/dashboard')} />
+    )
+  }
+
+  return (
+    <div className="min-h-[80vh] bg-neutral-950 text-white p-6">
+      Unknown step.
+    </div>
+  )
 }

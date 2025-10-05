@@ -1,38 +1,39 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useRef, useState } from "react";
 import { createClient } from "@supabase/supabase-js";
 import OnboardCardLayout from "./OnboardCardLayout";
 import ChautariLocationPicker from "../ChautariLocationPicker";
 
-export default function RootsStep({ onNext, onBack, initialValue = null }) {
-  const [supabase, setSupabase] = useState(null);
+/**
+ * Unified RootsStep — same logic, unified visuals
+ */
+export default function RootsStep({ supabase: supabaseProp, onNext, initialValue = null, onBack }) {
+  const supabaseRef = useRef(null);
+  if (!supabaseRef.current) {
+    if (supabaseProp) {
+      supabaseRef.current = supabaseProp;
+    } else if (typeof window !== "undefined" && process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+      supabaseRef.current = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+        { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } }
+      );
+    }
+  }
+  const supabase = supabaseRef.current;
+
   const [value, setValue] = useState(initialValue);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
-  useEffect(() => {
-    // ✅ Reuse global client or safely initialize
-    if (!globalThis.supabase) {
-      const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-      const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-      if (url && key) {
-        globalThis.supabase = createClient(url, key, {
-          auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
-        });
-      } else {
-        console.error("❌ Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY");
-      }
-    }
-    setSupabase(globalThis.supabase || null);
-  }, []);
-
-  const canContinue = Boolean(value && supabase);
+  const canContinue = Boolean(value);
 
   const handleContinue = async () => {
     if (!canContinue || saving) return;
     setSaving(true);
     setError("");
     try {
+      if (!supabase) throw new Error("Supabase client unavailable");
       const { data: session } = await supabase.auth.getSession();
       const userId = session?.session?.user?.id;
       if (!userId) throw new Error("Please sign in first.");
@@ -41,7 +42,7 @@ export default function RootsStep({ onNext, onBack, initialValue = null }) {
         .update({ roots_json: value, updated_at: new Date().toISOString() })
         .eq("user_id", userId);
       if (upErr) throw upErr;
-      onNext?.();
+      if (typeof onNext === "function") onNext();
     } catch (e) {
       console.error(e);
       setError(e?.message || "Failed to save roots");
@@ -54,30 +55,29 @@ export default function RootsStep({ onNext, onBack, initialValue = null }) {
     <OnboardCardLayout>
       <div className="mb-5 flex items-center justify-between">
         <button
-          onClick={onBack}
+          type="button"
           className="rounded-xl border border-white/20 bg-white/5 px-3 py-2 text-sm text-gray-200 hover:bg-white/10"
+          onClick={() => (typeof onBack === "function" ? onBack() : null)}
         >
           ← Back
         </button>
         <div className="text-sm text-gray-400">2/3</div>
       </div>
 
-      <h2 className="text-2xl md:text-3xl font-semibold text-white">
-        Where do your roots touch the earth?
-      </h2>
-      <p className="text-gray-400 text-sm mb-4">
-        Choose Nepal or Abroad. This anchors your presence in the Chautarī.
-      </p>
+      <div className="mb-6">
+        <h2 className="text-2xl md:text-3xl font-semibold text-white">
+          Where do your roots touch the earth?
+        </h2>
+        <p className="text-gray-400 text-sm">
+          Choose Nepal or Abroad. This anchors your presence in the Chautari.
+        </p>
+      </div>
 
-      {supabase ? (
-        <ChautariLocationPicker
-          supabase={supabase}
-          initialValue={initialValue}
-          onChange={setValue}
-        />
-      ) : (
-        <p className="text-gray-500 text-sm mt-4">Loading locations…</p>
-      )}
+      <ChautariLocationPicker
+        supabase={supabase}
+        initialValue={initialValue}
+        onChange={setValue}
+      />
 
       {error && <p className="text-red-400 text-sm mt-3">{error}</p>}
 
@@ -86,13 +86,10 @@ export default function RootsStep({ onNext, onBack, initialValue = null }) {
           Start above — we’ll build your path step by step.
         </div>
         <button
+          type="button"
+          className={`px-5 py-3 rounded-2xl ${canContinue ? "bg-yellow-500 hover:bg-yellow-400 text-black" : "bg-white/10 text-white/60"} font-semibold`}
           onClick={handleContinue}
           disabled={!canContinue || saving}
-          className={`px-5 py-3 rounded-2xl ${
-            canContinue
-              ? "bg-yellow-500 hover:bg-yellow-400 text-black"
-              : "bg-white/10 text-white/60"
-          } font-semibold`}
         >
           {saving ? "Saving…" : "Continue"}
         </button>
