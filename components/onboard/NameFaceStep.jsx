@@ -29,6 +29,13 @@ export default function NameFaceStep({ t, onBack, onNext }) {
 
   useEffect(() => { if (!toast) return; const id = setTimeout(() => setToast(null), 1800); return ()=>clearTimeout(id); }, [toast]);
 
+  useEffect(() => {
+    return () => {
+      if (previewUrl?.startsWith("blob:")) URL.revokeObjectURL(previewUrl);
+      if (editorSrc?.startsWith("blob:")) URL.revokeObjectURL(editorSrc);
+    };
+  }, [previewUrl, editorSrc]);
+
   const pickFromGallery = (e) => {
     const f = e.target.files?.[0];
     if (!f || !f.type.startsWith("image/")) return;
@@ -79,7 +86,7 @@ export default function NameFaceStep({ t, onBack, onNext }) {
     onNext?.({ name: first.trim(), surname: surname.trim() || null, photo_url: publicUrl });
   };
 
-  const gateDisabled = !(first.trim().length > 0 && allowContinue) || saving;
+  const gateDisabled = !(first.trim().length > 0 && allowContinue && publicUrl) || saving;
 
   return (
     <OnboardCardLayout>
@@ -157,7 +164,7 @@ export default function NameFaceStep({ t, onBack, onNext }) {
           disabled={gateDisabled}
           className={`w-full rounded-2xl ${gateDisabled ? "bg-yellow-600/60" : "bg-yellow-500 hover:bg-yellow-400"} px-5 py-3 text-black font-semibold disabled:opacity-60`}
         >
-          {saving ? "Saving..." : (t?.nameFace?.cta?.continue ?? "Continue")}
+          {saving ? "Saving..." : (t?.nameface?.cta?.continue ?? "Continue")}
         </button>
       </div>
     </OnboardCardLayout>
