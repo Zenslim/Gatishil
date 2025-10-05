@@ -1,21 +1,27 @@
-// lib/supabase/browser.ts
 'use client';
-import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { createBrowserClient } from '@supabase/ssr';
 
-function env(
-  key: 'NEXT_PUBLIC_SUPABASE_URL' | 'NEXT_PUBLIC_SUPABASE_ANON_KEY'
-): string {
-  const v = process.env[key];
-  if (!v) throw new Error(`[supabase-browser] Missing ${key} in environment`);
-  return v;
+/**
+ * Browser-side Supabase client (singleton).
+ * Provides both `getBrowserSupabase()` and a ready `supabase` instance,
+ * so older imports like `import { supabase } from '@/lib/supabase/browser'`
+ * keep working.
+ */
+let _client: ReturnType<typeof createBrowserClient> | null = null;
+
+export function getBrowserSupabase() {
+  if (!_client) {
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL as string;
+    const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string;
+    if (!url || !key) {
+      throw new Error('Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY');
+    }
+    _client = createBrowserClient(url, key);
+  }
+  return _client;
 }
 
-const url  = env('NEXT_PUBLIC_SUPABASE_URL');
-const anon = env('NEXT_PUBLIC_SUPABASE_ANON_KEY');
+export const supabase = getBrowserSupabase();
 
-export function createBrowserClient(): SupabaseClient {
-  // client: persist session is fine; Next.js will store in local storage
-  return createClient(url, anon);
-}
-// optional backward alias if other files still import getBrowserSupabase
-export const getBrowserSupabase = createBrowserClient;
+// Re-export to satisfy existing imports found in build logs
+export { createBrowserClient };
