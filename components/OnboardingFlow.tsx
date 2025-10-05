@@ -24,19 +24,22 @@ export default function OnboardingFlow({ lang = 'en' }: Props) {
     router.push(`/onboard?${sp.toString()}`);
   };
 
+  // Map prop names to what the step components expect:
+  const t = lang;
+  const onNext = go;
+
   switch (step) {
     case 'entry':
-      return <WelcomeStep go={go} lang={lang} />;
+      return <WelcomeStep t={t} onNext={onNext} />;
     case 'name':
-      return <NameFaceStep go={go} lang={lang} />;
+      return <NameFaceStep t={t} onNext={onNext} />;
     case 'roots':
-      return <RootsStep go={go} lang={lang} />;
+      return <RootsStep t={t} onNext={onNext} />;
     case 'atma':
-      return <AtmaDishaStep go={go} lang={lang} />;
+      return <AtmaDishaStep t={t} onNext={onNext} />;
     case 'trust':
-      return <TrustStep go={go} lang={lang} />;
+      return <TrustStep t={t} onNext={onNext} />;
     default:
-      return <WelcomeStep go={go} lang={lang} />;
+      return <WelcomeStep t={t} onNext={onNext} />;
   }
 }
-
