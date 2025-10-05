@@ -46,7 +46,10 @@ export default function NameFaceStep({ t, onBack, onNext }) {
   const confirmAndSave = async (imgBlob) => {
     setSaving(true);
     try {
+      // Preview immediately
       const localUrl = URL.createObjectURL(imgBlob);
+      // Revoke old preview to avoid leaks
+      if (previewUrl && previewUrl.startsWith("blob:")) URL.revokeObjectURL(previewUrl);
       setPreviewUrl(localUrl);
       setSavedBlob(imgBlob);
 
@@ -55,6 +58,7 @@ export default function NameFaceStep({ t, onBack, onNext }) {
       if (!uid) throw new Error("No session");
 
       const photo_url = await uploadAvatar(imgBlob, uid);
+      setPublicUrl(photo_url);
       const { error } = await supabase.from("profiles").upsert(
         { user_id: uid, name: first.trim(), surname: surname.trim() || null, photo_url },
         { onConflict: "user_id" }
