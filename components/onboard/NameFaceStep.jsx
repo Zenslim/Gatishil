@@ -19,7 +19,8 @@ export default function NameFaceStep({ t, onBack, onNext }) {
 
   const [showCamera, setShowCamera] = useState(false);
   const [editorSrc, setEditorSrc] = useState(null);
-  const [previewUrl, setPreviewUrl] = useState(null);
+  const [previewUrl, setPreviewUrl] = useState(null); // local blob for instant preview
+  const [publicUrl, setPublicUrl] = useState(null);   // Supabase Storage URL to persist
   const [savedBlob, setSavedBlob] = useState(null);
 
   const [saving, setSaving] = useState(false);
