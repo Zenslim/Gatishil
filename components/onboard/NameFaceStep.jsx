@@ -75,8 +75,8 @@ export default function NameFaceStep({ t, onBack, onNext }) {
   };
 
   const continueNext = () => {
-    if (!allowContinue || !first.trim()) return;
-    onNext?.({ name: first.trim(), surname: surname.trim() || null, photo_url: previewUrl });
+    if (!allowContinue || !first.trim() || !publicUrl) return;
+    onNext?.({ name: first.trim(), surname: surname.trim() || null, photo_url: publicUrl });
   };
 
   const gateDisabled = !(first.trim().length > 0 && allowContinue) || saving;
