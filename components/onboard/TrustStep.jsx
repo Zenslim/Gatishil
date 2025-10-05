@@ -2,11 +2,10 @@
 
 import React, { useEffect, useState } from 'react';
 import { startRegistration } from '@simplewebauthn/browser';
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import { supabase } from '@/lib/supabaseClient';
 import { createLocalPin, hasLocalPin } from '@/lib/localPin';
 
 export default function TrustStep({ onDone }) {
-  const supabase = createClientComponentClient();
   const [supported, setSupported] = useState(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState(null);
@@ -114,7 +113,7 @@ export default function TrustStep({ onDone }) {
                     pattern="[0-9]*"
                     maxLength={4}
                     value={pin}
-                    onChange={(e) => setPin(e.target.value.replace(/\\D/g, ''))}
+                    onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))}
                     className="mt-1 w-full rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-emerald-500"
                     placeholder="••••"
                   />
