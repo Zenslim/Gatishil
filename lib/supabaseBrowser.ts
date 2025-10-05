@@ -1,6 +1,2 @@
-import { createClient } from '@supabase/supabase-js';
-
-const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-
-export const supabaseBrowser = createClient(url, anon, { auth: { persistSession: true, autoRefreshToken: true } });
+// Deprecated: use '@/lib/supabase/browser'
+export { supabase as supabaseBrowser } from '@/lib/supabase/browser'

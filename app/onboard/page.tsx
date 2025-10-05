@@ -4,7 +4,7 @@
 import { useEffect, useState } from "react";
 import { unstable_noStore as noStore } from "next/cache";
 import { useSearchParams } from "next/navigation";
-import { supabase } from "@/lib/supabaseClient";
+import { supabase } from "@/lib/supabase/browser";
 import OnboardingFlow from "@/components/OnboardingFlow";
 
 export const dynamic = "force-dynamic";
