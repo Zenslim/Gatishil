@@ -1,34 +1,27 @@
-import { cookies, headers } from 'next/headers';
-import { createServerClient } from '@supabase/ssr';
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
 /**
- * Server-side Supabase client for Route Handlers / Server Components.
- * Uses anon key; swap to SERVICE_ROLE where required in secure-only contexts.
+ * Server-side Supabase client without @supabase/ssr.
+ * Uses SERVICE_ROLE if provided (secure server-only), otherwise falls back to anon.
+ * No cookie/session persistence here; use it for backend actions/routes.
  */
-export function getServerSupabase() {
-  const cookieStore = cookies();
+export function getServerSupabase(): SupabaseClient {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL as string;
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string;
-
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY as string | undefined;
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string | undefined;
+  const key = serviceKey || anonKey;
   if (!url || !key) {
-    throw new Error('Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY');
+    throw new Error('Missing SUPABASE keys. Set NEXT_PUBLIC_SUPABASE_URL and either SUPABASE_SERVICE_ROLE_KEY or NEXT_PUBLIC_SUPABASE_ANON_KEY');
   }
-
-  return createServerClient(url, key, {
-    cookies: {
-      get: (name: string) => cookieStore.get(name)?.value,
-      set: (name: string, value: string, options: any) => {
-        cookieStore.set({ name, value, ...options });
-      },
-      remove: (name: string, options: any) => {
-        cookieStore.set({ name, value: '', ...options, expires: new Date(0) });
-      },
+  return createClient(url, key, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
     },
-    // Pass through headers to help SSR session detection
-    headers: {
-      get: (name: string) => headers().get(name) ?? undefined,
+    global: {
+      headers: { 'X-Client-Info': 'gatishil/server' },
     },
   });
 }
 
-export { createServerClient };
+export { getServerSupabase as createServerClient }; // light compat if referenced by old name
