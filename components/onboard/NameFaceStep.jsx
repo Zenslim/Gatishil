@@ -1,39 +1,38 @@
-import { useState, useRef, useEffect } from "react";
+"use client";
+import Image from "next/image";
+import { useEffect, useState, useRef } from "react";
 import { supabase } from "@/lib/supabaseClient";
+import OnboardCardLayout from "./OnboardCardLayout";
+import CameraCapture from "./CameraCapture";
+import ImageEditor from "./ImageEditor";
+
+const AVATAR_BUCKET = "avatars";
 
 /**
- * @typedef {{ 
- *   onNext: (data: {name:string, surname:string|null, photo_url:string}) => void, 
- *   onBack?: () => void,
- *   t?: any
- * }} Props
+ * NameFaceStep — UI preserved (card, colors), logic fixed
+ * - Keeps your original beautiful UI (OnboardCardLayout, Tailwind classes).
+ * - Uploads to Supabase Storage and stores the PUBLIC url (not blob:).
+ * - Upserts profiles by user_id (UNIQUE), with updated_at.
+ * - Continue enables only when first name + publicUrl exist.
  */
-
-/**
- * NameFaceStep
- * - Uploads avatar to Supabase Storage (bucket: 'avatars')
- * - Upserts profile row by user_id (UNIQUE) with photo_url
- * - Persists the public photo_url (NOT a blob:)
- * - Enables Continue only when first name + publicUrl exist
- * - Accepts optional onBack (to satisfy OnboardingFlow.tsx)
- * @param {Props} props
- */
-export default function NameFaceStep({ onNext, onBack, t }) {
-  // form state
+export default function NameFaceStep({ t, onBack, onNext }) {
   const [first, setFirst] = useState("");
   const [surname, setSurname] = useState("");
 
-  // image state
-  const [previewUrl, setPreviewUrl] = useState(null); // local blob for preview
-  const [publicUrl, setPublicUrl] = useState(null);   // Supabase public URL to persist
-  const [editorSrc, setEditorSrc] = useState(null);   // reserved if you pipe a camera/editor
+  const [showCamera, setShowCamera] = useState(false);
+  const [editorSrc, setEditorSrc] = useState(null);
+  const [previewUrl, setPreviewUrl] = useState(null); // blob for UI
+  const [publicUrl, setPublicUrl] = useState(null);   // supabase public URL
 
-  // ui state
   const [saving, setSaving] = useState(false);
-  const [toast, setToast] = useState("");
-  const fileRef = useRef(null);
+  const [toast, setToast] = useState(null);
 
-  // cleanup object URLs
+  useEffect(() => {
+    if (!toast) return;
+    const id = setTimeout(() => setToast(null), 1800);
+    return () => clearTimeout(id);
+  }, [toast]);
+
   useEffect(() => {
     return () => {
       if (previewUrl?.startsWith("blob:")) URL.revokeObjectURL(previewUrl);
@@ -41,161 +40,141 @@ export default function NameFaceStep({ onNext, onBack, t }) {
     };
   }, [previewUrl, editorSrc]);
 
-  // Upload to Storage and return public URL
+  const pickFromGallery = (e) => {
+    const f = e.target.files?.[0];
+    if (!f || !f.type.startsWith("image/")) return;
+    const url = URL.createObjectURL(f);
+    setEditorSrc(url);
+  };
+
   const uploadAvatar = async (blob, uid) => {
     const mime = blob.type || "image/webp";
     const ext = (mime.split("/")[1] || "webp").toLowerCase();
     const key = `${uid}/${Date.now()}.${ext}`;
-
-    const { data: up, error: upErr } = await supabase
-      .storage
-      .from("avatars")
-      .upload(key, blob, { contentType: mime, upsert: true });
-
-    if (upErr) throw upErr;
-
-    const { data: pub } = supabase.storage.from("avatars").getPublicUrl(up.path);
-    return pub.publicUrl;
+    const up = await supabase.storage.from(AVATAR_BUCKET).upload(key, blob, { contentType: mime, upsert: true });
+    if (up.error) throw up.error;
+    return supabase.storage.from(AVATAR_BUCKET).getPublicUrl(up.data.path).data.publicUrl;
   };
 
-  // Called when user picks a file or confirms from editor
-  const confirmAndSave = async (fileOrBlob) => {
-    const blob = fileOrBlob; // File or Blob
-
+  const confirmAndSave = async (imgBlob) => {
     setSaving(true);
-    setToast("");
-
     try {
-      // show instant local preview
-      const local = URL.createObjectURL(blob);
+      const localUrl = URL.createObjectURL(imgBlob);
       if (previewUrl?.startsWith("blob:")) URL.revokeObjectURL(previewUrl);
-      setPreviewUrl(local);
+      setPreviewUrl(localUrl);
 
-      // get session
-      const { data: s } = await supabase.auth.getSession();
-      const uid = s?.session?.user?.id;
-      if (!uid) throw new Error("No session. Please sign in and try again.");
+      const { data } = await supabase.auth.getSession();
+      const uid = data.session?.user?.id;
+      if (!uid) throw new Error("No session");
 
-      // upload to Storage
-      const photo_url = await uploadAvatar(blob, uid);
+      const photo_url = await uploadAvatar(imgBlob, uid);
       setPublicUrl(photo_url);
 
-      // upsert profile by user_id (requires UNIQUE on user_id)
-      const { error: upsertErr } = await supabase
-        .from("profiles")
-        .upsert(
-          {
-            user_id: uid,
-            name: first.trim(),
-            surname: surname.trim() || null,
-            photo_url,
-            updated_at: new Date().toISOString(),
-          },
-          { onConflict: "user_id" }
-        );
-
-      if (upsertErr) throw upsertErr;
+      const { error } = await supabase.from("profiles").upsert(
+        { user_id: uid, name: first.trim(), surname: surname.trim() || null, photo_url, updated_at: new Date().toISOString() },
+        { onConflict: "user_id" }
+      );
+      if (error) throw error;
 
       setToast("Saved.");
-    } catch (e) {
-      console.error("NameFaceStep upload/save error:", e);
-      setToast(e?.message || "Upload failed. Try another image.");
-      setPublicUrl(null); // keep button disabled
+    } catch (err) {
+      console.error(err);
+      setToast(err?.message || "Photo upload failed. Please try another image.");
+      setPublicUrl(null);
     } finally {
       setSaving(false);
     }
   };
 
-  // Continue → pass persisted public URL (never the blob:)
   const continueNext = () => {
     if (!first.trim() || !publicUrl || saving) return;
-    onNext?.({
-      name: first.trim(),
-      surname: surname.trim() || null,
-      photo_url: publicUrl,
-    });
+    onNext?.({ name: first.trim(), surname: surname.trim() || null, photo_url: publicUrl });
   };
 
   const gateDisabled = !(first.trim() && publicUrl) || saving;
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between">
-        <div className="text-2xl font-semibold">
-          {t?.nameface?.title ?? "Show your face so people recognize you in the Chauṭarī."}{" "}
-          <button
-            type="button"
-            className="underline"
-            onClick={() =>
-              alert(
-                t?.nameface?.why ??
-                  "Faces help real people connect. You control how your profile appears."
-              )
-            }
-          >
-            {t?.nameface?.why_label ?? "Why?"}
-          </button>
-        </div>
-        {onBack && (
-          <button
-            type="button"
-            onClick={onBack}
-            className="text-sm underline opacity-80 hover:opacity-100"
-          >
-            {t?.common?.back ?? "Back"}
-          </button>
-        )}
+    <OnboardCardLayout>
+      <div className="mb-5 flex items-center justify-between">
+        <button onClick={onBack} className="rounded-xl border border-white/20 bg-white/5 px-3 py-2 text-sm text-gray-200 hover:bg-white/10">← {t?.common?.back ?? "Back"}</button>
+        <div className="text-sm text-gray-400">1/3</div>
       </div>
 
-      <label className="text-sm opacity-80">First name*</label>
-      <input
-        value={first}
-        onChange={(e) => setFirst(e.target.value)}
-        className="input w-full"
-        placeholder={t?.nameface?.placeholders?.first ?? "Enter your first name"}
-      />
+      {toast && <div className="mb-3 rounded-lg bg-emerald-500/15 px-3 py-2 text-sm text-emerald-300">{toast}</div>}
 
-      <label className="text-sm opacity-80">Surname (optional)</label>
-      <input
-        value={surname}
-        onChange={(e) => setSurname(e.target.value)}
-        className="input w-full"
-        placeholder={t?.nameface?.placeholders?.surname ?? "Enter your surname"}
-      />
-
-      <div className="flex items-center gap-3">
-        <div className="w-24 h-24 rounded-full bg-black/50 overflow-hidden border border-neutral-700">
-          {previewUrl ? (
-            <img className="w-full h-full object-cover" src={previewUrl} alt="face" />
-          ) : null}
-        </div>
-
-        <button type="button" className="btn" onClick={() => fileRef.current?.click()}>
-          {t?.nameface?.cta?.choose ?? "Choose from gallery"}
+      <h2 className="text-2xl font-semibold text-white">
+        {t?.nameface?.title ?? "Show your face so people recognize you in the Chauṭarī."}{" "}
+        <button onClick={()=>alert(t?.nameface?.why ?? "Faces help real people connect. You control visibility.")} className="underline">
+          {t?.nameface?.why_label ?? "Why?"}
         </button>
+      </h2>
 
-        <input
-          ref={fileRef}
-          type="file"
-          accept="image/*"
-          hidden
-          onChange={(e) => {
-            const file = e.target.files?.[0];
-            if (file) confirmAndSave(file);
-          }}
-        />
+      <div className="mt-6 grid gap-4">
+        <label className="block">
+          <span className="text-sm font-medium text-gray-300">First name*</span>
+          <input
+            className="mt-1 w-full rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-yellow-500"
+            placeholder="e.g., Nabin"
+            value={first}
+            onChange={(e)=> setFirst(e.target.value)}
+            required
+          />
+        </label>
+
+        <label className="block">
+          <span className="text-sm font-medium text-gray-300">Surname (optional)</span>
+          <input
+            className="mt-1 w-full rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-yellow-500"
+            placeholder="e.g., Shrestha"
+            value={surname}
+            onChange={(e)=> setSurname(e.target.value)}
+          />
+        </label>
       </div>
 
-      <button
-        type="button"
-        disabled={gateDisabled}
-        className={`btn w-full ${gateDisabled ? "opacity-50 cursor-not-allowed" : ""}`}
-        onClick={continueNext}
-      >
-        {saving ? (t?.common?.saving ?? "Saving...") : t?.nameface?.cta?.continue ?? "Continue"}
-      </button>
+      {/* Photo area */}
+      <div className="mt-6 grid grid-cols-[140px_1fr] gap-4 items-start">
+        <div className="w-[140px] h-[140px] rounded-full bg-black/40 border border-white/10 grid place-items-center overflow-hidden">
+          {previewUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={previewUrl} alt="preview" className="w-full h-full object-cover" />
+          ) : (
+            <div className="text-sm text-gray-500">1:1</div>
+          )}
+        </div>
+        <div className="flex gap-3">
+          <button onClick={()=>setShowCamera(true)} className="rounded-xl border border-white/20 bg-white/5 px-4 py-2 text-white hover:bg-white/10">Take a selfie</button>
+          <label className="rounded-xl border border-white/20 bg-white/5 px-4 py-2 text-white hover:bg-white/10 cursor-pointer">
+            Choose from gallery
+            <input type="file" accept="image/*" onChange={pickFromGallery} className="hidden" />
+          </label>
+        </div>
+      </div>
 
-      {!!toast && <p className="text-sm opacity-80">{toast}</p>}
-    </div>
+      {/* Editor */}
+      {editorSrc && (
+        <ImageEditor
+          src={editorSrc}
+          onCancel={()=>setEditorSrc(null)}
+          onConfirm={(blob)=>{ setEditorSrc(null); confirmAndSave(blob); }}
+        />
+      )}
+      {showCamera && (
+        <CameraCapture
+          onCapture={(url)=>{ setShowCamera(false); setEditorSrc(url); }}
+          onCancel={()=>setShowCamera(false)}
+        />
+      )}
+
+      <div className="mt-8">
+        <button
+          onClick={continueNext}
+          disabled={gateDisabled}
+          className={`w-full rounded-2xl ${gateDisabled ? "bg-yellow-600/60" : "bg-yellow-500 hover:bg-yellow-400"} px-5 py-3 text-black font-semibold disabled:opacity-60`}
+        >
+          {saving ? (t?.common?.saving ?? "Saving...") : (t?.nameface?.cta?.continue ?? "Continue")}
+        </button>
+      </div>
+    </OnboardCardLayout>
   );
 }
