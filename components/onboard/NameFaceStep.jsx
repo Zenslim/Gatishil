@@ -2,21 +2,31 @@ import { useState, useRef, useEffect } from "react";
 import { supabase } from "@/lib/supabaseClient";
 
 /**
+ * @typedef {{ 
+ *   onNext: (data: {name:string, surname:string|null, photo_url:string}) => void, 
+ *   onBack?: () => void,
+ *   t?: any
+ * }} Props
+ */
+
+/**
  * NameFaceStep
  * - Uploads avatar to Supabase Storage (bucket: 'avatars')
- * - Upserts profile row by user_id (requires UNIQUE on user_id — already added)
+ * - Upserts profile row by user_id (UNIQUE) with photo_url
  * - Persists the public photo_url (NOT a blob:)
  * - Enables Continue only when first name + publicUrl exist
+ * - Accepts optional onBack (to satisfy OnboardingFlow.tsx)
+ * @param {Props} props
  */
-export default function NameFaceStep({ onNext, t }) {
+export default function NameFaceStep({ onNext, onBack, t }) {
   // form state
   const [first, setFirst] = useState("");
   const [surname, setSurname] = useState("");
 
   // image state
-  const [previewUrl, setPreviewUrl] = useState(null); // local blob for immediate preview
+  const [previewUrl, setPreviewUrl] = useState(null); // local blob for preview
   const [publicUrl, setPublicUrl] = useState(null);   // Supabase public URL to persist
-  const [editorSrc, setEditorSrc] = useState(null);   // if you pipe through an editor, keep source here
+  const [editorSrc, setEditorSrc] = useState(null);   // reserved if you pipe a camera/editor
 
   // ui state
   const [saving, setSaving] = useState(false);
@@ -50,7 +60,7 @@ export default function NameFaceStep({ onNext, t }) {
 
   // Called when user picks a file or confirms from editor
   const confirmAndSave = async (fileOrBlob) => {
-    const blob = fileOrBlob; // can be File or Blob
+    const blob = fileOrBlob; // File or Blob
 
     setSaving(true);
     setToast("");
@@ -70,7 +80,7 @@ export default function NameFaceStep({ onNext, t }) {
       const photo_url = await uploadAvatar(blob, uid);
       setPublicUrl(photo_url);
 
-      // upsert profile by user_id
+      // upsert profile by user_id (requires UNIQUE on user_id)
       const { error: upsertErr } = await supabase
         .from("profiles")
         .upsert(
@@ -110,20 +120,31 @@ export default function NameFaceStep({ onNext, t }) {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="text-2xl font-semibold">
-        {t?.nameface?.title ?? "Show your face so people recognize you in the Chauṭarī."}{" "}
-        <button
-          type="button"
-          className="underline"
-          onClick={() =>
-            alert(
-              t?.nameface?.why ??
-                "Faces help real people connect. You control how your profile appears."
-            )
-          }
-        >
-          {t?.nameface?.why_label ?? "Why?"}
-        </button>
+      <div className="flex items-center justify-between">
+        <div className="text-2xl font-semibold">
+          {t?.nameface?.title ?? "Show your face so people recognize you in the Chauṭarī."}{" "}
+          <button
+            type="button"
+            className="underline"
+            onClick={() =>
+              alert(
+                t?.nameface?.why ??
+                  "Faces help real people connect. You control how your profile appears."
+              )
+            }
+          >
+            {t?.nameface?.why_label ?? "Why?"}
+          </button>
+        </div>
+        {onBack && (
+          <button
+            type="button"
+            onClick={onBack}
+            className="text-sm underline opacity-80 hover:opacity-100"
+          >
+            {t?.common?.back ?? "Back"}
+          </button>
+        )}
       </div>
 
       <label className="text-sm opacity-80">First name*</label>
@@ -152,9 +173,6 @@ export default function NameFaceStep({ onNext, t }) {
         <button type="button" className="btn" onClick={() => fileRef.current?.click()}>
           {t?.nameface?.cta?.choose ?? "Choose from gallery"}
         </button>
-
-        {/* If you have a camera component, render it here and pipe its Blob to confirmAndSave */}
-        {/* <CameraCapture onBlob={(b)=>confirmAndSave(b)} /> */}
 
         <input
           ref={fileRef}
