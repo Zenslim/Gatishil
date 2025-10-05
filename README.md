@@ -10,5 +10,3 @@ Minimal, production-ready **Next.js App Router** homepage for **GatishilNepal.or
 
 ## Deploy (one-step)
 **Upload this repository to GitHub and import it on Vercel.**
-
-— Built 2025-09-28
