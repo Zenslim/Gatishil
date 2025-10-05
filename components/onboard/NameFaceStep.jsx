@@ -55,13 +55,19 @@ export default function NameFaceStep({ t, onBack, onNext }) {
   };
 
   const continueNext = () => {
-    if (!first.trim() || !previewUrl || saving) return;
-    onNext?.({
-      name: first.trim(),
-      surname: surname.trim() || null,
-      photo_url: previewUrl,
-    });
+  if (!first.trim() || !previewUrl || saving) return;
+
+  // You can store data locally if needed later:
+  const data = {
+    name: first.trim(),
+    surname: surname.trim() || null,
+    photo_url: previewUrl,
   };
+  localStorage.setItem('onboard_nameface', JSON.stringify(data));
+
+  // Move to next step
+  onNext('roots');
+};
 
   const gateDisabled = !(first.trim() && previewUrl) || saving;
 
