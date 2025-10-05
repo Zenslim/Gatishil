@@ -1,17 +1,29 @@
 import { useState, useRef, useEffect } from "react";
 import { supabase } from "@/lib/supabaseClient";
 
+/**
+ * NameFaceStep
+ * - Uploads avatar to Supabase Storage (bucket: 'avatars')
+ * - Upserts profile row by user_id (requires UNIQUE on user_id — already added)
+ * - Persists the public photo_url (NOT a blob:)
+ * - Enables Continue only when first name + publicUrl exist
+ */
 export default function NameFaceStep({ onNext, t }) {
+  // form state
   const [first, setFirst] = useState("");
   const [surname, setSurname] = useState("");
+
+  // image state
+  const [previewUrl, setPreviewUrl] = useState(null); // local blob for immediate preview
+  const [publicUrl, setPublicUrl] = useState(null);   // Supabase public URL to persist
+  const [editorSrc, setEditorSrc] = useState(null);   // if you pipe through an editor, keep source here
+
+  // ui state
   const [saving, setSaving] = useState(false);
-  const [previewUrl, setPreviewUrl] = useState(null);
-  const [publicUrl, setPublicUrl] = useState(null);
-  const [allowContinue, setAllowContinue] = useState(false);
   const [toast, setToast] = useState("");
-  const [editorSrc, setEditorSrc] = useState(null);
   const fileRef = useRef(null);
 
+  // cleanup object URLs
   useEffect(() => {
     return () => {
       if (previewUrl?.startsWith("blob:")) URL.revokeObjectURL(previewUrl);
@@ -19,87 +31,131 @@ export default function NameFaceStep({ onNext, t }) {
     };
   }, [previewUrl, editorSrc]);
 
+  // Upload to Storage and return public URL
   const uploadAvatar = async (blob, uid) => {
     const mime = blob.type || "image/webp";
-    const ext = mime.split("/")[1] || "webp";
+    const ext = (mime.split("/")[1] || "webp").toLowerCase();
     const key = `${uid}/${Date.now()}.${ext}`;
-    const { error, data } = await supabase.storage.from("avatars").upload(key, blob, {
-      contentType: mime,
-      upsert: true,
-    });
-    if (error) throw error;
-    const { data: pub } = supabase.storage.from("avatars").getPublicUrl(data.path);
+
+    const { data: up, error: upErr } = await supabase
+      .storage
+      .from("avatars")
+      .upload(key, blob, { contentType: mime, upsert: true });
+
+    if (upErr) throw upErr;
+
+    const { data: pub } = supabase.storage.from("avatars").getPublicUrl(up.path);
     return pub.publicUrl;
   };
 
-  const confirmAndSave = async (imgBlob) => {
+  // Called when user picks a file or confirms from editor
+  const confirmAndSave = async (fileOrBlob) => {
+    const blob = fileOrBlob; // can be File or Blob
+
     setSaving(true);
+    setToast("");
+
     try {
-      const localUrl = URL.createObjectURL(imgBlob);
-      if (previewUrl && previewUrl.startsWith("blob:")) URL.revokeObjectURL(previewUrl);
-      setPreviewUrl(localUrl);
+      // show instant local preview
+      const local = URL.createObjectURL(blob);
+      if (previewUrl?.startsWith("blob:")) URL.revokeObjectURL(previewUrl);
+      setPreviewUrl(local);
 
-      const { data } = await supabase.auth.getSession();
-      const uid = data.session?.user?.id;
-      if (!uid) throw new Error("No session");
+      // get session
+      const { data: s } = await supabase.auth.getSession();
+      const uid = s?.session?.user?.id;
+      if (!uid) throw new Error("No session. Please sign in and try again.");
 
-      const photo_url = await uploadAvatar(imgBlob, uid);
+      // upload to Storage
+      const photo_url = await uploadAvatar(blob, uid);
       setPublicUrl(photo_url);
 
-      const { error } = await supabase.from("profiles").upsert(
-        {
-          user_id: uid,
-          name: first.trim(),
-          surname: surname.trim() || null,
-          photo_url,
-        },
-        { onConflict: "user_id" }
-      );
-      if (error) throw error;
+      // upsert profile by user_id
+      const { error: upsertErr } = await supabase
+        .from("profiles")
+        .upsert(
+          {
+            user_id: uid,
+            name: first.trim(),
+            surname: surname.trim() || null,
+            photo_url,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "user_id" }
+        );
+
+      if (upsertErr) throw upsertErr;
 
       setToast("Saved.");
-      setAllowContinue(true);
-    } catch (err) {
-      console.error(err);
-      setToast(err?.message || "Photo upload failed. Please try another image.");
+    } catch (e) {
+      console.error("NameFaceStep upload/save error:", e);
+      setToast(e?.message || "Upload failed. Try another image.");
+      setPublicUrl(null); // keep button disabled
     } finally {
       setSaving(false);
     }
   };
 
+  // Continue → pass persisted public URL (never the blob:)
   const continueNext = () => {
-    if (!allowContinue || !first.trim() || !publicUrl) return;
-    onNext?.({ name: first.trim(), surname: surname.trim() || null, photo_url: publicUrl });
+    if (!first.trim() || !publicUrl || saving) return;
+    onNext?.({
+      name: first.trim(),
+      surname: surname.trim() || null,
+      photo_url: publicUrl,
+    });
   };
 
-  const gateDisabled = !(first.trim().length > 0 && allowContinue && publicUrl) || saving;
+  const gateDisabled = !(first.trim() && publicUrl) || saving;
 
   return (
     <div className="flex flex-col gap-4">
-      <label>First name*</label>
+      <div className="text-2xl font-semibold">
+        {t?.nameface?.title ?? "Show your face so people recognize you in the Chauṭarī."}{" "}
+        <button
+          type="button"
+          className="underline"
+          onClick={() =>
+            alert(
+              t?.nameface?.why ??
+                "Faces help real people connect. You control how your profile appears."
+            )
+          }
+        >
+          {t?.nameface?.why_label ?? "Why?"}
+        </button>
+      </div>
+
+      <label className="text-sm opacity-80">First name*</label>
       <input
         value={first}
         onChange={(e) => setFirst(e.target.value)}
-        className="input"
-        placeholder="Enter your first name"
+        className="input w-full"
+        placeholder={t?.nameface?.placeholders?.first ?? "Enter your first name"}
       />
-      <label>Surname (optional)</label>
+
+      <label className="text-sm opacity-80">Surname (optional)</label>
       <input
         value={surname}
         onChange={(e) => setSurname(e.target.value)}
-        className="input"
-        placeholder="Enter your surname"
+        className="input w-full"
+        placeholder={t?.nameface?.placeholders?.surname ?? "Enter your surname"}
       />
 
       <div className="flex items-center gap-3">
         <div className="w-24 h-24 rounded-full bg-black/50 overflow-hidden border border-neutral-700">
           {previewUrl ? (
-            <img src={previewUrl} alt="face" className="w-full h-full object-cover" />
+            <img className="w-full h-full object-cover" src={previewUrl} alt="face" />
           ) : null}
         </div>
-        <button type="button" onClick={() => fileRef.current?.click()} className="btn">
-          Choose Photo
+
+        <button type="button" className="btn" onClick={() => fileRef.current?.click()}>
+          {t?.nameface?.cta?.choose ?? "Choose from gallery"}
         </button>
+
+        {/* If you have a camera component, render it here and pipe its Blob to confirmAndSave */}
+        {/* <CameraCapture onBlob={(b)=>confirmAndSave(b)} /> */}
+
         <input
           ref={fileRef}
           type="file"
@@ -115,13 +171,13 @@ export default function NameFaceStep({ onNext, t }) {
       <button
         type="button"
         disabled={gateDisabled}
-        className={`btn w-full ${gateDisabled ? "opacity-50" : ""}`}
+        className={`btn w-full ${gateDisabled ? "opacity-50 cursor-not-allowed" : ""}`}
         onClick={continueNext}
       >
-        {saving ? "Saving..." : t?.nameface?.cta?.continue ?? "Continue"}
+        {saving ? (t?.common?.saving ?? "Saving...") : t?.nameface?.cta?.continue ?? "Continue"}
       </button>
 
-      {toast && <p className="text-sm text-green-500">{toast}</p>}
+      {!!toast && <p className="text-sm opacity-80">{toast}</p>}
     </div>
   );
 }
