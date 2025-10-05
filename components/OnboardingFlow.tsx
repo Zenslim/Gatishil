@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import dynamic from 'next/dynamic';
 import { useRouter, useSearchParams } from 'next/navigation';
 
@@ -12,26 +12,27 @@ const RootsStep     = dynamic(() => import('@/components/onboard/RootsStep'),   
 const AtmaDishaStep = dynamic(() => import('@/components/AtmaDisha/AtmaDisha'),   { ssr: false });
 const TrustStep     = dynamic(() => import('@/components/onboard/TrustStep'),     { ssr: false });
 
+const VALID_STEPS = ['entry', 'name', 'roots', 'atma', 'trust'] as const;
+type Step = typeof VALID_STEPS[number];
+
 export default function OnboardingFlow({ lang = 'en' }: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const step = (searchParams.get('step') ?? 'entry') as
-    | 'entry' | 'name' | 'roots' | 'atma' | 'trust';
+  const rawStep = searchParams.get('step');
+  const step: Step = (VALID_STEPS.includes((rawStep || '') as Step) ? rawStep : 'entry') as Step;
 
-  const go = (s: string) => {
+  const go = (s: Step) => {
     const sp = new URLSearchParams(searchParams.toString());
     sp.set('step', s);
     if (!sp.get('src')) sp.set('src', 'join');
     router.push(`/onboard?${sp.toString()}`);
   };
 
-  // Map to what step components expect
   const t = lang;
-  const onNext = go;
+  const onNext = (s: string) => go((s as Step) || 'entry');
 
-  // Backward navigation map
-  const backMap: Record<typeof step, string | null> = {
+  const backMap: Record<Step, Step | null> = {
     entry: null,
     name:  'entry',
     roots: 'name',
@@ -42,8 +43,21 @@ export default function OnboardingFlow({ lang = 'en' }: Props) {
   const onBack = () => {
     const prev = backMap[step];
     if (prev) go(prev);
-    else router.push('/'); // entry has no back → home
+    else router.push('/');
   };
+
+  // Normalize ugly URLs like ?step=undefined / ?step=null / ?step=foo → ?step=entry
+  useEffect(() => {
+    const raw = searchParams.get('step');
+    const valid = raw && VALID_STEPS.includes(raw as Step);
+    if (!valid) {
+      const sp = new URLSearchParams(searchParams.toString());
+      sp.set('step', 'entry');
+      if (!sp.get('src')) sp.set('src', 'join');
+      router.replace(`/onboard?${sp.toString()}`);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // run once on mount to clean the URL
 
   switch (step) {
     case 'entry': return <WelcomeStep   t={t} onNext={onNext} onBack={onBack} />;
