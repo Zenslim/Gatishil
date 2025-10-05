@@ -1,33 +1,30 @@
 "use client";
-import { useRef, useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { createClient } from "@supabase/supabase-js";
 import OnboardCardLayout from "./OnboardCardLayout";
 import ChautariLocationPicker from "../ChautariLocationPicker";
 
-/**
- * RootsStep — fixed Supabase initialization + stable picker logic
- */
 export default function RootsStep({ onNext, onBack, initialValue = null }) {
   const [supabase, setSupabase] = useState(null);
   const [value, setValue] = useState(initialValue);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
-  // ✅ Always create client on mount if not injected
   useEffect(() => {
-    if (!supabase) {
+    // ✅ Reuse global client or safely initialize
+    if (!globalThis.supabase) {
       const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
       const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
       if (url && key) {
-        const client = createClient(url, key, {
+        globalThis.supabase = createClient(url, key, {
           auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
         });
-        setSupabase(client);
       } else {
-        console.error("❌ Missing Supabase env vars in browser build");
+        console.error("❌ Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY");
       }
     }
-  }, [supabase]);
+    setSupabase(globalThis.supabase || null);
+  }, []);
 
   const canContinue = Boolean(value && supabase);
 
@@ -39,17 +36,15 @@ export default function RootsStep({ onNext, onBack, initialValue = null }) {
       const { data: session } = await supabase.auth.getSession();
       const userId = session?.session?.user?.id;
       if (!userId) throw new Error("Please sign in first.");
-
       const { error: upErr } = await supabase
         .from("profiles")
         .update({ roots_json: value, updated_at: new Date().toISOString() })
         .eq("user_id", userId);
       if (upErr) throw upErr;
-
       onNext?.();
     } catch (e) {
       console.error(e);
-      setError(e.message || "Failed to save roots");
+      setError(e?.message || "Failed to save roots");
     } finally {
       setSaving(false);
     }
@@ -74,7 +69,6 @@ export default function RootsStep({ onNext, onBack, initialValue = null }) {
         Choose Nepal or Abroad. This anchors your presence in the Chautarī.
       </p>
 
-      {/* 🚀 Only render picker once Supabase is ready */}
       {supabase ? (
         <ChautariLocationPicker
           supabase={supabase}
