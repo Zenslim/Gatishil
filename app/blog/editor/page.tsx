@@ -1,20 +1,31 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
+import { supabase } from "@/lib/supabaseClient";
 import { sealAndPublish } from "@/lib/blogApi";
 import { EditorLayout } from "@/components/blog/EditorLayout";
 const MDXEditor = dynamic(() => import("@/components/blog/MDXEditor"), { ssr: false });
 const PreviewPane = dynamic(() => import("@/components/blog/PreviewPane"), { ssr: false });
 
 export default function EditorPage() {
+  const router = useRouter();
   const [title, setTitle] = useState("");
   const [slug, setSlug] = useState("");
   const [excerpt, setExcerpt] = useState("");
   const [content, setContent] = useState("");
   const [tags, setTags] = useState<string>("");
-  const router = useRouter();
+
+  // Redirect if not signed in
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      if (!data.session) {
+        alert("Please sign in to publish.");
+        window.location.href = "/join";
+      }
+    });
+  }, []);
 
   useEffect(() => {
     const s = title.toLowerCase().trim().replace(/[^a-z0-9\s-]/g, "").replace(/\s+/g, "-");
