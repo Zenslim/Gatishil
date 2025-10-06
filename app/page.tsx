@@ -1,7 +1,13 @@
 'use client';
 
 import { motion, useScroll, useTransform } from 'framer-motion';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+/** util: run code only after React mounts (prevents hydration mismatch) */
+function useMounted() {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  return mounted;
+}
 
 /**
  * Gatishil — Mobile-first Homepage (DAO tooltip + FAQ link)
@@ -109,6 +115,7 @@ function DaoWord({ className = "" }: { className?: string }) {
 }
 export default function HomePage() {
   const [open, setOpen] = useState(false);
+  const mounted = useMounted();
 
   const NavLinks = () => (
     <>
@@ -131,7 +138,7 @@ export default function HomePage() {
         <div className="absolute inset-0 opacity-[0.85] bg-[radial-gradient(1200px_600px_at_50%_-10%,rgba(255,255,255,0.06),transparent_60%),radial-gradient(900px_500px_at_80%_10%,rgba(251,191,36,0.08),transparent_60%),radial-gradient(900px_500px_at_20%_10%,rgba(244,114,182,0.06),transparent_60%)]" />
       </div>
 
-      <Starfield />
+      {mounted && <Starfield />}
 
       {/* Header */}
       <header className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-16 pt-4 sm:pt-6 relative z-20">
