@@ -1,4 +1,4 @@
-'use client';
+use client';
 
 import Head from 'next/head'
 import { motion } from 'framer-motion'
@@ -73,7 +73,7 @@ export default function Why() {
           </p>
           <p className="mt-3 text-slate-300/85">
             Their greed awakened a generation. Their silence made us speak. Their collapse became our spark. We are that spark —
-            the <span className="text-amber-300/95 font-medium">Gatishil Loktantric Party</span>, the DAO Party of the Powerless.
+            the <span className="text-amber-300/95 font-medium">Gatishil Movement</span>, the DAO Party of the Powerless.
           </p>
         </Section>
 
@@ -85,7 +85,7 @@ export default function Why() {
           </p>
           <div className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-5 sm:p-6">
             <p className="text-amber-300/90 text-sm sm:text-base font-medium">
-              The new chauṭarī is not a stage — it’s a shared ledger of trust. Transparency is the new revolution; sunlight, our policy.
+              The new chautari is not a stage, it’s a shared ledger of trust. Transparency is the new revolution; sunlight, our policy.
             </p>
           </div>
         </Section>
