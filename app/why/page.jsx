@@ -73,7 +73,7 @@ export default function Why() {
           </p>
           <p className="mt-3 text-slate-300/85">
             Their greed awakened a generation. Their silence made us speak. Their collapse became our spark. We are that spark —
-            the <span className="text-amber-300/95 font-medium">Gatishil Movement</span>, the DAO Party of the Powerless.
+            the Gatishil Movement, the DAO Party of the Powerless.
           </p>
         </Section>
 
