@@ -239,13 +239,17 @@ export default function HomePage() {
           <motion.h1 className="text-[28px] sm:text-4xl md:text-5xl font-extrabold leading-tight mt-3" {...fadeUp(0.05)}>
   The <DaoWord className="bg-clip-text text-transparent bg-gradient-to-r from-amber-300 via-orange-400 to-rose-400" /> Party of the Powerless.
 </motion.h1>
-            <motion.p className="mt-4 text-slate-300/90 text-base sm:text-lg max-w-2xl" {...fadeUp(0.1)}>
-              <span className="font-semibold">Service, Not Career. Community, Not Power.</span>
-            </motion.p>
+           <motion.p
+  className="mt-4 text-slate-300/90 text-xl sm:text-2xl font-bold max-w-2xl"
+  {...fadeUp(0.1)}
+>
+  Service, Not Career. Community, Not Power.
+</motion.p>
+
 
             <motion.p className="mt-2 text-slate-300/90 text-sm sm:text-base max-w-2xl" {...fadeUp(0.14)}>
               Not another party of faces, but a movement that makes thrones irrelevant.
-              Build parallel life, restore culture, and grow cooperative wealth.
+              Live free without fear. Create together. Restore the flow. Rise as one.
             </motion.p>
 
             {/* CTAs */}
@@ -257,7 +261,7 @@ export default function HomePage() {
                 className="px-5 py-3 rounded-2xl bg-amber-400 text-black font-semibold text-center transition"
                 {...fadeUp(0.18)}
               >
-                Join Us
+                Join Us to Restore the Flow
               </motion.a>
                           <motion.a
                 href="#manifesto"
@@ -329,7 +333,7 @@ export default function HomePage() {
               </h3>
               <ul className="mt-2 space-y-2 text-slate-300/85 text-sm">
                 <li>Stop accepting helplessness. Our strength is immense but sleeping.</li>
-                <li>• The elephant forgets its power when it believes the rope is real.</li>
+                <li>• The elephant forgets its power when it believes the rope is unbreakable.</li>
                 <li>• The mightiest river begins as a forgotten spring.</li>
                 <li>• The system sells fear; we return to the flow.</li>
               </ul>
