@@ -1,7 +1,7 @@
 'use client';
 
 import { motion, useScroll, useTransform } from 'framer-motion';
-import { useEffect, useState } from 'react';
+import { useState, useEffect } from 'react';
 /** util: run code only after React mounts (prevents hydration mismatch) */
 function useMounted() {
   const [mounted, setMounted] = useState(false);
@@ -505,7 +505,7 @@ export default function HomePage() {
       <footer className="relative z-10 py-8 sm:py-10 text-sm text-slate-300">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-16">
           <div className="flex flex-col items-center gap-2">
-            <p className="text-center">© {new Date().getFullYear()} GatishilNepal.org</p>
+            <p className="text-center">© {mounted ? new Date().getFullYear() : 2025} GatishilNepal.org</p>
             <p className="text-center text-slate-400">Democracy That Flows — Not Stagnates.</p>
             <nav className="mt-3 flex flex-wrap items-center justify-center gap-4 text-slate-300">
               <a href="/join" className="hover:text-white">Join</a>
