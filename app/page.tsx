@@ -329,7 +329,7 @@ export default function HomePage() {
               </h3>
               <ul className="mt-2 space-y-2 text-slate-300/85 text-sm">
                 <li>Stop accepting helplessness. Our strength is immense but sleeping.</li>
-                <li>• The elephant rope: strength wasted if you believe you’re tied.</li>
+                <li>• The elephant forgets its power when it believes the rope is real.</li>
                 <li>• The mightiest river begins as a forgotten spring.</li>
                 <li>• The system sells fear; we return to the flow.</li>
               </ul>
@@ -347,19 +347,19 @@ export default function HomePage() {
                 <li>• Eat from your own harvest; no one can buy your hunger.</li>
                 <li>• Work is dignity; dependence is chains.</li>
               </ul>
-              <p className="mt-3 text-amber-200 text-xs sm:text-sm">🤔 How long will we feed on scraps when our soil waits for seed?</p>
+              <p className="mt-3 text-amber-200 text-xs sm:text-sm">🤔 Why beg for bread when our earth still waits for seed?</p>
             </motion.div>
 
             {/* 3 Justice */}
             <motion.div {...fadeUp(0.06)} className="p-5 sm:p-6 rounded-2xl bg-white/5 border border-white/10">
               <h3 className="font-semibold text-base sm:text-lg flex items-center gap-2">
-                ⚖️ Justice — Judge the Judge
+                ⚖️ Justice — Truth Has No Master
               </h3>
               <ul className="mt-2 space-y-2 text-slate-300/85 text-sm">
                 <li>The law must be blind, especially to the powerful.</li>
                 <li>• If the fence eats the crops, who protects the field?</li>
                 <li>• The scale must be balanced, not for sale.</li>
-                <li>• Justice is owed, not gifted.</li>
+                <li>• Fairness is not charity; it is our birthright.</li>
               </ul>
               <p className="mt-3 text-amber-200 text-xs sm:text-sm">🤔 Who will guard the people if justice itself is sold?</p>
             </motion.div>
@@ -367,15 +367,15 @@ export default function HomePage() {
             {/* 4 Transparency */}
             <motion.div {...fadeUp(0.08)} className="p-5 sm:p-6 rounded-2xl bg-white/5 border border-white/10">
               <h3 className="font-semibold text-base sm:text-lg flex items-center gap-2">
-                🌍 Transparency — Sunlight as Policy
+                🌍 Transparency — Light Belongs to All
               </h3>
               <ul className="mt-2 space-y-2 text-slate-300/85 text-sm">
-                <li>Every decision, every rupee, must live in sunlight.</li>
-                <li>• A thief steals in the dark — sunlight is the cure.</li>
+                <li>Every rupee should shine, every decision be seen.</li>
+                <li>• Darkness hides thieves; light protects the people.</li>
                 <li>• Muddy water hides fish; clear water builds trust.</li>
-                <li>• Secrecy feeds the corrupt; openness feeds the people.</li>
+                <li>• The sun never left, we just closed our eyes</li>
               </ul>
-              <p className="mt-3 text-amber-200 text-xs sm:text-sm">🤔 If leaders fear the light, what are they hiding from us?</p>
+              <p className="mt-3 text-amber-200 text-xs sm:text-sm">🤔 A leader who fears light has already betrayed the people.</p>
             </motion.div>
 
             {/* 5 Solidarity */}
@@ -395,13 +395,13 @@ export default function HomePage() {
             {/* 6 Servitude */}
             <motion.div {...fadeUp(0.12)} className="p-5 sm:p-6 rounded-2xl bg-white/5 border border-white/10">
               <h3 className="font-semibold text-base sm:text-lg flex items-center gap-2">
-                🛠 Servitude — Serve, Don’t Rule
+                🛠 Servitude — Eat After the People
               </h3>
               <ul className="mt-2 space-y-2 text-slate-300/85 text-sm">
                 <li>Leadership is service, not reward. Politics is duty, not business.</li>
                 <li>• The true shepherd eats after the flock, not from it.</li>
                 <li>• Power is not ownership; it is responsibility.</li>
-                <li>• To serve is to carry water to a thirsty neighbor.</li>
+                <li>• To serve is to see the divine in every citizen.</li>
               </ul>
               <p className="mt-3 text-amber-200 text-xs sm:text-sm">🤔 What kind of leader feasts while their people starve?</p>
             </motion.div>
@@ -412,26 +412,26 @@ export default function HomePage() {
                 🎶 Culture — Every Voice Sings
               </h3>
               <ul className="mt-2 space-y-2 text-slate-300/85 text-sm">
-                <li>Our culture is a collaborative masterpiece.</li>
+                <li>Many Rivers, One Flow — The United Soul of Nepal.</li>
                 <li>• Crafted by many, mastered by none.</li>
                 <li>• We are not a solo; we are a chorus.</li>
-                <li>• Culture is the immune system of a people.</li>
+                <li>• Diversity is our strength — many notes, one harmony.</li>
               </ul>
-              <p className="mt-3 text-amber-200 text-xs sm:text-sm">🤔 What song remains if we silence the choir?</p>
+              <p className="mt-3 text-amber-200 text-xs sm:text-sm">🤔 What happens to a nation when it forgets its own tune?</p>
             </motion.div>
 
             {/* 8 Freedom */}
             <motion.div {...fadeUp(0.16)} className="p-5 sm:p-6 rounded-2xl bg-white/5 border border-white/10">
               <h3 className="font-semibold text-base sm:text-lg flex items-center gap-2">
-                ❤️ Freedom — Dare to Fly
+                ❤️ Freedom — Remember the Sky
               </h3>
               <ul className="mt-2 space-y-2 text-slate-300/85 text-sm">
                 <li>Freedom is our natural state; we’ve just forgotten its taste.</li>
-                <li>• A throne looks powerful only while we kneel.</li>
+                <li>• The throne survives only if we keep bowing.</li>
                 <li>• A bird in a cage forgets the sky until it flies.</li>
                 <li>• Freedom is not a privilege; it is the air we breathe.</li>
               </ul>
-              <p className="mt-3 text-amber-200 text-xs sm:text-sm">🤔 Why beg for a candle when we were born under the sun?</p>
+              <p className="mt-3 text-amber-200 text-xs sm:text-sm">🤔 Why beg for light while standing under the sun?</p>
             </motion.div>
           </div>
 
@@ -468,14 +468,14 @@ export default function HomePage() {
             <motion.div {...fadeUp(0.06)} className="p-5 sm:p-6 rounded-2xl bg-white/5 border border-white/10">
               <h3 className="text-lg font-semibold">🌱 Grassroots Mobilization</h3>
               <p className="mt-2 text-slate-300/85 text-sm">
-                <span className="font-semibold">The Party is You. The Mandate is Ours.</span> Like a field where all farmers plant — no harvest unless all work.
+                <span className="font-semibold">The Party is You. The Mandate is Ours.</span> Like a shared khet where every farmer plants, no harvest unless all work.
               </p>
             </motion.div>
 
             <motion.div {...fadeUp(0.08)} className="p-5 sm:p-6 rounded-2xl bg-white/5 border border-white/10">
               <h3 className="text-lg font-semibold">📜 Philosophical Foundation</h3>
               <p className="mt-2 text-slate-300/85 text-sm">
-                <span className="font-semibold">A New Dharma for a Digital Nepal.</span> Like ancient guthi rules, but written in code — fair, tamper-proof, shared by all.
+                <span className="font-semibold">The People’s Code. The Nation’s Flow.</span> Like ancient guthi rules, but written in code — fair, tamper-proof, shared by all.
               </p>
             </motion.div>
           </div>
