@@ -34,8 +34,9 @@ export default function TrustStep() {
   const doPasskey = async () => {
     setBusy(true); setErr(null); setMsg(null);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Sign-in required');
+      const { data: { session } } = await supabase.auth.getSession();
+if (!session) throw new Error('Sign-in required');
+const user = session.user;
 
       const r1 = await fetch('/api/webauthn/options', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
