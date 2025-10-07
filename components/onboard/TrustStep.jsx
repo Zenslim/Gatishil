@@ -1,5 +1,4 @@
 'use client';
-
 import React, { useEffect, useState } from 'react';
 import { startRegistration } from '@simplewebauthn/browser';
 import { supabase } from '@/lib/supabaseClient';
@@ -23,38 +22,30 @@ export default function TrustStep() {
     })();
   }, []);
 
-  // 🌿 Passkey Creation
+  const redirectHome = () => setTimeout(() => { window.location.href = '/dashboard'; }, 1500);
+
   const doPasskey = async () => {
-    setBusy(true);
-    setErr(null);
-    setMsg(null);
+    setBusy(true); setErr(null); setMsg(null);
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Sign-in required');
-      const username = user.email || user.id;
-
       const r1 = await fetch('/api/webauthn/authn/options', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: user.id, username })
+        body: JSON.stringify({ userId: user.id, username: user.email || user.id }),
       });
-      if (!r1.ok) throw new Error('Failed to get options');
+      if (!r1.ok) throw new Error('Failed to get registration options');
       const options = await r1.json();
-
-      const att = await startRegistration(options);
-
+      const attestation = await startRegistration(options);
       const r2 = await fetch('/api/webauthn/authn/verify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: user.id, response: att })
+        body: JSON.stringify({ userId: user.id, response: attestation }),
       });
       const j2 = await r2.json();
       if (!r2.ok || !j2.ok) throw new Error(j2.error || 'Verification failed');
-
       setMsg('🌿 Your voice is now sealed to this device.');
-      setTimeout(() => {
-        window.location.href = '/dashboard';
-      }, 1500);
+      redirectHome();
     } catch (e) {
       console.error('Passkey setup failed:', e);
       setErr(e?.message || 'Passkey setup failed');
@@ -63,18 +54,13 @@ export default function TrustStep() {
     }
   };
 
-  // 🔑 PIN Creation (Fallback)
   const doPin = async () => {
-    setBusy(true);
-    setErr(null);
-    setMsg(null);
+    setBusy(true); setErr(null); setMsg(null);
     try {
       if (!/^[0-9]{4}$/.test(pin)) throw new Error('Enter a 4-digit PIN');
       await createLocalPin(pin);
       setMsg('🌿 Your voice is now sealed to this device.');
-      setTimeout(() => {
-        window.location.href = '/dashboard';
-      }, 1500);
+      redirectHome();
     } catch (e) {
       console.error('PIN creation failed:', e);
       setErr(e?.message || 'Could not create PIN');
@@ -83,7 +69,6 @@ export default function TrustStep() {
     }
   };
 
-  // 🧭 Render
   return (
     <div className="min-h-[80vh] bg-neutral-950 text-white grid place-items-center p-6">
       <div className="w-full max-w-xl p-6 rounded-2xl bg-black/40 border border-white/10">
@@ -97,11 +82,8 @@ export default function TrustStep() {
           <p className="mt-6 text-sm text-white/60">Checking your device capabilities…</p>
         ) : supported ? (
           <div className="mt-6">
-            <button
-              onClick={doPasskey}
-              disabled={busy}
-              className="w-full py-3 rounded-xl bg-emerald-500 hover:bg-emerald-600 disabled:opacity-60"
-            >
+            <button onClick={doPasskey} disabled={busy}
+              className="w-full py-3 rounded-xl bg-emerald-500 hover:bg-emerald-600 disabled:opacity-60">
               {busy ? 'Creating…' : 'Create Passkey 🔐'}
             </button>
             <p className="mt-3 text-xs text-white/60">
@@ -116,22 +98,14 @@ export default function TrustStep() {
               <div className="space-y-3">
                 <label className="block">
                   <span className="text-sm text-gray-300">Create a 4-digit PIN 🔑</span>
-                  <input
-                    type="password"
-                    inputMode="numeric"
-                    pattern="[0-9]*"
-                    maxLength={4}
-                    value={pin}
-                    onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))}
-                    className="mt-1 w-full rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                    placeholder="••••"
-                  />
+                  <input type="password" inputMode="numeric" pattern="[0-9]*" maxLength={4}
+                    value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))}
+                    className="mt-1 w-full rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-white
+                               placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    placeholder="••••" />
                 </label>
-                <button
-                  onClick={doPin}
-                  disabled={busy}
-                  className="w-full py-3 rounded-xl bg-emerald-500 hover:bg-emerald-600 disabled:opacity-60"
-                >
+                <button onClick={doPin} disabled={busy}
+                  className="w-full py-3 rounded-xl bg-emerald-500 hover:bg-emerald-600 disabled:opacity-60">
                   {busy ? 'Saving…' : 'Create PIN'}
                 </button>
               </div>
@@ -146,10 +120,8 @@ export default function TrustStep() {
         {err && <p className="mt-4 text-red-400">{err}</p>}
 
         <div className="mt-6">
-          <button
-            onClick={() => (window.location.href = '/dashboard')}
-            className="w-full py-3 rounded-xl border border-white/20 hover:bg-white/10"
-          >
+          <button onClick={() => (window.location.href = '/dashboard')}
+            className="w-full py-3 rounded-xl border border-white/20 hover:bg-white/10">
             Not now → Use OTP next time
           </button>
         </div>

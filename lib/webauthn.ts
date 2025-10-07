@@ -1,48 +1,8 @@
-import { generateRegistrationOptions, verifyRegistrationResponse } from '@simplewebauthn/server';
-
-const RP_NAME = process.env.RP_NAME || 'Chautari';
-const RP_ID = process.env.RP_ID || '';
-const ORIGIN = process.env.NEXT_PUBLIC_APP_ORIGIN || '';
-
-const userChallenges = new Map<string, string>();
-
-function assertEnv() {
-  if (!RP_ID) throw new Error('RP_ID is missing');
-  if (!ORIGIN) throw new Error('NEXT_PUBLIC_APP_ORIGIN is missing');
-}
-
-export async function createRegOptions(userId: string, username: string) {
-  assertEnv();
-  const options = await generateRegistrationOptions({
-    rpName: RP_NAME,
-    rpID: RP_ID,
-    // convert string to Uint8Array
-    userID: Buffer.from(userId, 'utf8'),
-    userName: username,
-    attestationType: 'none',
-    authenticatorSelection: {
-      residentKey: 'preferred',
-      userVerification: 'preferred',
-      authenticatorAttachment: 'platform',
-    },
-  });
-  userChallenges.set(userId, options.challenge);
-  return options;
-}
-
-export async function verifyRegResponse(userId: string, response: any) {
-  assertEnv();
-  const expectedChallenge = userChallenges.get(userId);
-  if (!expectedChallenge) {
-    throw new Error('No outstanding challenge for this user');
-  }
-  const verification = await verifyRegistrationResponse({
-    response,
-    expectedChallenge,
-    expectedOrigin: ORIGIN,
-    expectedRPID: RP_ID,
-    requireUserVerification: true,
-  });
-  userChallenges.delete(userId);
-  return verification;
-}
+export const RP_NAME = 'Gatishil Nepal';
+export const RP_ID = 'gatishilnepal.org';
+export const EXPECTED_ORIGINS = [
+  'https://gatishilnepal.org',
+  'https://www.gatishilnepal.org',
+];
+export const CHALLENGE_COOKIE = 'webauthn_chal';
+export const CHALLENGE_TTL = 60 * 10; // 10 minutes
