@@ -14,16 +14,16 @@ export default function LoginPage() {
   const [msg, setMsg] = useState<string | null>(null);
   const pwRef = useRef<HTMLInputElement>(null);
 
-  // If already signed in → /members
+  // If already signed in → /dashboard
   useEffect(() => {
     let mounted = true;
     (async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!mounted) return;
-      if (session) router.replace('/members');
+      if (session) router.replace('/dashboard');
     })();
     const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => {
-      if (s) router.replace('/members');
+      if (s) router.replace('/dashboard');
     });
     return () => sub.subscription.unsubscribe();
   }, [router]);
@@ -45,7 +45,7 @@ export default function LoginPage() {
       );
 
       if (error) throw error;
-      router.replace('/members');
+      router.replace('/dashboard');
     } catch (e: any) {
       setErr(e?.message ?? 'Login failed. Please try again.');
     } finally {
