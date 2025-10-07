@@ -29,7 +29,7 @@ export default function TrustStep() {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Sign-in required');
-      const r1 = await fetch('/api/webauthn/authn/options', {
+      const r1 = await fetch('/api/webauthn/options', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId: user.id, username: user.email || user.id }),
@@ -37,7 +37,7 @@ export default function TrustStep() {
       if (!r1.ok) throw new Error('Failed to get registration options');
       const options = await r1.json();
       const attestation = await startRegistration(options);
-      const r2 = await fetch('/api/webauthn/authn/verify', {
+      const r2 = await fetch('/api/webauthn/verify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId: user.id, response: attestation }),
