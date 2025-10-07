@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 
@@ -13,17 +13,15 @@ export default function LoginPage() {
   const [err, setErr] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const pwRef = useRef<HTMLInputElement>(null);
-  
+
+  // --- Handle login ---
   async function doLogin(e: React.FormEvent) {
     e.preventDefault();
     setErr(null);
     setMsg(null);
     setLoading(true);
     try {
-      // Supabase password sign-in supports email or phone via 'email' or 'phone' fields.
-      // Detect: digits => phone, else => email.
       const looksLikePhone = /^[0-9+()\s-]{6,}$/.test(identifier.trim());
-
       const { error } = await supabase.auth.signInWithPassword(
         looksLikePhone
           ? { phone: identifier.trim(), password }
@@ -32,7 +30,7 @@ export default function LoginPage() {
 
       if (error) throw error;
 
-      // Ensure session ready, then hard navigate (most reliable cross-device)
+      // Cross-browser reliable redirect
       await supabase.auth.getSession();
       window.location.href = '/dashboard';
     } catch (e: any) {
@@ -42,6 +40,7 @@ export default function LoginPage() {
     }
   }
 
+  // --- Forgot Password ---
   async function forgotPassword() {
     setErr(null);
     setMsg(null);
@@ -65,27 +64,10 @@ export default function LoginPage() {
     }
   }
 
-  // Mimic banking apps: focus password field to trigger saved-credential autofill/biometric.
+  // --- Biometric Autofill ---
   function useBiometric() {
     pwRef.current?.focus();
     setTimeout(() => pwRef.current?.focus(), 25);
-  }
-
-  // Prevent login card flashing on mobile while we check the session
-  if (checking) {
-    return (
-      <main className="min-h-screen bg-gradient-to-b from-slate-900 to-black text-white flex items-center justify-center p-6">
-        <div className="w-full max-w-md rounded-2xl border border-white/10 bg-white/5 shadow-2xl p-8 animate-pulse">
-          <div className="h-7 w-44 bg-white/10 rounded mb-2" />
-          <div className="h-4 w-28 bg-white/10 rounded" />
-          <div className="mt-6 space-y-3">
-            <div className="h-10 bg-white/10 rounded" />
-            <div className="h-10 bg-white/10 rounded" />
-            <div className="h-10 bg-white/10 rounded" />
-          </div>
-        </div>
-      </main>
-    );
   }
 
   return (
@@ -93,11 +75,9 @@ export default function LoginPage() {
       <div className="w-full max-w-md rounded-2xl border border-white/10 bg-white/5 shadow-2xl p-8">
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-semibold tracking-tight">🔐 Member Login</h1>
-          {!isAuthed && (
-            <a href="/join" className="text-sm text-emerald-300 hover:underline">
-              New? Join →
-            </a>
-          )}
+          <a href="/join" className="text-sm text-emerald-300 hover:underline">
+            New? Join →
+          </a>
         </div>
         <p className="text-sm text-white/70 mt-1">
           Enter your <b>email or phone</b> and password. Tap <b>Use Biometric</b> if your device has a saved credential.
@@ -166,7 +146,7 @@ export default function LoginPage() {
             <div className="h-px flex-1 bg-white/10" />
           </div>
 
-          {/* Bank-like biometric quick login: triggers saved-credential autofill */}
+          {/* Bank-like biometric quick login */}
           <button
             type="button"
             onClick={useBiometric}
