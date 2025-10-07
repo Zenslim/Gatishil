@@ -1,23 +1,33 @@
-// lib/supabaseClient.ts
-import { createClient } from '@supabase/supabase-js';
+import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 
-const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL as string
+const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string
 
-// ✅ Ensure single shared client (prevents "Multiple GoTrueClient instances" issue)
-const globalForSupabase = globalThis as unknown as {
-  __supabase?: ReturnType<typeof createClient>;
-};
+// Guard against multiple GoTrueClient instances by memoizing on the global scope.
+declare global {
+  // eslint-disable-next-line no-var
+  var __supabase__: SupabaseClient | undefined
+}
 
-export const supabase =
-  globalForSupabase.__supabase ??
-  createClient(url, key, {
-    auth: {
-      persistSession: true,
-      autoRefreshToken: true,
-      detectSessionInUrl: true,
-      flowType: 'pkce',
-    },
-  });
-
-if (process.env.NODE_ENV !== 'production') globalForSupabase.__supabase = supabase;
+export const supabase: SupabaseClient = (() => {
+  if (typeof window === 'undefined') {
+    if (!global.__supabase__) {
+      global.__supabase__ = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+        auth: { persistSession: false }
+      })
+    }
+    return global.__supabase__!
+  }
+  // browser
+  if (!globalThis.__supabase__) {
+    globalThis.__supabase__ = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: true,
+        flowType: 'pkce',
+      },
+    })
+  }
+  return globalThis.__supabase__!
+})()

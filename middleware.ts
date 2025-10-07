@@ -1,40 +1,29 @@
-// middleware.ts
-import type { NextRequest } from 'next/server';
-import { NextResponse } from 'next/server';
+import { NextResponse } from 'next/server'
+import type { NextRequest } from 'next/server'
 
-// Supabase sets cookies like: sb-<project-ref>-auth-token
-const AUTH_COOKIE_RE = /^sb-[^-]+-auth-token$/;
+// Redirect logged-in users away from /join and /login to /dashboard.
+// We treat the presence of Supabase auth cookies as "logged in" for edge speed.
+const AUTH_COOKIES = new Set([
+  'sb-access-token',
+  'sb-refresh-token',
+  // legacy cookie keys that may appear on some browsers
+  'sb:token',
+  'sb:refresh'
+])
 
-function hasSupabaseSession(req: NextRequest) {
-  for (const c of req.cookies.getAll()) {
-    if (AUTH_COOKIE_RE.test(c.name) && c.value && c.value !== 'null' && c.value !== 'undefined') {
-      return true;
-    }
-  }
-  return false;
+export const config = {
+  matcher: ['/join', '/login'],
 }
 
 export function middleware(req: NextRequest) {
-  const url = req.nextUrl;
-  const path = url.pathname;
-  const authed = hasSupabaseSession(req);
+  const { pathname } = req.nextUrl
+  // quick check for any Supabase auth cookie
+  const hasAuthCookie = req.cookies.getAll().some(c => AUTH_COOKIES.has(c.name))
 
-  // Already signed in → keep users out of /login and /join
-  if (authed && (path === '/login' || path.startsWith('/join'))) {
-    const to = new URL('/dashboard', req.url);
-    return NextResponse.redirect(to);
+  if (hasAuthCookie && (pathname === '/join' || pathname === '/login')) {
+    const url = req.nextUrl.clone()
+    url.pathname = '/dashboard'
+    return NextResponse.redirect(url)
   }
-
-  // Not signed in → keep /dashboard protected
-  if (!authed && path.startsWith('/dashboard')) {
-    const to = new URL('/login', req.url);
-    return NextResponse.redirect(to);
-  }
-
-  return NextResponse.next();
+  return NextResponse.next()
 }
-
-// Only run for these routes
-export const config = {
-  matcher: ['/login', '/join/:path*', '/dashboard/:path*'],
-};
