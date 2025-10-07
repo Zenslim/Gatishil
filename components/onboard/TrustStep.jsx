@@ -1,4 +1,6 @@
+// components/onboard/TrustStep.jsx
 'use client';
+
 import React, { useEffect, useState } from 'react';
 import { startRegistration } from '@simplewebauthn/browser';
 import { supabase } from '@/lib/supabaseClient';
@@ -29,21 +31,26 @@ export default function TrustStep() {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Sign-in required');
+
       const r1 = await fetch('/api/webauthn/options', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId: user.id, username: user.email || user.id }),
       });
-      if (!r1.ok) throw new Error('Failed to get registration options');
-      const options = await r1.json();
+      const j1 = await r1.json().catch(() => ({}));
+      if (!r1.ok) throw new Error(j1?.error || 'Failed to get registration options');
+
+      const options = j1;
       const attestation = await startRegistration(options);
+
       const r2 = await fetch('/api/webauthn/verify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId: user.id, response: attestation }),
       });
-      const j2 = await r2.json();
-      if (!r2.ok || !j2.ok) throw new Error(j2.error || 'Verification failed');
+      const j2 = await r2.json().catch(() => ({}));
+      if (!r2.ok || !j2?.ok) throw new Error(j2?.error || 'Verification failed');
+
       setMsg('🌿 Your voice is now sealed to this device.');
       redirectHome();
     } catch (e) {
