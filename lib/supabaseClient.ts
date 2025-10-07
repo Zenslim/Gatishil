@@ -1,29 +1,23 @@
 // lib/supabaseClient.ts
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { createClient } from '@supabase/supabase-js';
 
-const url = process.env.NEXT_PUBLIC_SUPABASE_URL as string;
-const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string;
+const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
-declare global {
-  // eslint-disable-next-line no-var
-  var __supabase__: SupabaseClient | undefined;
-}
+// ✅ Ensure single shared client (prevents "Multiple GoTrueClient instances" issue)
+const globalForSupabase = globalThis as unknown as {
+  __supabase?: ReturnType<typeof createClient>;
+};
 
-/**
- * Singleton Supabase client with a project-specific storageKey.
- * Prevents the "Multiple GoTrueClient instances" warning and
- * avoids clobbering tokens when multiple apps share a domain.
- */
-if (!globalThis.__supabase__) {
-  globalThis.__supabase__ = createClient(url, anon, {
+export const supabase =
+  globalForSupabase.__supabase ??
+  createClient(url, key, {
     auth: {
-      storageKey: 'gatishilnepal-auth', // unique key for this app
-      autoRefreshToken: true,
       persistSession: true,
+      autoRefreshToken: true,
       detectSessionInUrl: true,
+      flowType: 'pkce',
     },
   });
-}
 
-export const supabase = globalThis.__supabase__!;
-export default supabase;
+if (process.env.NODE_ENV !== 'production') globalForSupabase.__supabase = supabase;
