@@ -1,6 +1,5 @@
-// app/api/webauthn/options/route.ts
-export const runtime = 'nodejs'; // ensure Node runtime (not Edge)
-export const dynamic = 'force-dynamic'; // allow setting cookies
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
@@ -9,10 +8,13 @@ import { RP_NAME, RP_ID, CHALLENGE_COOKIE, CHALLENGE_TTL } from '@/lib/webauthn'
 
 export async function POST(req: Request) {
   try {
-    const { userId, username } = await req.json();
-    console.log('[webauthn/options] userId:', userId);
+    const body = await req.json().catch(() => ({}));
+    const userId = body?.userId;
+    const username = body?.username;
+    console.log('[webauthn/options] BODY →', body);
+
     if (!userId || !username) {
-      return NextResponse.json({ ok: false, error: 'Missing userId/username' }, { status: 400 });
+      return NextResponse.json({ ok:false, error:'Missing userId/username' }, { status:400 });
     }
 
     const options = await generateRegistrationOptions({
@@ -40,7 +42,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json(options);
   } catch (e: any) {
-    console.error('[webauthn/options] error:', e);
-    return NextResponse.json({ ok: false, error: e?.message || 'Server error' }, { status: 500 });
+    console.error('[webauthn/options] ERROR →', e);
+    return NextResponse.json({ ok:false, error: e?.message || 'Server error in /webauthn/options' }, { status:500 });
   }
 }

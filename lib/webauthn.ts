@@ -1,4 +1,3 @@
-// lib/webauthn.ts
 export const RP_NAME = 'Gatishil Nepal';
 export const RP_ID = 'gatishilnepal.org';
 export const EXPECTED_ORIGINS = [

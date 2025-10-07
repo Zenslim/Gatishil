@@ -1,4 +1,3 @@
-// components/onboard/TrustStep.jsx
 'use client';
 
 import React, { useEffect, useState } from 'react';
@@ -11,6 +10,7 @@ export default function TrustStep() {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState(null);
   const [err, setErr] = useState(null);
+  const [serverErr, setServerErr] = useState(null);
   const [pin, setPin] = useState('');
 
   useEffect(() => {
@@ -18,8 +18,13 @@ export default function TrustStep() {
       try {
         const ok = await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
         setSupported(ok);
+      } catch { setSupported(false); }
+      // Quick health check
+      try {
+        const r = await fetch('/api/webauthn/ping');
+        setServerErr(r.ok ? null : 'Ping failed');
       } catch {
-        setSupported(false);
+        setServerErr('API unreachable');
       }
     })();
   }, []);
@@ -33,32 +38,26 @@ export default function TrustStep() {
       if (!user) throw new Error('Sign-in required');
 
       const r1 = await fetch('/api/webauthn/options', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId: user.id, username: user.email || user.id }),
       });
       const j1 = await r1.json().catch(() => ({}));
       if (!r1.ok) throw new Error(j1?.error || 'Failed to get registration options');
 
-      const options = j1;
-      const attestation = await startRegistration(options);
+      const att = await startRegistration(j1);
 
       const r2 = await fetch('/api/webauthn/verify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: user.id, response: attestation }),
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: user.id, response: att }),
       });
       const j2 = await r2.json().catch(() => ({}));
       if (!r2.ok || !j2?.ok) throw new Error(j2?.error || 'Verification failed');
 
-      setMsg('🌿 Your voice is now sealed to this device.');
-      redirectHome();
+      setMsg('🌿 Your voice is now sealed to this device.'); redirectHome();
     } catch (e) {
       console.error('Passkey setup failed:', e);
       setErr(e?.message || 'Passkey setup failed');
-    } finally {
-      setBusy(false);
-    }
+    } finally { setBusy(false); }
   };
 
   const doPin = async () => {
@@ -66,14 +65,11 @@ export default function TrustStep() {
     try {
       if (!/^[0-9]{4}$/.test(pin)) throw new Error('Enter a 4-digit PIN');
       await createLocalPin(pin);
-      setMsg('🌿 Your voice is now sealed to this device.');
-      redirectHome();
+      setMsg('🌿 Your voice is now sealed to this device.'); redirectHome();
     } catch (e) {
       console.error('PIN creation failed:', e);
       setErr(e?.message || 'Could not create PIN');
-    } finally {
-      setBusy(false);
-    }
+    } finally { setBusy(false); }
   };
 
   return (
@@ -84,6 +80,8 @@ export default function TrustStep() {
         <p className="text-white/70 mt-2">
           You’ve shared your name, roots, and skills. Now, let’s seal your voice to this device so it recognizes you every time you return.
         </p>
+
+        {serverErr && <p className="mt-2 text-amber-300 text-sm">API: {serverErr}</p>}
 
         {supported === null ? (
           <p className="mt-6 text-sm text-white/60">Checking your device capabilities…</p>
