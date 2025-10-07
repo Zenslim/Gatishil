@@ -12,39 +12,8 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
-  const [isAuthed, setIsAuthed] = useState(false);
-  const [checking, setChecking] = useState(true); // avoid flash on slower mobiles
   const pwRef = useRef<HTMLInputElement>(null);
-
-  // If already signed in → /dashboard
-  useEffect(() => {
-    let mounted = true;
-    (async () => {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      if (!mounted) return;
-      if (session) {
-        setIsAuthed(true);
-        // Hard replace avoids stale router state across browsers (Chrome/iOS webviews, etc.)
-        window.location.replace('/dashboard');
-      } else {
-        setChecking(false);
-      }
-    })();
-
-    const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => {
-      if (s) {
-        setIsAuthed(true);
-        window.location.replace('/dashboard');
-      } else {
-        setChecking(false);
-      }
-    });
-
-    return () => sub.subscription.unsubscribe();
-  }, [router]);
-
+  
   async function doLogin(e: React.FormEvent) {
     e.preventDefault();
     setErr(null);
