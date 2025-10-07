@@ -12,19 +12,36 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
+  const [isAuthed, setIsAuthed] = useState(false);
+  const [checking, setChecking] = useState(true); // avoid flash on slower mobiles
   const pwRef = useRef<HTMLInputElement>(null);
 
   // If already signed in → /dashboard
   useEffect(() => {
     let mounted = true;
     (async () => {
-      const { data: { session } } = await supabase.auth.getSession();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
       if (!mounted) return;
-      if (session) router.replace('/dashboard');
+      if (session) {
+        setIsAuthed(true);
+        // Hard replace avoids stale router state across browsers (Chrome/iOS webviews, etc.)
+        window.location.replace('/dashboard');
+      } else {
+        setChecking(false);
+      }
     })();
+
     const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => {
-      if (s) router.replace('/dashboard');
+      if (s) {
+        setIsAuthed(true);
+        window.location.replace('/dashboard');
+      } else {
+        setChecking(false);
+      }
     });
+
     return () => sub.subscription.unsubscribe();
   }, [router]);
 
@@ -35,7 +52,7 @@ export default function LoginPage() {
     setLoading(true);
     try {
       // Supabase password sign-in supports email or phone via 'email' or 'phone' fields.
-      // We’ll detect: digits => phone, else => email.
+      // Detect: digits => phone, else => email.
       const looksLikePhone = /^[0-9+()\s-]{6,}$/.test(identifier.trim());
 
       const { error } = await supabase.auth.signInWithPassword(
@@ -45,7 +62,10 @@ export default function LoginPage() {
       );
 
       if (error) throw error;
-      router.replace('/dashboard');
+
+      // Ensure session ready, then hard navigate (most reliable cross-device)
+      await supabase.auth.getSession();
+      window.location.href = '/dashboard';
     } catch (e: any) {
       setErr(e?.message ?? 'Login failed. Please try again.');
     } finally {
@@ -76,14 +96,27 @@ export default function LoginPage() {
     }
   }
 
-  // This mimics banking apps: tap “Use Biometric” → focus password field.
-  // Mobile/desktop password managers then offer saved credentials.
-  // On devices with biometrics, the autofill shows a fingerprint/FaceID prompt.
+  // Mimic banking apps: focus password field to trigger saved-credential autofill/biometric.
   function useBiometric() {
-    // Best effort: focus password → show credential manager autofill.
     pwRef.current?.focus();
-    // Some browsers show the suggestions only after a short blur/focus dance.
     setTimeout(() => pwRef.current?.focus(), 25);
+  }
+
+  // Prevent login card flashing on mobile while we check the session
+  if (checking) {
+    return (
+      <main className="min-h-screen bg-gradient-to-b from-slate-900 to-black text-white flex items-center justify-center p-6">
+        <div className="w-full max-w-md rounded-2xl border border-white/10 bg-white/5 shadow-2xl p-8 animate-pulse">
+          <div className="h-7 w-44 bg-white/10 rounded mb-2" />
+          <div className="h-4 w-28 bg-white/10 rounded" />
+          <div className="mt-6 space-y-3">
+            <div className="h-10 bg-white/10 rounded" />
+            <div className="h-10 bg-white/10 rounded" />
+            <div className="h-10 bg-white/10 rounded" />
+          </div>
+        </div>
+      </main>
+    );
   }
 
   return (
@@ -91,9 +124,11 @@ export default function LoginPage() {
       <div className="w-full max-w-md rounded-2xl border border-white/10 bg-white/5 shadow-2xl p-8">
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-semibold tracking-tight">🔐 Member Login</h1>
-          <a href="/join" className="text-sm text-emerald-300 hover:underline">
-            New? Join →
-          </a>
+          {!isAuthed && (
+            <a href="/join" className="text-sm text-emerald-300 hover:underline">
+              New? Join →
+            </a>
+          )}
         </div>
         <p className="text-sm text-white/70 mt-1">
           Enter your <b>email or phone</b> and password. Tap <b>Use Biometric</b> if your device has a saved credential.
