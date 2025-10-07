@@ -38,18 +38,49 @@ export default function AtmaDisha({ onDone }){
     }
   }, [allDone, phase]);
 
-  async function persist(payload){
-    try{
-      setSaving(true); setError("");
-      const { data: user } = await supabase.auth.getUser();
-      const uid = user?.user?.id;
-      if(!uid){ setSaving(false); return; }
-      const { error } = await supabase.from("profiles").update({ atmadisha_json: payload }).eq("user_id", uid);
-      if(error) throw error;
-    }catch(err){
-      setError("We’ll sync this to your profile shortly.");
-    }finally{ setSaving(false); }
+  async function persist(payload) {
+  try {
+    setSaving(true);
+    setError("");
+
+    // Stable session API
+    const { data: { session } } = await supabase.auth.getSession();
+    const uid = session?.user?.id;
+    if (!uid) throw new Error("Please sign in first.");
+
+    // Normalize answers to match existing DB columns
+    const toArray = (v) =>
+      Array.isArray(v) ? v : (v ? [v] : []);
+
+    const occ = toArray(payload?.occupation);
+    const ski = toArray(payload?.skill);
+    const pas = toArray(payload?.passion);
+    const com = toArray(payload?.compassion);
+    const vis = Array.isArray(payload?.vision)
+      ? payload.vision.join(" · ")
+      : (payload?.vision || "");
+
+    const { error } = await supabase
+      .from("profiles")
+      .update({
+        occupation: occ,
+        skill: ski,
+        passion: pas,
+        compassion: com,
+        vision: vis,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("user_id", uid);
+
+    if (error) throw error;
+  } catch (err) {
+    console.error("AtmaDisha persist error:", err);
+    setError("We’ll sync this to your profile shortly.");
+  } finally {
+    setSaving(false);
   }
+}
+
 
   const next = async (vals) => {
     if(!vals || vals.length === 0) return;
