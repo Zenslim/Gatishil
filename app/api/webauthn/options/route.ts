@@ -1,6 +1,7 @@
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
+import crypto from 'node:crypto';
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { generateRegistrationOptions } from '@simplewebauthn/server';
@@ -18,17 +19,18 @@ export async function POST(req: Request) {
     }
 
     const options = await generateRegistrationOptions({
-      rpName: RP_NAME,
-      rpID: RP_ID,
-      userID: String(userId),
-      userName: String(username),
-      attestationType: 'none',
-      authenticatorSelection: {
-        userVerification: 'preferred',
-        residentKey: 'preferred',
-        authenticatorAttachment: 'platform',
-      },
-    });
+     rpName: RP_NAME,
+     rpID: RP_ID,
+    // Convert Supabase UUID → 32-byte buffer (required by SimpleWebAuthn ≥v10)
+    userID: crypto.createHash('sha256').update(String(userId)).digest(),
+     userName: String(username),
+     attestationType: 'none',
+     authenticatorSelection: {
+       userVerification: 'preferred',
+       residentKey: 'preferred',
+       authenticatorAttachment: 'platform',
+     },
+  });
 
     cookies().set({
       name: CHALLENGE_COOKIE,
