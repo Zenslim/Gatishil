@@ -1,27 +1,10 @@
 "use client";
-import { useRef, useState } from "react";
-import { createClient } from "@supabase/supabase-js";
+import { useState } from "react";
+import { supabase } from "@/lib/supabaseClient";
 import OnboardCardLayout from "./OnboardCardLayout";
 import ChautariLocationPicker from "../ChautariLocationPicker";
 
-/**
- * Unified RootsStep — same logic, unified visuals
- */
-export default function RootsStep({ supabase: supabaseProp, onNext, initialValue = null, onBack }) {
-  const supabaseRef = useRef(null);
-  if (!supabaseRef.current) {
-    if (supabaseProp) {
-      supabaseRef.current = supabaseProp;
-    } else if (typeof window !== "undefined" && process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
-      supabaseRef.current = createClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
-        { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } }
-      );
-    }
-  }
-  const supabase = supabaseRef.current;
-
+export default function RootsStep({ onNext, initialValue = null, onBack }) {
   const [value, setValue] = useState(initialValue);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -33,16 +16,15 @@ export default function RootsStep({ supabase: supabaseProp, onNext, initialValue
     setSaving(true);
     setError("");
     try {
-      if (!supabase) throw new Error("Supabase client unavailable");
-      const { data: session } = await supabase.auth.getSession();
-      const userId = session?.session?.user?.id;
+      const { data: { session } } = await supabase.auth.getSession();
+      const userId = session?.user?.id;
       if (!userId) throw new Error("Please sign in first.");
       const { error: upErr } = await supabase
         .from("profiles")
         .update({ roots_json: value, updated_at: new Date().toISOString() })
         .eq("user_id", userId);
       if (upErr) throw upErr;
-      if (typeof onNext === "function") onNext();
+      onNext?.();
     } catch (e) {
       console.error(e);
       setError(e?.message || "Failed to save roots");
@@ -57,7 +39,7 @@ export default function RootsStep({ supabase: supabaseProp, onNext, initialValue
         <button
           type="button"
           className="rounded-xl border border-white/20 bg-white/5 px-3 py-2 text-sm text-gray-200 hover:bg-white/10"
-          onClick={() => (typeof onBack === "function" ? onBack() : null)}
+          onClick={() => onBack?.()}
         >
           ← Back
         </button>
@@ -73,11 +55,7 @@ export default function RootsStep({ supabase: supabaseProp, onNext, initialValue
         </p>
       </div>
 
-      <ChautariLocationPicker
-        supabase={supabase}
-        initialValue={initialValue}
-        onChange={setValue}
-      />
+      <ChautariLocationPicker initialValue={initialValue} onChange={setValue} />
 
       {error && <p className="text-red-400 text-sm mt-3">{error}</p>}
 

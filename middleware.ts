@@ -1,29 +1,32 @@
-import { NextResponse } from 'next/server'
-import type { NextRequest } from 'next/server'
+import { NextResponse } from 'next/server';
+import type { NextRequest } from 'next/server';
 
-// Redirect logged-in users away from /join and /login to /dashboard.
-// We treat the presence of Supabase auth cookies as "logged in" for edge speed.
-const AUTH_COOKIES = new Set([
-  'sb-access-token',
-  'sb-refresh-token',
-  // legacy cookie keys that may appear on some browsers
-  'sb:token',
-  'sb:refresh'
-])
+/**
+ * Edge guard to reduce flicker and enforce sane redirects.
+ * - If a Supabase session cookie exists, /login and /join redirect to /dashboard.
+ * - If no session and path is /dashboard, send to /join.
+ */
+export function middleware(req: NextRequest) {
+  const url = req.nextUrl
+  const hasSession = req.cookies.has('sb-access-token') || req.cookies.has('sb:token') || req.cookies.has('supabase-auth-token')
 
-export const config = {
-  matcher: ['/join', '/login'],
+  const pathname = url.pathname
+
+  // Already authenticated → never show join/login
+  if (hasSession && (pathname === '/login' || pathname === '/join')) {
+    const to = new URL('/dashboard', req.url)
+    return NextResponse.redirect(to)
+  }
+
+  // Unauthed user trying to access /dashboard → go to /join
+  if (!hasSession && pathname === '/dashboard') {
+    const to = new URL('/join', req.url)
+    return NextResponse.redirect(to)
+  }
+
+  return NextResponse.next()
 }
 
-export function middleware(req: NextRequest) {
-  const { pathname } = req.nextUrl
-  // quick check for any Supabase auth cookie
-  const hasAuthCookie = req.cookies.getAll().some(c => AUTH_COOKIES.has(c.name))
-
-  if (hasAuthCookie && (pathname === '/join' || pathname === '/login')) {
-    const url = req.nextUrl.clone()
-    url.pathname = '/dashboard'
-    return NextResponse.redirect(url)
-  }
-  return NextResponse.next()
+export const config = {
+  matcher: ['/login', '/join', '/dashboard'],
 }

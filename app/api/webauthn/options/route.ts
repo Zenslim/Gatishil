@@ -1,50 +1,36 @@
-export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
+import { cookies } from 'next/headers'
+import { NextResponse } from 'next/server'
+import { generateRegistrationOptions } from '@simplewebauthn/server'
 
-import crypto from 'node:crypto';
-import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
-import { generateRegistrationOptions } from '@simplewebauthn/server';
-import { RP_NAME, RP_ID, CHALLENGE_COOKIE, CHALLENGE_TTL } from '@/lib/webauthn';
+const rpID = process.env.RP_ID as string
+const rpName = process.env.RP_NAME || 'Gatishil Nepal'
+
+function textToBytes(s: string) { return new TextEncoder().encode(s) }
 
 export async function POST(req: Request) {
   try {
-    const body = await req.json().catch(() => ({}));
-    const userId = body?.userId;
-    const username = body?.username;
-    console.log('[webauthn/options] BODY →', body);
+    const body = await req.json()
+    const userId: string = body?.userId
+    const username: string = body?.username || userId
 
-    if (!userId || !username) {
-      return NextResponse.json({ ok:false, error:'Missing userId/username' }, { status:400 });
-    }
+    if (!userId) return NextResponse.json({ error: 'userId required' }, { status: 400 })
+    if (!rpID) return NextResponse.json({ error: 'Missing RP_ID' }, { status: 500 })
 
     const options = await generateRegistrationOptions({
-     rpName: RP_NAME,
-     rpID: RP_ID,
-    // Convert Supabase UUID → 32-byte buffer (required by SimpleWebAuthn ≥v10)
-    userID: crypto.createHash('sha256').update(String(userId)).digest(),
-     userName: String(username),
-     attestationType: 'none',
-     authenticatorSelection: {
-       userVerification: 'preferred',
-       residentKey: 'preferred',
-       authenticatorAttachment: 'platform',
-     },
-  });
+      rpID, rpName,
+      userName: username,
+      userID: textToBytes(userId), // binary per spec
+      attestationType: 'none',
+      authenticatorSelection: {
+        residentKey: 'preferred',
+        userVerification: 'required',
+        authenticatorAttachment: 'platform',
+      },
+    })
 
-    cookies().set({
-      name: CHALLENGE_COOKIE,
-      value: options.challenge,
-      httpOnly: true,
-      sameSite: 'strict',
-      secure: true,
-      path: '/',
-      maxAge: CHALLENGE_TTL,
-    });
-
-    return NextResponse.json(options);
+    cookies().set('wa_chal', options.challenge, { httpOnly: true, maxAge: 600, secure: true, sameSite: 'strict', path: '/' })
+    return NextResponse.json(options)
   } catch (e: any) {
-    console.error('[webauthn/options] ERROR →', e);
-    return NextResponse.json({ ok:false, error: e?.message || 'Server error in /webauthn/options' }, { status:500 });
+    return NextResponse.json({ error: e?.message || 'Failed to create options' }, { status: 500 })
   }
 }

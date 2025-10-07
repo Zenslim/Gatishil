@@ -4,22 +4,23 @@ import React, { useEffect, useState } from 'react';
 import { startRegistration } from '@simplewebauthn/browser';
 import { supabase } from '@/lib/supabaseClient';
 import { createLocalPin, hasLocalPin } from '@/lib/localPin';
+import { useRouter } from 'next/navigation';
 
-export default function TrustStep() {
+export default function TrustStep({ onDone }) {
   const [supported, setSupported] = useState(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState(null);
   const [err, setErr] = useState(null);
   const [serverErr, setServerErr] = useState(null);
   const [pin, setPin] = useState('');
+  const router = useRouter();
 
   useEffect(() => {
     (async () => {
       try {
-        const ok = await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
-        setSupported(ok);
+        const ok = await window?.PublicKeyCredential?.isUserVerifyingPlatformAuthenticatorAvailable?.();
+        setSupported(!!ok);
       } catch { setSupported(false); }
-      // Quick health check
       try {
         const r = await fetch('/api/webauthn/ping');
         setServerErr(r.ok ? null : 'Ping failed');
@@ -29,14 +30,19 @@ export default function TrustStep() {
     })();
   }, []);
 
-  const redirectHome = () => setTimeout(() => { window.location.href = '/dashboard'; }, 1500);
+  const finish = () => {
+    setTimeout(() => {
+      if (onDone) onDone();
+      else router.replace('/dashboard');
+    }, 1200);
+  };
 
   const doPasskey = async () => {
     setBusy(true); setErr(null); setMsg(null);
     try {
       const { data: { session } } = await supabase.auth.getSession();
-if (!session) throw new Error('Sign-in required');
-const user = session.user;
+      if (!session) throw new Error('Sign-in required');
+      const user = session.user;
 
       const r1 = await fetch('/api/webauthn/options', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -54,7 +60,8 @@ const user = session.user;
       const j2 = await r2.json().catch(() => ({}));
       if (!r2.ok || !j2?.ok) throw new Error(j2?.error || 'Verification failed');
 
-      setMsg('🌿 Your voice is now sealed to this device.'); redirectHome();
+      setMsg('🌿 Your voice is now sealed to this device.');
+      finish();
     } catch (e) {
       console.error('Passkey setup failed:', e);
       setErr(e?.message || 'Passkey setup failed');
@@ -66,7 +73,8 @@ const user = session.user;
     try {
       if (!/^[0-9]{4}$/.test(pin)) throw new Error('Enter a 4-digit PIN');
       await createLocalPin(pin);
-      setMsg('🌿 Your voice is now sealed to this device.'); redirectHome();
+      setMsg('🌿 Your voice is now sealed to this device.');
+      finish();
     } catch (e) {
       console.error('PIN creation failed:', e);
       setErr(e?.message || 'Could not create PIN');
@@ -126,7 +134,7 @@ const user = session.user;
         {err && <p className="mt-4 text-red-400">{err}</p>}
 
         <div className="mt-6">
-          <button onClick={() => (window.location.href = '/dashboard')}
+          <button onClick={() => (onDone ? onDone() : router.replace('/dashboard'))}
             className="w-full py-3 rounded-xl border border-white/20 hover:bg-white/10">
             Not now → Use OTP next time
           </button>
