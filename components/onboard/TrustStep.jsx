@@ -5,7 +5,7 @@ import { startRegistration } from '@simplewebauthn/browser';
 import { supabase } from '@/lib/supabaseClient';
 import { createLocalPin, hasLocalPin } from '@/lib/localPin';
 
-export default function TrustStep({ onDone }) {
+export default function TrustStep() {
   const [supported, setSupported] = useState(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState(null);
@@ -23,6 +23,7 @@ export default function TrustStep({ onDone }) {
     })();
   }, []);
 
+  // 🌿 Passkey Creation
   const doPasskey = async () => {
     setBusy(true);
     setErr(null);
@@ -51,14 +52,18 @@ export default function TrustStep({ onDone }) {
       if (!r2.ok || !j2.ok) throw new Error(j2.error || 'Verification failed');
 
       setMsg('🌿 Your voice is now sealed to this device.');
-      setTimeout(() => onDone?.(), 800);
+      setTimeout(() => {
+        window.location.href = '/dashboard';
+      }, 1500);
     } catch (e) {
+      console.error('Passkey setup failed:', e);
       setErr(e?.message || 'Passkey setup failed');
     } finally {
       setBusy(false);
     }
   };
 
+  // 🔑 PIN Creation (Fallback)
   const doPin = async () => {
     setBusy(true);
     setErr(null);
@@ -67,14 +72,18 @@ export default function TrustStep({ onDone }) {
       if (!/^[0-9]{4}$/.test(pin)) throw new Error('Enter a 4-digit PIN');
       await createLocalPin(pin);
       setMsg('🌿 Your voice is now sealed to this device.');
-      setTimeout(() => onDone?.(), 800);
+      setTimeout(() => {
+        window.location.href = '/dashboard';
+      }, 1500);
     } catch (e) {
+      console.error('PIN creation failed:', e);
       setErr(e?.message || 'Could not create PIN');
     } finally {
       setBusy(false);
     }
   };
 
+  // 🧭 Render
   return (
     <div className="min-h-[80vh] bg-neutral-950 text-white grid place-items-center p-6">
       <div className="w-full max-w-xl p-6 rounded-2xl bg-black/40 border border-white/10">
@@ -138,7 +147,7 @@ export default function TrustStep({ onDone }) {
 
         <div className="mt-6">
           <button
-            onClick={() => onDone?.()}
+            onClick={() => (window.location.href = '/dashboard')}
             className="w-full py-3 rounded-xl border border-white/20 hover:bg-white/10"
           >
             Not now → Use OTP next time
