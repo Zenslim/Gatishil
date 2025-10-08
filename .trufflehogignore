@@ -1,0 +1,17 @@
+# Ignore non-code and demo/test paths
+docs/**
+examples/**
+example/**
+tests/**
+__tests__/**
+fixtures/**
+public/**
+assets/**
+
+# Ignore common placeholder phrases
+(?i)dummy[_-]?(secret|token|key)
+(?i)example[_-]?(secret|token|key)
+(?i)changeme
+
+# Ignore localhost URLs
+http://localhost:\d{2,5}/.*
