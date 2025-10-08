@@ -229,6 +229,13 @@ export default function StatusPage() {
   );
 }
 
+function startTimer() {
+  const now = () =>
+    typeof performance !== 'undefined' ? performance.now() : Date.now();
+  const started = now();
+  return () => Math.round(now() - started);
+}
+
 function maskUrl(url: string) {
   try {
     const u = new URL(url);
