@@ -249,9 +249,10 @@ export default function StatusPage() {
 
 type Timer = () => number;
 
+const now = () =>
+  typeof performance !== 'undefined' ? performance.now() : Date.now();
+
 function startTimer(): Timer {
-  const now = () =>
-    typeof performance !== 'undefined' ? performance.now() : Date.now();
   const started = now();
   return () => Math.round(now() - started);
 }
