@@ -1,11 +1,25 @@
+import 'server-only';
 import { createClient } from '@supabase/supabase-js';
 
-const url = process.env.NEXT_PUBLIC_SUPABASE_URL as string | undefined;
-const service = process.env.SUPABASE_SERVICE_ROLE as string | undefined;
+type ServerEnvKey = 'NEXT_PUBLIC_SUPABASE_URL' | 'SUPABASE_SERVICE_ROLE_KEY';
+
+function assertServerRuntime() {
+  if (typeof window !== 'undefined') {
+    throw new Error('getAdminSupabase must only be used on the server.');
+  }
+}
+
+function getServerEnv(key: ServerEnvKey): string {
+  const value = process.env[key];
+  if (!value) {
+    throw new Error(`Missing env: ${key}`);
+  }
+  return value;
+}
 
 export function getAdminSupabase() {
-  if (!url || !service) {
-    throw new Error('Missing env: NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE');
-  }
+  assertServerRuntime();
+  const url = getServerEnv('NEXT_PUBLIC_SUPABASE_URL');
+  const service = getServerEnv('SUPABASE_SERVICE_ROLE_KEY');
   return createClient(url, service, { auth: { persistSession: false } });
 }
