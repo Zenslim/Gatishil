@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { createClient } from "@supabase/supabase-js";
+import { getSupabaseBrowser } from "@/lib/supabaseClient";
 
 /**
  * ChautariLocationPicker.jsx — Auto-Approve Edition
@@ -15,15 +15,7 @@ export default function ChautariLocationPicker({
 }) {
   const supabaseRef = useRef(null);
   if (!supabaseRef.current) {
-    if (supabaseProp) {
-      supabaseRef.current = supabaseProp;
-    } else if (typeof window !== "undefined" && process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
-      supabaseRef.current = createClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
-        { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } }
-      );
-    }
+    supabaseRef.current = supabaseProp ?? getSupabaseBrowser();
   }
   const supabase = supabaseRef.current;
 

@@ -2,7 +2,8 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { createClient, User } from '@supabase/supabase-js';
+import { User } from '@supabase/supabase-js';
+import { getSupabaseBrowser } from '@/lib/supabaseClient';
 
 type PublicCard = {
   id: string;
@@ -27,19 +28,10 @@ export default function MembersPage() {
   const [region, setRegion] = useState('');
   const [skillsCsv, setSkillsCsv] = useState(''); // "farmer, designer"
 
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
-
-  const supabase = useMemo(() => {
-    if (!supabaseUrl || !supabaseAnonKey) return null;
-    return createClient(supabaseUrl, supabaseAnonKey, {
-      auth: { persistSession: true, autoRefreshToken: true },
-    });
-  }, [supabaseUrl, supabaseAnonKey]);
+  const supabase = useMemo(() => getSupabaseBrowser(), []);
 
   // 1) find current signed-in user (needed for RPC)
   useEffect(() => {
-    if (!supabase) return;
     let mounted = true;
 
     const init = async () => {
@@ -76,7 +68,6 @@ export default function MembersPage() {
 
   // 2) load public list (anyone can see)
   const loadPublicList = async () => {
-    if (!supabase) return;
     setLoadingList(true);
     const { data, error } = await supabase
       .from('members_public') // ✅ read from members_public
@@ -87,7 +78,6 @@ export default function MembersPage() {
   };
 
   useEffect(() => {
-    if (!supabase) return;
     loadPublicList();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [supabase]);
@@ -95,7 +85,6 @@ export default function MembersPage() {
   // 3) submit to RPC upsert_my_profile (authenticated only)
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!supabase) return;
     setMsg('');
     if (!sessionUser) {
       setMsg('Please sign in first, then try again.');
