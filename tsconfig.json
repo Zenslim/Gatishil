@@ -15,8 +15,7 @@
     "incremental": true,
     "types": [
       "node",
-      "vitest/globals"
-    ],
+       ],
     "baseUrl": ".",
     "paths": {
       "@/*": [
