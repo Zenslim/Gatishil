@@ -55,5 +55,9 @@ jobs:
           echo "${HOME}/go/bin" >> "$GITHUB_PATH"
 
       - name: Run osv-scanner
-        run: |
-          osv-scanner --lockfile=package-lock.json --fail-severity=HIGH
+          uses: google/osv-scanner-action@v1
+        with:
+          scan-args: >
+            scan
+            --lockfile=package-lock.json
+            --format=table
