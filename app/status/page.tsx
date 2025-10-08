@@ -43,23 +43,21 @@ export default function StatusPage() {
 
       // 2) Supabase Auth ping
       if (supabase) {
-        const authStart = performance.now();
+        const authTimer = startTimer();
         try {
           const { error } = await supabase.auth.getSession();
-          const authEnd = performance.now();
           results.push({
             label: 'Supabase Auth reachable',
             ok: !error,
             detail: error ? error.message : 'ok',
-            ms: Math.round(authEnd - authStart),
+            ms: authTimer(),
           });
         } catch (e: any) {
-          const authEnd = performance.now();
           results.push({
             label: 'Supabase Auth reachable',
             ok: false,
             detail: e?.message || 'unknown error',
-            ms: Math.round(authEnd - authStart),
+            ms: authTimer(),
           });
         }
       } else {
@@ -72,7 +70,7 @@ export default function StatusPage() {
 
       // 3) Safe DB probe (treat "no table yet" as OK during bootstrap)
       if (supabase) {
-        const dbStart = performance.now();
+        const dbTimer = startTimer();
         let ok = false;
         let detail = '';
         try {
@@ -132,12 +130,11 @@ export default function StatusPage() {
             detail = msg || 'unknown db error';
           }
         }
-        const dbEnd = performance.now();
         results.push({
           label: 'Database probe (bootstrap-safe)',
           ok,
           detail,
-          ms: Math.round(dbEnd - dbStart),
+          ms: dbTimer(),
         });
       }
 
@@ -242,6 +239,13 @@ export default function StatusPage() {
       </div>
     </main>
   );
+}
+
+function startTimer() {
+  const now = () =>
+    typeof performance !== 'undefined' ? performance.now() : Date.now();
+  const started = now();
+  return () => Math.round(now() - started);
 }
 
 function maskUrl(url: string) {
