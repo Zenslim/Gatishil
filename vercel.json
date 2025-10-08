@@ -1,16 +1,11 @@
 {
-  "build": {
-    "env": {
-      "NEXT_PUBLIC_SUPABASE_URL": "@next_public_supabase_url",
-      "NEXT_PUBLIC_SUPABASE_ANON_KEY": "@next_public_supabase_anon_key"
-    }
-  },
   "functions": {
     "api/**": {
       "runtime": "nodejs20.x"
     }
   },
   "env": {
-    "NEXT_RUNTIME": "nodejs"
+    "NEXT_PUBLIC_SUPABASE_URL": "https://YOUR-PROJECT.supabase.co",
+    "NEXT_PUBLIC_SUPABASE_ANON_KEY": "YOUR-ANON-KEY"
   }
 }
