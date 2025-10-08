@@ -1,9 +1,8 @@
 title = "Gatishil - Secret Scan Policy"
 [extend]
-# Keep default rules, just add allowlists below.
 
 [allowlist]
-description = "Allow non-sensitive demo/test files"
+description = "Ignore non-sensitive demo/test and binary assets"
 paths = [
   '''^docs/''',
   '''^examples?/''',
@@ -18,32 +17,19 @@ paths = [
   '''\.snap$''',
   '''^public/''',
   '''^assets?/''',
-  '''^.*\.png$''',
-  '''^.*\.jpg$''',
-  '''^.*\.svg$''',
-  '''^.*\.webp$''',
-  '''^.*\.gif$''',
-  '''^.*\.mp4$''',
-  '''^.*\.mov$''',
-  '''^.*\.ico$''',
-  '''^.*\.pdf$''',
-  '''^.*\.woff2?$'''
+  '''^.*\.(png|jpg|jpeg|svg|webp|gif|mp4|mov|ico|pdf|woff2?)$'''
 ]
 
 regexes = [
-  # Empty secrets or placeholders
   '''(?i)(xxxxxxxx|changeme|your_[a-z0-9_]+_here)''',
   '''(?i)(example|sample|dummy|placeholder)[-_]?(key|token|secret|password)''',
-  # Localhost URIs
-  '''^http://localhost:\d{2,5}''',
+  '''^http://localhost:\d{2,5}'''
 ]
 
-# Ignored files by name
 files = [
   ".env.example",
   "env.example",
-  ".env.local.example",
+  ".env.local.example"
 ]
 
-# Redact allowed group matches in reports
 commits = []
