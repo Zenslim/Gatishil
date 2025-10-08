@@ -1,25 +1,31 @@
-docs/**
-examples/**
-example/**
-tests/**
-__tests__/**
-fixtures/**
-spec/**
-cypress/**
-e2e/**
-public/**
-assets/**
+# ==== RE2 REGEX PATH EXCLUDES (TruffleHog v3) ====
+# Folders (repo-root relative)
+^docs/
+^examples?/
+^tests?/
+^__tests__/
+^fixtures?/
+^spec/
+^cypress/
+^e2e/
+^public/
+^assets?/
 
-# Common placeholders
-(?i)dummy[_-]?(secret|token|key)
-(?i)example[_-]?(secret|token|key)
-(?i)changeme
+# Binary / asset extensions (match file paths)
+\.png$
+\.jpg$
+\.jpeg$
+\.svg$
+\.webp$
+\.gif$
+\.mp4$
+\.mov$
+\.ico$
+\.pdf$
+\.woff2?$
 
-# localhost
-http://localhost:\d{2,5}/.*
-
-# Supabase public URL
-https://[a-z0-9]{20}\.supabase\.co/.*
-
-# Google API key pattern (not a secret)
-AIza[0-9A-Za-z\-_]{35}
+# NOTE:
+# - These are *path* regexes only. Do not add token/text patterns here.
+# - TruffleHog v3 reads this file when called with:
+#     --exclude-paths .trufflehogignore
+# - Keep patterns anchored (^) and use $ for extensions.
