@@ -11,6 +11,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+      - name: Install deps (CI)
+        run: npm ci --no-audit --no-fund
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
