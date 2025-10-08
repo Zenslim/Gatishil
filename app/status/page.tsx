@@ -229,9 +229,12 @@ export default function StatusPage() {
   );
 }
 
-function startTimer() {
-  const now = () =>
-    typeof performance !== 'undefined' ? performance.now() : Date.now();
+type Timer = () => number;
+
+const now = () =>
+  typeof performance !== 'undefined' ? performance.now() : Date.now();
+
+function startTimer(): Timer {
   const started = now();
   return () => Math.round(now() - started);
 }
