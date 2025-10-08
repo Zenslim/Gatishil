@@ -21,7 +21,7 @@
     "react-markdown": "9.0.1",
     "remark-gfm": "4.0.0",
     "three": "0.160.0",
-    "zod": "3.23.8"
+    "zod": "4.1.12"
   },
   "devDependencies": {
     "@types/node": "20.14.12",
