@@ -3,7 +3,6 @@
 
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { unstable_noStore as noStore } from 'next/cache';
 import { supabase } from '@/lib/supabaseClient';
 import { COUNTRIES } from '@/app/data/countries';
 
@@ -61,7 +60,6 @@ async function safeFetch(url: string, init: RequestInit, timeoutMs = 10000) {
 
 // ---------- Client component ----------
 function JoinClient() {
-  noStore(); // be explicit: never cache this render
 
   const router = useRouter();
   const _params = useSearchParams(); // kept for potential future use
