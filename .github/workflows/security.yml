@@ -1,0 +1,63 @@
+name: Security scanning
+
+on:
+  release:
+    types: [published]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  generate-sbom:
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Generate CycloneDX SBOM
+        uses: CycloneDX/gh-node-module-generate-sbom@v2
+        with:
+          output-path: sbom
+          format: xml
+
+      - name: Upload SBOM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cyclonedx-sbom
+          path: sbom/bom.xml
+
+      - name: Attach SBOM to release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: sbom/bom.xml
+
+  osv-scan:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Install osv-scanner
+        run: |
+          go install github.com/google/osv-scanner/cmd/osv-scanner@v1
+          echo "${HOME}/go/bin" >> "$GITHUB_PATH"
+
+      - name: Run osv-scanner
+          uses: google/osv-scanner-action@v1
+        with:
+          scan-args: >
+            scan
+            --lockfile=package-lock.json
+            --format=table
