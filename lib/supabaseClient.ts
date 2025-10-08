@@ -1,24 +1,19 @@
-// lib/supabaseClient.ts
-import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import { createBrowserClient } from '@supabase/ssr'
+import { NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY } from './env'
 
-declare global {
-  // eslint-disable-next-line no-var
-  var __supabase__: SupabaseClient | undefined
+const getGlobal = () => (typeof window !== 'undefined' ? window : globalThis)
+const GLOBAL_KEY = '__gatishil_sb__'
+
+export function getSupabaseBrowser() {
+  const g: any = getGlobal()
+  if (!g[GLOBAL_KEY]) {
+    g[GLOBAL_KEY] = createBrowserClient(
+      NEXT_PUBLIC_SUPABASE_URL,
+      NEXT_PUBLIC_SUPABASE_ANON_KEY,
+      { cookieOptions: { sameSite: 'lax' } }
+    )
+  }
+  return g[GLOBAL_KEY]
 }
 
-const url = process.env.NEXT_PUBLIC_SUPABASE_URL as string
-const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string
-
-if (!url || !anon) {
-  console.warn('Supabase env missing: NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY')
-}
-
-export const supabase: SupabaseClient = globalThis.__supabase__ ?? createClient(url, anon, {
-  auth: {
-    persistSession: true,
-    autoRefreshToken: true,
-    detectSessionInUrl: typeof window !== 'undefined',
-  },
-})
-
-if (!globalThis.__supabase__) globalThis.__supabase__ = supabase
+export const supabase = getSupabaseBrowser()
