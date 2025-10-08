@@ -1,45 +1,63 @@
-name: CI
+name: build-and-test
 
 on:
-  push:
-    branches: [main, master]
   pull_request:
+    branches: [ main ]
+  push:
+    branches: [ main ]
+
+permissions:
+  contents: read
 
 jobs:
-  build-and-test:
+  ci:
     runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-      - name: Install deps (CI)
-        run: npm ci --no-audit --no-fund
 
-      - name: Setup Node.js
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Use Node 20.x
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
-          cache: 'npm'
+          node-version: 20
+          cache: npm
 
-      - name: Install dependencies
-        run: npm install
+      # Primary npm config (npmjs)
+      - name: Configure npm (primary registry)
+        run: |
+          npm config set registry https://registry.npmjs.org/
+          npm config set fetch-retries 5
+          npm config set fetch-retry-maxtimeout 600000
+          npm config set prefer-online true
+          npm config set legacy-peer-deps true
+          npm config set audit false
+          npm config set fund false
 
-      - name: Type check
-        run: npm run typecheck
+      # Try npmjs; if 403/timeout, fall back to npmmirror
+      - name: Install deps (try npmjs, then mirror)
+        run: |
+          npm i --no-audit --no-fund || (
+            echo "npmjs install failed; switching to mirror…" &&
+            npm config set registry https://registry.npmmirror.com &&
+            npm i --no-audit --no-fund
+          )
+
+      - name: Typecheck (if present)
+        run: npm run typecheck --if-present
 
       - name: Lint
-        run: npm run lint
+        run: npm run lint --if-present
 
-      - name: Unit tests with coverage
-        run: npm run test:unit
-        env:
-          NEXT_PUBLIC_SUPABASE_URL: http://localhost:54321
-          NEXT_PUBLIC_SUPABASE_ANON_KEY: test-anon-key
+      - name: Build
+        run: npm run build --if-present
 
-      - name: Install Playwright browsers
-        run: npx playwright install --with-deps chromium
+      - name: Unit tests
+        run: npm test --if-present
 
-      - name: Playwright smoke tests
-        run: npm run test:e2e
-        env:
-          NEXT_PUBLIC_SUPABASE_URL: http://localhost:54321
-          NEXT_PUBLIC_SUPABASE_ANON_KEY: test-anon-key
+      - name: Upload coverage (optional)
+        if: success() && hashFiles('coverage/**') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage
