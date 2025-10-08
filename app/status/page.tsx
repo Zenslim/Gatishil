@@ -136,6 +136,12 @@ export default function StatusPage() {
           detail,
           ms: dbTimer(),
         });
+      } else {
+        results.push({
+          label: 'Database probe (bootstrap-safe)',
+          ok: false,
+          detail: 'client not initialized (missing env)',
+        });
       }
 
       setProbes(results);
@@ -241,7 +247,9 @@ export default function StatusPage() {
   );
 }
 
-function startTimer() {
+type Timer = () => number;
+
+function startTimer(): Timer {
   const now = () =>
     typeof performance !== 'undefined' ? performance.now() : Date.now();
   const started = now();
