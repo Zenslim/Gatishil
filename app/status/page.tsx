@@ -46,18 +46,20 @@ export default function StatusPage() {
         const authTimer = startTimer();
         try {
           const { error } = await supabase.auth.getSession();
+          const ms = authTimer();
           results.push({
             label: 'Supabase Auth reachable',
             ok: !error,
             detail: error ? error.message : 'ok',
-            ms: authTimer(),
+            ms,
           });
         } catch (e: any) {
+          const ms = authTimer();
           results.push({
             label: 'Supabase Auth reachable',
             ok: false,
             detail: e?.message || 'unknown error',
-            ms: authTimer(),
+            ms,
           });
         }
       } else {
@@ -130,11 +132,12 @@ export default function StatusPage() {
             detail = msg || 'unknown db error';
           }
         }
+        const ms = dbTimer();
         results.push({
           label: 'Database probe (bootstrap-safe)',
           ok,
           detail,
-          ms: dbTimer(),
+          ms,
         });
       } else {
         results.push({
