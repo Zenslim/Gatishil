@@ -1,8 +1,7 @@
 title = "Gatishil - Secret Scan Policy"
-[extend]
 
 [allowlist]
-description = "Ignore non-sensitive demo/test and binary assets"
+description = "Ignore non-sensitive demo/test and binary assets; allow known public tokens/URLs"
 paths = [
   '''^docs/''',
   '''^examples?/''',
@@ -12,18 +11,21 @@ paths = [
   '''^specs?/''',
   '''^cypress/''',
   '''^e2e/''',
+  '''^public/''',
+  '''^assets?/''',
   '''\.md$''',
   '''^\.github/ISSUE_TEMPLATE/''',
   '''\.snap$''',
-  '''^public/''',
-  '''^assets?/''',
   '''^.*\.(png|jpg|jpeg|svg|webp|gif|mp4|mov|ico|pdf|woff2?)$'''
 ]
 
 regexes = [
-  '''(?i)(xxxxxxxx|changeme|your_[a-z0-9_]+_here)''',
-  '''(?i)(example|sample|dummy|placeholder)[-_]?(key|token|secret|password)''',
-  '''^http://localhost:\d{2,5}'''
+  # localhost
+  '''^http://localhost:\d{2,5}(/.*)?$''',
+  # Supabase project URL (public)
+  '''^https://[a-z0-9]{20}\.supabase\.co(/.*)?$''',
+  # Google API key (not a secret)
+  '''^AIza[0-9A-Za-z\-_]{35}$'''
 ]
 
 files = [

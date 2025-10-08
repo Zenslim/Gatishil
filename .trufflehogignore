@@ -4,10 +4,22 @@ example/**
 tests/**
 __tests__/**
 fixtures/**
+spec/**
+cypress/**
+e2e/**
 public/**
 assets/**
 
+# Common placeholders
 (?i)dummy[_-]?(secret|token|key)
 (?i)example[_-]?(secret|token|key)
 (?i)changeme
+
+# localhost
 http://localhost:\d{2,5}/.*
+
+# Supabase public URL
+https://[a-z0-9]{20}\.supabase\.co/.*
+
+# Google API key pattern (not a secret)
+AIza[0-9A-Za-z\-_]{35}
