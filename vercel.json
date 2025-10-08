@@ -1,21 +1,16 @@
 {
-  "framework": "nextjs",
-  "rewrites": [],
+  "build": {
+    "env": {
+      "NEXT_PUBLIC_SUPABASE_URL": "@next_public_supabase_url",
+      "NEXT_PUBLIC_SUPABASE_ANON_KEY": "@next_public_supabase_anon_key"
+    }
+  },
+  "functions": {
+    "api/**": {
+      "runtime": "nodejs20.x"
+    }
+  },
   "env": {
-    "NEXT_PUBLIC_SUPABASE_URL": "@supabase-url",
-    "NEXT_PUBLIC_SUPABASE_ANON_KEY": "@supabase-anon-key"
-  },
-  "preview": {
-    "env": {
-      "NEXT_PUBLIC_SUPABASE_URL": "@supabase-url-preview",
-      "NEXT_PUBLIC_SUPABASE_ANON_KEY": "@supabase-anon-key-preview"
-    }
-  },
-  "production": {
-    "env": {
-      "NEXT_PUBLIC_SUPABASE_URL": "@supabase-url",
-      "NEXT_PUBLIC_SUPABASE_ANON_KEY": "@supabase-anon-key",
-      "SUPABASE_SERVICE_ROLE_KEY": "@supabase-service-role-key"
-    }
+    "NEXT_RUNTIME": "nodejs"
   }
 }

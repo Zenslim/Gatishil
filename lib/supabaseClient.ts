@@ -1,45 +1,17 @@
-'use client';
+// lib/supabaseClient.ts
+import { createBrowserClient } from '@supabase/ssr';
+import { NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY } from './env';
 
-import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+// Ensure a single browser client per window to avoid "Multiple GoTrueClient instances" warnings.
+const getGlobal = () => (typeof window !== 'undefined' ? (window as any) : (globalThis as any));
+const GLOBAL_KEY = '__gatishil_sb__';
 
-declare global {
-  // eslint-disable-next-line no-var
-  var __supabaseBrowserClient__: SupabaseClient | undefined;
-}
-
-type BrowserEnvKey = 'NEXT_PUBLIC_SUPABASE_URL' | 'NEXT_PUBLIC_SUPABASE_ANON_KEY';
-
-function ensureBrowserRuntime() {
-  if (typeof window === 'undefined') {
-    throw new Error('supabaseClient is browser-only. Use lib/supabase/server on the server.');
-  }
-}
-
-function getBrowserEnv(key: BrowserEnvKey): string {
-  const value = process.env[key];
-  if (!value) {
-    throw new Error(`Missing required environment variable: ${key}`);
-  }
-  return value;
-}
-
-export function getSupabaseBrowserClient(): SupabaseClient {
-  ensureBrowserRuntime();
-  if (!globalThis.__supabaseBrowserClient__) {
-    const url = getBrowserEnv('NEXT_PUBLIC_SUPABASE_URL');
-    const anonKey = getBrowserEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY');
-    globalThis.__supabaseBrowserClient__ = createClient(url, anonKey, {
-      auth: {
-        persistSession: true,
-        autoRefreshToken: true,
-        detectSessionInUrl: true,
-      },
-      global: {
-        headers: { 'X-Client-Info': 'gatishil/browser' },
-      },
+export function getSupabaseBrowser() {
+  const g = getGlobal();
+  if (!g[GLOBAL_KEY]) {
+    g[GLOBAL_KEY] = createBrowserClient(NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, {
+      cookieOptions: { sameSite: 'lax' }
     });
   }
-  return globalThis.__supabaseBrowserClient__;
+  return g[GLOBAL_KEY];
 }
-
-export const supabase = getSupabaseBrowserClient();
