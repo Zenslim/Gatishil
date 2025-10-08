@@ -1,3 +1,3 @@
-'use client';
-
-export { getSupabaseBrowserClient as getBrowserSupabase, supabase } from '../supabaseClient';
+export { supabase } from '../supabaseClient';
+export { getSupabaseBrowser as getBrowserSupabase } from '../supabaseClient';
+export { getSupabaseBrowserClient } from '../supabaseClient';
