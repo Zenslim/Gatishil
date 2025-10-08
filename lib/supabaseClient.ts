@@ -1,19 +1,16 @@
-import { createBrowserClient } from '@supabase/ssr'
-import { NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY } from './env'
+import { createClient } from '@supabase/supabase-js';
 
-const getGlobal = () => (typeof window !== 'undefined' ? window : globalThis)
-const GLOBAL_KEY = '__gatishil_sb__'
+const url = process.env.NEXT_PUBLIC_SUPABASE_URL as string;
+const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string;
 
-export function getSupabaseBrowser() {
-  const g: any = getGlobal()
-  if (!g[GLOBAL_KEY]) {
-    g[GLOBAL_KEY] = createBrowserClient(
-      NEXT_PUBLIC_SUPABASE_URL,
-      NEXT_PUBLIC_SUPABASE_ANON_KEY,
-      { cookieOptions: { sameSite: 'lax' } }
-    )
-  }
-  return g[GLOBAL_KEY]
+if (!url || !anon) {
+  // Fail fast during build if envs are missing
+  throw new Error('Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY');
 }
 
-export const supabase = getSupabaseBrowser()
+// Browser-safe singleton client
+export const supabase = createClient(url, anon);
+
+// Alias names to satisfy various imports across the app
+export const getSupabaseBrowser = () => supabase;
+export const getSupabaseBrowserClient = () => supabase;

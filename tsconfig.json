@@ -14,8 +14,8 @@
     "allowJs": true,
     "incremental": true,
     "types": [
-      "node"
-    ],
+      "node",
+       ],
     "baseUrl": ".",
     "paths": {
       "@/*": [
