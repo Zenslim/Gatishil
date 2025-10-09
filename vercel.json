@@ -1,5 +1,20 @@
 {
-  "buildCommand": "next build",
-  "outputDirectory": ".next",
-  "framework": "nextjs"
+  "redirects": [
+    {
+      "source": "https://www.gatishilnepal.org/:path*",
+      "destination": "https://gatishilnepal.org/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/:path*",
+      "has": [
+        {
+          "type": "host",
+          "value": "www.gatishilnepal.org"
+        }
+      ],
+      "destination": "https://gatishilnepal.org/:path*",
+      "permanent": true
+    }
+  ]
 }
