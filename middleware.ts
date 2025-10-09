@@ -11,12 +11,14 @@ const PROTECTED_REDIRECTS = new Set(['/login', '/join']);
 
 export function middleware(req: NextRequest) {
   const url = req.nextUrl.clone();
-  const host = req.headers.get('host') ?? '';
+  const hostHeader = req.headers.get('host') ?? '';
+  const host = hostHeader.split(':')[0];
 
   if (WWW_HOSTS.has(host)) {
-    url.hostname = CANONICAL_HOST;
-    url.protocol = 'https:';
-    return NextResponse.redirect(url, { status: 308 });
+    const redirectUrl = new URL(req.url);
+    redirectUrl.hostname = CANONICAL_HOST;
+    redirectUrl.protocol = 'https:';
+    return NextResponse.redirect(redirectUrl, { status: 308 });
   }
 
   if (PROTECTED_REDIRECTS.has(url.pathname)) {
