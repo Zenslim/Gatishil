@@ -3,10 +3,14 @@
     {
       "source": "/:path*",
       "has": [
-        { "type": "host", "value": "www.gatishilnepal.org" }
+        {
+          "type": "host",
+          "value": "www.gatishilnepal.org"
+        }
       ],
       "destination": "https://gatishilnepal.org/:path*",
       "permanent": true
     }
-  ]
+  ],
+  "trailingSlash": false
 }
