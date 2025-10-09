@@ -1,8 +1,8 @@
 {
   "name": "gatishilnepal",
   "private": true,
-  "version": "0.1.0",
-  "description": "Gatishil Nepal \u2013 Next.js 14 (App Router, TS)",
+  "version": "1.0.0",
+  "description": "Gatishil Nepal – Next.js 14 (App Router, TS)",
   "engines": {
     "node": "20.x"
   },
