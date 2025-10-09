@@ -37,28 +37,28 @@ export default function StatusPage() {
       });
 
       // 2) Supabase Auth ping
-      const t0 = performance.now();
+      const authStart = performance.now();
       try {
         const { error } = await supabase.auth.getSession();
-        const t1 = performance.now();
+        const authEnd = performance.now();
         results.push({
           label: 'Supabase Auth reachable',
           ok: !error,
           detail: error ? error.message : 'ok',
-          ms: Math.round(t1 - t0),
+          ms: Math.round(authEnd - authStart),
         });
       } catch (e: any) {
-        const t1 = performance.now();
+        const authEnd = performance.now();
         results.push({
           label: 'Supabase Auth reachable',
           ok: false,
           detail: e?.message || 'unknown error',
-          ms: Math.round(t1 - t0),
+          ms: Math.round(authEnd - authStart),
         });
       }
 
       // 3) Safe DB probe (treat "no table yet" as OK during bootstrap)
-      const t0 = performance.now();
+      const dbStart = performance.now();
       let ok = false;
       let detail = '';
       try {
@@ -118,12 +118,12 @@ export default function StatusPage() {
           detail = msg || 'unknown db error';
         }
       }
-      const t1 = performance.now();
+      const dbEnd = performance.now();
       results.push({
         label: 'Database probe (bootstrap-safe)',
         ok,
         detail,
-        ms: Math.round(t1 - t0),
+        ms: Math.round(dbEnd - dbStart),
       });
 
       setProbes(results);
