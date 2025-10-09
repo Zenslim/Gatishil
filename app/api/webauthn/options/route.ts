@@ -1,36 +1,53 @@
-import { cookies } from 'next/headers'
-import { NextResponse } from 'next/server'
-import { generateRegistrationOptions } from '@simplewebauthn/server'
+import { cookies } from "next/headers";
+import { NextRequest, NextResponse } from "next/server";
+import { generateRegistrationOptions } from "@simplewebauthn/server";
 
-const rpID = process.env.RP_ID as string
-const rpName = process.env.RP_NAME || 'Gatishil Nepal'
+function toBufferSource(id: string): Uint8Array {
+  return new TextEncoder().encode(id);
+}
 
-function textToBytes(s: string) { return new TextEncoder().encode(s) }
+// Replace with your real current user fetch
+function getCurrentUser(req: NextRequest) {
+  const userId = "user-id-from-auth";
+  return {
+    id: userId,
+    idBuffer: toBufferSource(userId),
+    name: "user@example.com",
+    displayName: "Gatishil Member",
+  };
+}
 
-export async function POST(req: Request) {
+export async function GET(req: NextRequest) {
   try {
-    const body = await req.json()
-    const userId: string = body?.userId
-    const username: string = body?.username || userId
-
-    if (!userId) return NextResponse.json({ error: 'userId required' }, { status: 400 })
-    if (!rpID) return NextResponse.json({ error: 'Missing RP_ID' }, { status: 500 })
+    const user = getCurrentUser(req);
+    const rpID = "gatishilnepal.org";
 
     const options = await generateRegistrationOptions({
-      rpID, rpName,
-      userName: username,
-      userID: textToBytes(userId), // binary per spec
-      attestationType: 'none',
+      rpName: "Gatishil Nepal",
+      rpID,
+      userID: user.idBuffer, // BufferSource required by simplewebauthn
+      userName: user.name,
+      userDisplayName: user.displayName,
+      attestationType: "none",
       authenticatorSelection: {
-        residentKey: 'preferred',
-        userVerification: 'required',
-        authenticatorAttachment: 'platform',
+        residentKey: "preferred",
+        userVerification: "preferred",
+        authenticatorAttachment: "platform",
       },
-    })
+      supportedAlgorithmIDs: [-7, -257],
+    });
 
-    cookies().set('wa_chal', options.challenge, { httpOnly: true, maxAge: 600, secure: true, sameSite: 'strict', path: '/' })
-    return NextResponse.json(options)
-  } catch (e: any) {
-    return NextResponse.json({ error: e?.message || 'Failed to create options' }, { status: 500 })
+    const res = NextResponse.json(options);
+    res.cookies.set("webauthn_challenge", options.challenge, {
+      httpOnly: true,
+      sameSite: "strict",
+      secure: true,
+      maxAge: 60 * 5,
+      path: "/",
+    });
+    return res;
+  } catch (err) {
+    console.error("webauthn/options error:", err);
+    return new NextResponse("Internal Server Error", { status: 500 });
   }
 }
