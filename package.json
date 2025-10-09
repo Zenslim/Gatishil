@@ -17,7 +17,7 @@
   "dependencies": {
     "@simplewebauthn/browser": "10.0.0",
     "@simplewebauthn/server": "10.0.0",
-    "@supabase/ssr": "0.5.0",
+    "@supabase/ssr": "0.7.0",
     "@supabase/supabase-js": "2.45.4",
     "framer-motion": "11.3.19",
     "lucide-react": "0.454.0",
