@@ -1,0 +1,60 @@
+name: Vercel — Cancel Queued/Building
+
+on:
+  workflow_dispatch: {}         # run manually from Actions tab
+  push:
+    branches:
+      - develop                 # optional: auto-run on pushes to develop before merging to main
+
+jobs:
+  cancel-builds:
+    runs-on: ubuntu-latest
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}          # Personal token (Account → Settings → Tokens)
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}# Project ID (Vercel → Project → Settings → General)
+      VERCEL_TEAM_ID: ${{ secrets.VERCEL_TEAM_ID }}      # Team ID if project is inside a team (optional)
+    steps:
+      - name: Fail fast if token/project missing
+        run: |
+          test -n "$VERCEL_TOKEN" || { echo "Missing VERCEL_TOKEN secret"; exit 1; }
+          test -n "$VERCEL_PROJECT_ID" || { echo "Missing VERCEL_PROJECT_ID secret"; exit 1; }
+
+      - name: List BUILDING/QUEUED deployments (paged)
+        id: list
+        run: |
+          BASE="https://api.vercel.com"
+          Q="state=BUILDING,QUEUED&app=$VERCEL_PROJECT_ID&limit=100"
+          if [ -n "$VERCEL_TEAM_ID" ]; then Q="$Q&teamId=$VERCEL_TEAM_ID"; fi
+
+          # Collect IDs across pages
+          ids="[]"
+          next=""
+          while : ; do
+            url="$BASE/v13/deployments?$Q"
+            if [ -n "$next" ]; then url="$url&until=$next"; fi
+            resp=$(curl -fsSL -H "Authorization: Bearer $VERCEL_TOKEN" "$url")
+            page_ids=$(echo "$resp" | jq -r '.deployments[]?.uid' | jq -R . | jq -s .)
+            ids=$(jq -c --argjson a "$ids" --argjson b "$page_ids" '$a + $b' <<< "")
+            next=$(echo "$resp" | jq -r '.pagination?.next | select(.!=null)')
+            [ -n "$next" ] || break
+          done
+
+          echo "ids=$ids" >> "$GITHUB_OUTPUT"
+          echo "Found $(echo "$ids" | jq 'length') deployments to cancel."
+
+      - name: Cancel each deployment
+        if: ${{ steps.list.outputs.ids != '[]' }}
+        run: |
+          BASE="https://api.vercel.com"
+          if [ -n "$VERCEL_TEAM_ID" ]; then TEAMQS="&teamId=$VERCEL_TEAM_ID"; fi
+          echo '${{ steps.list.outputs.ids }}' | jq -r '.[]' | while read id; do
+            echo "Cancelling $id ..."
+            # Vercel cancel endpoint is v12
+            curl -fsS -X PATCH \
+              -H "Authorization: Bearer $VERCEL_TOKEN" \
+              "$BASE/v12/deployments/$id/cancel?skipQueue=true$TEAMQS" \
+              || echo "Cancel call failed for $id (may have finished already)"
+          done
+
+      - name: Summary
+        run: echo "Cancellation run finished."
