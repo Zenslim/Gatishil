@@ -10,6 +10,7 @@ const NameFaceStep = dynamic(() => import('@/components/onboard/NameFaceStep'), 
 const RootsStep = dynamic(() => import('@/components/onboard/RootsStep'), { ssr: false })
 // REPLACED: JanmandalStep → AtmaDisha
 const AtmaDishaStep = dynamic(() => import('@/components/AtmaDisha/AtmaDisha'), { ssr: false })
+const TrustStep = dynamic(() => import('@/components/onboard/TrustStep'), { ssr: false })
 
 export default function OnboardingFlow({ lang = 'en' }: Props){
   const router = useRouter()
@@ -62,9 +63,13 @@ export default function OnboardingFlow({ lang = 'en' }: Props){
   if(step === 'atmadisha'){
     return (
       <div className="min-h-[80vh] bg-neutral-950 grid place-items-center px-4 md:px-6">
-        <AtmaDishaStep onDone={() => router.replace('/dashboard')} />
+        <AtmaDishaStep onDone={() => go('trust')} />
       </div>
     )
+  }
+
+  if(step === 'trust'){
+    return <TrustStep onDone={() => router.replace('/dashboard')} />
   }
 
   return <div className="min-h-[80vh] bg-neutral-950 text-white p-6">Unknown step.</div>
