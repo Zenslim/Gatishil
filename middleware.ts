@@ -10,26 +10,31 @@ const WWW_HOSTS = new Set(['www.gatishilnepal.org']);
 const PROTECTED_REDIRECTS = new Set(['/login', '/join']);
 
 export function middleware(req: NextRequest) {
-  const url = req.nextUrl.clone();
-  const host = url.hostname;
+  try {
+    const url = req.nextUrl.clone();
+    const host = url.hostname;
 
-  if (WWW_HOSTS.has(host)) {
-    const redirectUrl = req.nextUrl.clone();
-    redirectUrl.hostname = CANONICAL_HOST;
-    redirectUrl.protocol = 'https:';
-    return NextResponse.redirect(redirectUrl, { status: 308 });
-  }
-
-  if (PROTECTED_REDIRECTS.has(url.pathname)) {
-    // Heuristic: Supabase sets at least one sb- cookie when logged in
-    const hasSb = Array.from(req.cookies.getAll()).some((c) => c.name.startsWith('sb-'));
-    if (hasSb) {
-      url.pathname = '/dashboard';
-      return NextResponse.redirect(url);
+    if (WWW_HOSTS.has(host)) {
+      const redirectUrl = req.nextUrl.clone();
+      redirectUrl.hostname = CANONICAL_HOST;
+      redirectUrl.protocol = 'https:';
+      return NextResponse.redirect(redirectUrl, { status: 308 });
     }
-  }
 
-  return NextResponse.next();
+    if (PROTECTED_REDIRECTS.has(url.pathname)) {
+      const cookieHeader = req.headers.get('cookie');
+      const hasSb = cookieHeader ? cookieHeader.split(';').some((chunk) => chunk.trim().startsWith('sb-')) : false;
+      if (hasSb) {
+        url.pathname = '/dashboard';
+        return NextResponse.redirect(url);
+      }
+    }
+
+    return NextResponse.next();
+  } catch (error) {
+    console.error('middleware error', error);
+    return NextResponse.next();
+  }
 }
 
 export const config = {
