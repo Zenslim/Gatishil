@@ -1,7 +1,8 @@
 'use client'
-import React from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import dynamic from 'next/dynamic'
 import { useRouter, useSearchParams } from 'next/navigation'
+import { supabase } from '@/lib/supabaseClient'
 
 type Props = { lang?: 'en' | 'np' }
 
@@ -17,6 +18,64 @@ export default function OnboardingFlow({ lang = 'en' }: Props) {
   const router = useRouter()
   const searchParams = useSearchParams()
   const step = searchParams.get('step') ?? 'entry'
+  const code = searchParams.get('code')
+
+  const [authReady, setAuthReady] = useState(() => !code)
+  const [authError, setAuthError] = useState<string | null>(null)
+
+  const sanitizedHref = useMemo(() => {
+    if (typeof window === 'undefined') return null
+    const sp = new URLSearchParams(window.location.search)
+    sp.delete('code')
+    const qs = sp.toString()
+    return qs ? `/onboard?${qs}` : '/onboard'
+  }, [code])
+
+  useEffect(() => {
+    if (!code) return
+    let cancelled = false
+    ;(async () => {
+      setAuthError(null)
+      const { error } = await supabase.auth.exchangeCodeForSession(code)
+      if (cancelled) return
+      if (error) {
+        console.error('Failed to exchange onboarding code', error)
+        setAuthError('Your sign-in link expired. Please request a new link from /join.')
+        setAuthReady(true)
+        return
+      }
+      setAuthReady(true)
+      if (sanitizedHref) router.replace(sanitizedHref)
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [code, router, sanitizedHref])
+
+  if (!authReady) {
+    return (
+      <div className="min-h-[80vh] bg-neutral-950 text-white flex items-center justify-center">
+        <div className="text-sm text-gray-300">Preparing your session…</div>
+      </div>
+    )
+  }
+
+  if (authError) {
+    return (
+      <div className="min-h-[80vh] bg-neutral-950 text-white flex items-center justify-center px-6 text-center">
+        <div>
+          <p className="text-base font-medium text-amber-300">We couldn&apos;t confirm your sign-in.</p>
+          <p className="mt-3 text-sm text-gray-300">{authError}</p>
+          <button
+            className="mt-6 rounded-xl border border-white/20 bg-white/5 px-4 py-2 text-sm text-white hover:bg-white/10"
+            onClick={() => router.replace('/join')}
+          >
+            Go back to Join
+          </button>
+        </div>
+      </div>
+    )
+  }
 
   const go = (s: string) => {
     const sp = new URLSearchParams(searchParams.toString())
