@@ -1,9 +1,15 @@
-import { cookies } from "next/headers";
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { verifyRegistrationResponse } from "@simplewebauthn/server";
 import type { RegistrationResponseJSON } from "@simplewebauthn/typescript-types";
 
-// Replace with your real DB save
+// TODO: wire these to your real session/DB
+async function getExpectedChallengeForUser(userId: string): Promise<string> {
+  // Retrieve the challenge you saved during options generation
+  // e.g., from a server session keyed by userId
+  return "challenge-from-session";
+}
+
+// TODO: wire these to your real DB
 async function saveCredential(userId: string, data: {
   credentialID: string;
   credentialPublicKey: string;
@@ -16,29 +22,37 @@ async function saveCredential(userId: string, data: {
 
 export async function POST(req: NextRequest) {
   try {
-    const body = (await req.json()) as RegistrationResponseJSON & { userId?: string };
-    const userId = body.user?.id as unknown as string || body["userId"] || "user-id-from-auth";
+    const body = (await req.json()) as RegistrationResponseJSON & { userId: string };
+    const { userId, ...registrationResponse } = body;
 
-    const cookieStore = cookies();
-    const expectedChallenge = cookieStore.get("webauthn_challenge")?.value;
-    if (!expectedChallenge) {
-      return NextResponse.json({ ok: false, reason: "missing-challenge" }, { status: 400 });
+    if (!userId) {
+      return new Response(JSON.stringify({ ok: false, reason: "missing-userId" }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      });
     }
 
-    // Clear to prevent replay
-    cookieStore.set("webauthn_challenge", "", { maxAge: 0, path: "/" });
+    const expectedChallenge = await getExpectedChallengeForUser(userId);
 
     const verification = await verifyRegistrationResponse({
-      response: body,
+      response: registrationResponse,
       expectedChallenge,
+      // RP ID is the apex domain (no scheme/port)
       expectedRPID: "gatishilnepal.org",
-      expectedOrigins: ["https://gatishilnepal.org", "https://www.gatishilnepal.org"],
+      // Accept both apex and www to prevent origin mismatch
+      expectedOrigins: [
+        "https://gatishilnepal.org",
+        "https://www.gatishilnepal.org",
+      ],
       requireUserVerification: false,
     });
 
     const { verified, registrationInfo } = verification;
     if (!verified || !registrationInfo) {
-      return NextResponse.json({ ok: false, reason: "verification-failed" }, { status: 400 });
+      return new Response(JSON.stringify({ ok: false, reason: "verification-failed" }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      });
     }
 
     const {
@@ -57,9 +71,13 @@ export async function POST(req: NextRequest) {
       credentialBackedUp,
     });
 
-    return NextResponse.json({ ok: true }, { status: 200 });
+    return new Response(JSON.stringify({ ok: true }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
   } catch (err: any) {
+    // Emit the *exact* reason to logs so we can diagnose quickly
     console.error("webauthn/verify 500:", err?.message || err, err?.stack);
-    return new NextResponse("Internal Server Error", { status: 500 });
+    return new Response("Internal Server Error", { status: 500 });
   }
 }
