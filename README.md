@@ -70,3 +70,7 @@ For alternative hosting, build with `npm run build` and serve the `.next` output
 
 - Product requirements and additional docs live under the [`docs/`](docs) directory.
 - Use GitHub Issues for bugs or feature requests; see [CONTRIBUTING](CONTRIBUTING.md) for collaboration guidelines.
+
+## Repo Cleanup
+
+- Removed an obsolete duplicate `OnboardingFlow.tsx` entry point in the project root to ensure the App Router imports a single authoritative onboarding flow component.
