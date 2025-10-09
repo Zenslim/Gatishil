@@ -38,13 +38,15 @@ export async function GET(req: NextRequest) {
     });
 
     const res = NextResponse.json(options);
-    res.cookies.set("webauthn_challenge", options.challenge, {
-      httpOnly: true,
-      sameSite: "strict",
-      secure: true,
-      maxAge: 60 * 5,
-      path: "/",
-    });
+res.cookies.set("webauthn_challenge", options.challenge, {
+  httpOnly: true,
+  sameSite: "strict",
+  secure: true,
+  maxAge: 60 * 5,
+  path: "/",
+  domain: ".gatishilnepal.org", // 🔥 makes cookie valid for both www and apex
+});
+
     return res;
   } catch (err) {
     console.error("webauthn/options error:", err);
