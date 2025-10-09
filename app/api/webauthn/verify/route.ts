@@ -2,8 +2,14 @@ import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
 import { verifyRegistrationResponse } from '@simplewebauthn/server'
 
-const rpID = process.env.RP_ID as string
-const origin = process.env.NEXT_PUBLIC_APP_ORIGIN as string
+import { EXPECTED_ORIGINS, RP_ID } from '@/lib/webauthn'
+
+const rpID = process.env.RP_ID ?? RP_ID
+const configuredOrigins = process.env.NEXT_PUBLIC_APP_ORIGIN
+  ?.split(',')
+  .map((value) => value.trim())
+  .filter(Boolean)
+const expectedOrigins = configuredOrigins?.length ? configuredOrigins : EXPECTED_ORIGINS
 
 export async function POST(req: Request) {
   try {
@@ -14,7 +20,7 @@ export async function POST(req: Request) {
     const verification = await verifyRegistrationResponse({
       response: body?.response,
       expectedChallenge,
-      expectedOrigin: origin,
+      expectedOrigin: expectedOrigins.length === 1 ? expectedOrigins[0] : expectedOrigins,
       expectedRPID: rpID,
       requireUserVerification: true,
     })
