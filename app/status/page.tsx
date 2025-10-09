@@ -2,7 +2,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { createClient } from '@supabase/supabase-js';
+import { getSupabaseBrowserClient } from '@/lib/supabaseClient';
 
 type Probe = {
   label: string;
@@ -18,12 +18,7 @@ export default function StatusPage() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 
-  const supabase = useMemo(() => {
-    if (!supabaseUrl || !supabaseAnonKey) return null;
-    return createClient(supabaseUrl, supabaseAnonKey, {
-      auth: { persistSession: false, autoRefreshToken: false },
-    });
-  }, [supabaseUrl, supabaseAnonKey]);
+  const supabase = useMemo(() => getSupabaseBrowserClient(), []);
 
   useEffect(() => {
     const run = async () => {
@@ -42,110 +37,94 @@ export default function StatusPage() {
       });
 
       // 2) Supabase Auth ping
-      if (supabase) {
-        const authTimer = startTimer();
-        try {
-          const { error } = await supabase.auth.getSession();
-          const ms = authTimer();
-          results.push({
-            label: 'Supabase Auth reachable',
-            ok: !error,
-            detail: error ? error.message : 'ok',
-            ms,
-          });
-        } catch (e: any) {
-          const ms = authTimer();
-          results.push({
-            label: 'Supabase Auth reachable',
-            ok: false,
-            detail: e?.message || 'unknown error',
-            ms,
-          });
-        }
-      } else {
+      const t0 = performance.now();
+      try {
+        const { error } = await supabase.auth.getSession();
+        const t1 = performance.now();
+        results.push({
+          label: 'Supabase Auth reachable',
+          ok: !error,
+          detail: error ? error.message : 'ok',
+          ms: Math.round(t1 - t0),
+        });
+      } catch (e: any) {
+        const t1 = performance.now();
         results.push({
           label: 'Supabase Auth reachable',
           ok: false,
-          detail: 'client not initialized (missing env)',
+          detail: e?.message || 'unknown error',
+          ms: Math.round(t1 - t0),
         });
       }
 
       // 3) Safe DB probe (treat "no table yet" as OK during bootstrap)
-      if (supabase) {
-        const dbTimer = startTimer();
-        let ok = false;
-        let detail = '';
-        try {
-          // try profiles first
-          const { data, error, status } = await supabase
-            .from('profiles')
-            .select('id')
-            .limit(1);
+      const t0 = performance.now();
+      let ok = false;
+      let detail = '';
+      try {
+        // try profiles first
+        const { data, error, status } = await supabase
+          .from('profiles')
+          .select('id')
+          .limit(1);
 
-          if (error) {
-            const notFound =
-              (error as any)?.code === '42P01' || // relation does not exist
-              status === 404 ||
-              /relation .* does not exist/i.test(error.message) ||
-              /schema cache/i.test(error.message);
+        if (error) {
+          const notFound =
+            (error as any)?.code === '42P01' || // relation does not exist
+            status === 404 ||
+            /relation .* does not exist/i.test(error.message) ||
+            /schema cache/i.test(error.message);
 
-            if (notFound) {
-              // try users as an alternate common table name
-              const retry = await supabase.from('users').select('id').limit(1);
-              if (retry.error) {
-                const alsoNotFound =
-                  (retry.error as any)?.code === '42P01' ||
-                  retry.status === 404 ||
-                  /relation .* does not exist/i.test(retry.error.message) ||
-                  /schema cache/i.test(retry.error.message);
+          if (notFound) {
+            // try users as an alternate common table name
+            const retry = await supabase.from('users').select('id').limit(1);
+            if (retry.error) {
+              const alsoNotFound =
+                (retry.error as any)?.code === '42P01' ||
+                retry.status === 404 ||
+                /relation .* does not exist/i.test(retry.error.message) ||
+                /schema cache/i.test(retry.error.message);
 
-                if (alsoNotFound) {
-                  // ✅ Bootstrap mode: No tables yet is acceptable for health
-                  ok = true;
-                  detail =
-                    'No public tables yet — bootstrap mode (OK: skipped). Create tables later.';
-                } else {
-                  ok = false;
-                  detail = `users error: ${retry.error.message} (status ${retry.status})`;
-                }
-              } else {
+              if (alsoNotFound) {
+                // ✅ Bootstrap mode: No tables yet is acceptable for health
                 ok = true;
-                detail = `users ok (${retry.data?.length || 0} rows visible)`;
+                detail =
+                  'No public tables yet — bootstrap mode (OK: skipped). Create tables later.';
+              } else {
+                ok = false;
+                detail = `users error: ${retry.error.message} (status ${retry.status})`;
               }
             } else {
-              ok = false;
-              detail = `profiles error: ${error.message} (status ${status})`;
+              ok = true;
+              detail = `users ok (${retry.data?.length || 0} rows visible)`;
             }
           } else {
-            ok = true;
-            detail = `profiles ok (${data?.length || 0} rows visible)`;
-          }
-        } catch (e: any) {
-          // If server says table/view missing in any other phrasing, still skip as OK.
-          const msg = `${e?.message || ''}`;
-          if (/relation .* does not exist/i.test(msg) || /schema cache/i.test(msg)) {
-            ok = true;
-            detail =
-              'No public tables yet — bootstrap mode (OK: skipped). Create tables later.';
-          } else {
             ok = false;
-            detail = msg || 'unknown db error';
+            detail = `profiles error: ${error.message} (status ${status})`;
           }
+        } else {
+          ok = true;
+          detail = `profiles ok (${data?.length || 0} rows visible)`;
         }
-        const ms = dbTimer();
-        results.push({
-          label: 'Database probe (bootstrap-safe)',
-          ok,
-          detail,
-          ms,
-        });
-      } else {
-        results.push({
-          label: 'Database probe (bootstrap-safe)',
-          ok: false,
-          detail: 'client not initialized (missing env)',
-        });
+      } catch (e: any) {
+        // If server says table/view missing in any other phrasing, still skip as OK.
+        const msg = `${e?.message || ''}`;
+        if (/relation .* does not exist/i.test(msg) || /schema cache/i.test(msg)) {
+          ok = true;
+          detail =
+            'No public tables yet — bootstrap mode (OK: skipped). Create tables later.';
+        } else {
+          ok = false;
+          detail = msg || 'unknown db error';
+        }
       }
+      const t1 = performance.now();
+      results.push({
+        label: 'Database probe (bootstrap-safe)',
+        ok,
+        detail,
+        ms: Math.round(t1 - t0),
+      });
 
       setProbes(results);
     };
