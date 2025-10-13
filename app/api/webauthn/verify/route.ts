@@ -124,6 +124,19 @@ function resolveAccessToken(
     return cookieToken;
   }
 
+  const legacyCookie = cookieStore.get("supabase-auth-token")?.value;
+  if (legacyCookie) {
+    try {
+      const parsed = JSON.parse(legacyCookie);
+      const legacyToken = parsed?.access_token;
+      if (typeof legacyToken === "string" && legacyToken.length > 0) {
+        return legacyToken;
+      }
+    } catch (error) {
+      console.error("[webauthn/verify] failed to parse supabase-auth-token", error);
+    }
+  }
+
   throw new UnauthorizedError();
 }
 
