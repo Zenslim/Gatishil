@@ -1,0 +1,15 @@
+{
+  "release-type": "node",
+  "packages": {
+    ".": {
+      "component": "web",
+      "extra-files": [
+        {
+          "type": "json",
+          "path": "package.json",
+          "jsonpath": "$.version"
+        }
+      ]
+    }
+  }
+}

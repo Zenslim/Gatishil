@@ -1,0 +1,31 @@
+# ==== RE2 REGEX PATH EXCLUDES (TruffleHog v3) ====
+# Folders (repo-root relative)
+^docs/
+^examples?/
+^tests?/
+^__tests__/
+^fixtures?/
+^spec/
+^cypress/
+^e2e/
+^public/
+^assets?/
+
+# Binary / asset extensions (match file paths)
+\.png$
+\.jpg$
+\.jpeg$
+\.svg$
+\.webp$
+\.gif$
+\.mp4$
+\.mov$
+\.ico$
+\.pdf$
+\.woff2?$
+
+# NOTE:
+# - These are *path* regexes only. Do not add token/text patterns here.
+# - TruffleHog v3 reads this file when called with:
+#     --exclude-paths .trufflehogignore
+# - Keep patterns anchored (^) and use $ for extensions.

@@ -1,0 +1,5 @@
+// package.json NOTE (merge manually if needed):
+// Ensure you have @simplewebauthn/server installed in dependencies:
+//   "dependencies": {
+//     "@simplewebauthn/server": "^10.0.0"
+//   }
