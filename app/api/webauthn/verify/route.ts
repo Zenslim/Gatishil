@@ -1,92 +1,138 @@
-// app/api/webauthn/verify/route.ts
+// Next.js 14 App Router – WebAuthn Registration Verify
 export const runtime = "nodejs";
 
+import { headers, cookies } from "next/headers";
 import { NextResponse } from "next/server";
+import { createServerClient } from "@supabase/ssr";
+import type { Database } from "@/types/supabase";
 
 import {
-  clearChallengeCookie,
   deriveRpID,
   expectedOrigins,
-  extractRegistrationCredential,
   readChallengeCookie,
-} from "../../../../lib/webauthn";
+  clearChallengeCookie,
+  extractRegistrationCredential,
+  toBase64Url,
+} from "@/lib/webauthn";
+
+import { verifyRegistrationResponse } from "@simplewebauthn/server";
+import type { RegistrationResponseJSON } from "@simplewebauthn/types";
+
+function supabaseServer() {
+  const cookieStore = cookies();
+  return createServerClient<Database>(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        get(name: string) { return cookieStore.get(name)?.value; },
+        set(name: string, value: string, options: any) { cookieStore.set({ name, value, ...options }); },
+        remove(name: string, options: any) { cookieStore.set({ name, value: "", ...options }); },
+      },
+    }
+  );
+}
 
 export async function POST(req: Request) {
   try {
-    const host = req.headers.get("host");
-    if (!host) {
-      return NextResponse.json({ ok: false, error: "Missing Host header" }, { status: 400 });
-    }
+    const hdrs = headers();
+    const host = hdrs.get("host");
+    const cookieHeader = hdrs.get("cookie");
     const rpID = deriveRpID(host);
+    const origins = Array.from(expectedOrigins);
 
-    const body = await req.json().catch(() => null);
-    if (!body || typeof body !== "object") {
-      return NextResponse.json(
-        { ok: false, error: "Invalid payload", detail: "Body must be JSON" },
-        { status: 400 }
-      );
-    }
-
-    const credential = extractRegistrationCredential(body);
+    const payload = await req.json();
+    const credential: RegistrationResponseJSON | null = extractRegistrationCredential(payload);
     if (!credential) {
-      return NextResponse.json(
-        {
-          ok: false,
-          error: "Invalid payload",
-          detail: "Missing WebAuthn credential (id, rawId, response, type)",
-        },
-        { status: 400 }
-      );
+      return NextResponse.json({ ok: false, error: "Bad payload" }, { status: 400 });
     }
 
-    // Dynamic import so module/runtime errors show up as JSON (not opaque 500)
-    let verifyRegistrationResponse: any;
-    try {
-      const mod: any = await import("@simplewebauthn/server");
-      verifyRegistrationResponse = mod.verifyRegistrationResponse || mod.default?.verifyRegistrationResponse;
-      if (!verifyRegistrationResponse) throw new Error("verifyRegistrationResponse not found");
-    } catch (e: any) {
-      return NextResponse.json(
-        { ok: false, error: "ImportError: @simplewebauthn/server", detail: String(e?.message || e) },
-        { status: 500 }
-      );
+    const challenge = readChallengeCookie(cookieHeader);
+    if (!challenge) {
+      return NextResponse.json({ ok: false, error: "Missing challenge" }, { status: 400 });
     }
 
-    // Read and validate challenge from cookie
-    const cookieHeader = req.headers.get("cookie") || "";
-    const expectedChallenge = readChallengeCookie(cookieHeader);
-    if (!expectedChallenge) {
-      return NextResponse.json({ ok: false, error: "Missing or expired challenge" }, { status: 400 });
+    const supabase = supabaseServer();
+    const { data: { user }, error: userErr } = await supabase.auth.getUser();
+    if (userErr || !user) {
+      return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
     }
 
     const verification = await verifyRegistrationResponse({
-      expectedChallenge,
-      expectedOrigin: Array.from(expectedOrigins),
+      expectedChallenge: challenge,
+      expectedOrigin: origins,
       expectedRPID: rpID,
       response: credential,
-      requireUserVerification: true,
+      requireUserVerification: false,
     });
 
-    if (!verification.verified) {
-      return NextResponse.json(
-        {
-          ok: false,
-          error: "Verification failed",
-          detail: verification.error || "@simplewebauthn/server returned verified=false",
-        },
-        { status: 400 }
-      );
+    if (!verification.verified || !verification.registrationInfo) {
+      return NextResponse.json({ ok: false, error: "Verification failed" }, { status: 400 });
     }
 
-    // Clear challenge cookie
-    const res = NextResponse.json({ ok: true });
+    const {
+      credentialID,
+      credentialPublicKey,
+      counter,
+      credentialDeviceType,
+      credentialBackedUp,
+      credentialTransports,
+    } = verification.registrationInfo;
+
+    const credIdStr = toBase64Url(credentialID);
+    const pubKeyStr = toBase64Url(credentialPublicKey);
+
+    // 1) Upsert the new credential
+    const { error: upsertErr } = await supabase
+      .from("webauthn_credentials")
+      .upsert(
+        {
+          user_id: user.id,
+          credential_id: credIdStr,
+          public_key: pubKeyStr,
+          counter: counter ?? 0,
+          device_type: credentialDeviceType ?? null,
+          backed_up: credentialBackedUp ?? null,
+          transports: credentialTransports ?? null,
+        },
+        { onConflict: "credential_id" }
+      );
+
+    if (upsertErr) {
+      console.error("[webauthn/verify] credential upsert failed", upsertErr);
+      return NextResponse.json({ ok: false, error: "DB upsert failed" }, { status: 500 });
+    }
+
+    // 2) Update user flags & list
+    const { data: urow, error: urowErr } = await supabase
+      .from("users")
+      .select("passkey_cred_ids")
+      .eq("id", user.id)
+      .single();
+
+    if (urowErr) {
+      console.error("[webauthn/verify] user row load failed", urowErr);
+      return NextResponse.json({ ok: false, error: "User row missing" }, { status: 500 });
+    }
+
+    const ids: string[] = Array.isArray(urow?.passkey_cred_ids) ? urow.passkey_cred_ids : [];
+    if (!ids.includes(credIdStr)) ids.push(credIdStr);
+
+    const { error: userUpdateErr } = await supabase
+      .from("users")
+      .update({ passkey_enabled: true, passkey_cred_ids: ids })
+      .eq("id", user.id);
+
+    if (userUpdateErr) {
+      console.error("[webauthn/verify] users update failed", userUpdateErr);
+      return NextResponse.json({ ok: false, error: "User update failed" }, { status: 500 });
+    }
+
+    const res = NextResponse.json({ ok: true, credential_id: credIdStr });
     clearChallengeCookie(res);
     return res;
   } catch (err: any) {
-    console.error("[webauthn/verify] Verification failed", err);
-    return NextResponse.json(
-      { ok: false, error: "Verification failed", detail: String(err?.message || err) },
-      { status: 500 }
-    );
+    console.error("[webauthn/verify] error", err);
+    return NextResponse.json({ ok: false, error: "Verification exception", detail: String(err?.message || err) }, { status: 500 });
   }
 }
