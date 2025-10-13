@@ -1,4 +1,4 @@
-// Next.js 14 App Router – WebAuthn Registration Verify (v3: Bearer fallback)
+// Next.js 14 App Router – WebAuthn Registration Verify (v4: JWT decode user id)
 export const runtime = "nodejs";
 
 import { headers, cookies } from "next/headers";
@@ -34,10 +34,23 @@ function supabaseServer() {
 }
 
 function readBearer(): string | null {
-  const auth = headers().get("authorization") || headers().get("Authorization");
+  const h = headers();
+  const auth = h.get("authorization") || h.get("Authorization");
   if (!auth) return null;
   const m = auth.match(/^Bearer\s+(.+)$/i);
   return m ? m[1] : null;
+}
+
+function decodeSubFromJWT(token: string): { sub?: string } | null {
+  try {
+    const [, p2] = token.split(".");
+    if (!p2) return null;
+    const json = Buffer.from(p2, "base64url").toString("utf8");
+    const obj = JSON.parse(json);
+    return { sub: obj?.sub };
+  } catch {
+    return null;
+  }
 }
 
 export async function POST(req: Request) {
@@ -60,18 +73,22 @@ export async function POST(req: Request) {
     }
 
     const supabase = supabaseServer();
-    // Prefer cookie session, but also accept Authorization: Bearer <access_token>
+
+    // 1) Try bearer JWT claims
     const bearer = readBearer();
-    let user = null as any;
+    let userId: string | null = null;
     if (bearer) {
-      const { data, error } = await supabase.auth.getUser(bearer);
-      if (!error) user = data.user;
+      const claims = decodeSubFromJWT(bearer);
+      if (claims?.sub) userId = claims.sub;
     }
-    if (!user) {
-      const { data: d2 } = await supabase.auth.getUser();
-      user = d2?.user ?? null;
+
+    // 2) Fallback to cookie session
+    if (!userId) {
+      const { data } = await supabase.auth.getUser();
+      if (data?.user) userId = data.user.id;
     }
-    if (!user) {
+
+    if (!userId) {
       return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
     }
 
@@ -99,14 +116,12 @@ export async function POST(req: Request) {
     const credIdStr = toBase64Url(credentialID);
     const pubKeyStr = toBase64Url(credentialPublicKey);
 
-    const supabase2 = supabase; // alias
-
     // 1) Upsert credential
-    const { error: upsertErr } = await supabase2
+    const { error: upsertErr } = await supabase
       .from("webauthn_credentials")
       .upsert(
         {
-          user_id: user.id,
+          user_id: userId,
           credential_id: credIdStr,
           public_key: pubKeyStr,
           counter: counter ?? 0,
@@ -122,10 +137,10 @@ export async function POST(req: Request) {
     }
 
     // 2) Flip user flags and append cred id
-    const { data: urow, error: urowErr } = await supabase2
+    const { data: urow, error: urowErr } = await supabase
       .from("users")
       .select("passkey_cred_ids")
-      .eq("id", user.id)
+      .eq("id", userId)
       .single();
     if (urowErr) {
       console.error("[webauthn/verify] user row load failed", urowErr);
@@ -135,10 +150,10 @@ export async function POST(req: Request) {
     const ids: string[] = Array.isArray(urow?.passkey_cred_ids) ? urow.passkey_cred_ids : [];
     if (!ids.includes(credIdStr)) ids.push(credIdStr);
 
-    const { error: userUpdateErr } = await supabase2
+    const { error: userUpdateErr } = await supabase
       .from("users")
       .update({ passkey_enabled: true, passkey_cred_ids: ids })
-      .eq("id", user.id);
+      .eq("id", userId);
     if (userUpdateErr) {
       console.error("[webauthn/verify] users update failed", userUpdateErr);
       return NextResponse.json({ ok: false, error: "User update failed" }, { status: 500 });

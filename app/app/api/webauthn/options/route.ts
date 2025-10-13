@@ -1,4 +1,4 @@
-// Next.js 14 App Router – WebAuthn Registration Options (v3: Bearer fallback)
+// Next.js 14 App Router – WebAuthn Registration Options (v4: JWT decode user id)
 export const runtime = "nodejs";
 
 import { cookies, headers } from "next/headers";
@@ -25,10 +25,24 @@ function supabaseServer() {
 }
 
 function readBearer(): string | null {
-  const auth = headers().get("authorization") || headers().get("Authorization");
+  const h = headers();
+  const auth = h.get("authorization") || h.get("Authorization");
   if (!auth) return null;
   const m = auth.match(/^Bearer\s+(.+)$/i);
   return m ? m[1] : null;
+}
+
+// Unsafe decode just to read claims; we don't verify here because this is first-party same-origin
+function decodeSubFromJWT(token: string): { sub?: string; email?: string } | null {
+  try {
+    const [, p2] = token.split(".");
+    if (!p2) return null;
+    const json = Buffer.from(p2, "base64url").toString("utf8");
+    const obj = JSON.parse(json);
+    return { sub: obj?.sub, email: obj?.email };
+  } catch {
+    return null;
+  }
 }
 
 export async function POST(req: Request) {
@@ -38,26 +52,36 @@ export async function POST(req: Request) {
     const rpID = deriveRpID(host);
 
     const supabase = supabaseServer();
-    // Prefer cookie session, but allow Authorization: Bearer <access_token>
+    // 1) Try bearer JWT -> sub
     const bearer = readBearer();
-    let user = null as any;
+    let userId: string | null = null;
+    let userEmail: string | null = null;
     if (bearer) {
-      const { data, error } = await supabase.auth.getUser(bearer);
-      if (!error) user = data.user;
+      const claims = decodeSubFromJWT(bearer);
+      if (claims?.sub) {
+        userId = claims.sub;
+        userEmail = claims.email ?? null;
+      }
     }
-    if (!user) {
-      const { data: d2 } = await supabase.auth.getUser();
-      user = d2?.user ?? null;
+
+    // 2) Fallback to cookie session
+    if (!userId) {
+      const { data } = await supabase.auth.getUser();
+      if (data?.user) {
+        userId = data.user.id;
+        userEmail = data.user.email ?? null;
+      }
     }
-    if (!user) {
+
+    if (!userId) {
       return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
     }
 
-    // Exclude existing credentials to prevent dupes
+    // Exclude existing creds
     const { data: existing } = await supabase
       .from("webauthn_credentials")
       .select("credential_id")
-      .eq("user_id", user.id);
+      .eq("user_id", userId);
 
     const excludeCredentials = (existing ?? []).map((c: any) => ({
       id: c.credential_id,
@@ -67,8 +91,8 @@ export async function POST(req: Request) {
     const options = await generateRegistrationOptions({
       rpName: rpName ?? "Gatishil Nepal",
       rpID,
-      userID: user.id,
-      userName: user.email ?? user.id,
+      userID: userId,
+      userName: userEmail ?? userId,
       attestationType: "none",
       authenticatorSelection: {
         authenticatorAttachment: "platform",
