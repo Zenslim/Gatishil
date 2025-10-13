@@ -20,9 +20,12 @@ export default function TrustStep({ onDone }) {
       try {
         const ok = await window?.PublicKeyCredential?.isUserVerifyingPlatformAuthenticatorAvailable?.();
         setSupported(!!ok);
-      } catch { setSupported(false); }
+      } catch {
+        setSupported(false);
+      }
       try {
-        const r = await fetch('/api/webauthn/ping');
+        // Optional health ping if you have this route; ignore failure gracefully
+        const r = await fetch('/api/webauthn/ping', { credentials: 'include' });
         setServerErr(r.ok ? null : 'Ping failed');
       } catch {
         setServerErr('API unreachable');
@@ -37,25 +40,46 @@ export default function TrustStep({ onDone }) {
     }, 1200);
   };
 
+  // Helper: build headers that carry Supabase session to Route Handlers
+  const authHeaders = async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    const access = session?.access_token;
+    return {
+      'content-type': 'application/json',
+      ...(access ? { Authorization: `Bearer ${access}` } : {}),
+    };
+  };
+
   const doPasskey = async () => {
     setBusy(true); setErr(null); setMsg(null);
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error('Sign-in required');
-      const user = session.user;
 
+      // 1) Get registration options (server reads user from cookie/token)
       const r1 = await fetch('/api/webauthn/options', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: user.id, username: user.email || user.id }),
+        method: 'POST',
+        credentials: 'include',
+        headers: await authHeaders(),
+        body: '{}',
       });
       const j1 = await r1.json().catch(() => ({}));
-      if (!r1.ok) throw new Error(j1?.error || 'Failed to get registration options');
+      if (!r1.ok || !j1) throw new Error(j1?.error || 'Failed to get registration options');
 
-      const att = await startRegistration(j1);
+      // Some handlers return { ok, options }, others return options directly.
+      const options = j1.options ?? j1;
+      if (!options || !options.challenge) throw new Error('Invalid registration options');
 
+      // 2) Create passkey (browser)
+      const attestation = await startRegistration(options);
+      if (!attestation) throw new Error('No credential created');
+
+      // 3) Verify + commit (server)
       const r2 = await fetch('/api/webauthn/verify', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: user.id, response: att }),
+        method: 'POST',
+        credentials: 'include',
+        headers: await authHeaders(),
+        body: JSON.stringify({ credential: attestation }),
       });
       const j2 = await r2.json().catch(() => ({}));
       if (!r2.ok || !j2?.ok) throw new Error(j2?.error || 'Verification failed');
@@ -65,7 +89,9 @@ export default function TrustStep({ onDone }) {
     } catch (e) {
       console.error('Passkey setup failed:', e);
       setErr(e?.message || 'Passkey setup failed');
-    } finally { setBusy(false); }
+    } finally {
+      setBusy(false);
+    }
   };
 
   const doPin = async () => {
@@ -78,7 +104,9 @@ export default function TrustStep({ onDone }) {
     } catch (e) {
       console.error('PIN creation failed:', e);
       setErr(e?.message || 'Could not create PIN');
-    } finally { setBusy(false); }
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
@@ -112,11 +140,17 @@ export default function TrustStep({ onDone }) {
               <div className="space-y-3">
                 <label className="block">
                   <span className="text-sm text-gray-300">Create a 4-digit PIN 🔑</span>
-                  <input type="password" inputMode="numeric" pattern="[0-9]*" maxLength={4}
-                    value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))}
+                  <input
+                    type="password"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    maxLength={4}
+                    value={pin}
+                    onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))}
                     className="mt-1 w-full rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-white
                                placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                    placeholder="••••" />
+                    placeholder="••••"
+                  />
                 </label>
                 <button onClick={doPin} disabled={busy}
                   className="w-full py-3 rounded-xl bg-emerald-500 hover:bg-emerald-600 disabled:opacity-60">
