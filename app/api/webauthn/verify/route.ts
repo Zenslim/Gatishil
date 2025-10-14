@@ -1,4 +1,4 @@
-// Next.js 14 App Router — WebAuthn Registration Verify (self-authenticating)
+// Next.js 14 App Router — WebAuthn Registration Verify (auth via Supabase JWT; writes to user_security)
 export const runtime = 'nodejs';
 
 import { cookies, headers } from 'next/headers';
@@ -33,6 +33,7 @@ function supabaseServer() {
   );
 }
 
+// Read token from cookies or Authorization
 function readAccessToken(): string | null {
   const jar = cookies();
   const h = headers();
@@ -66,6 +67,7 @@ export async function POST(req: Request) {
     const rpID = deriveRpID(host);
     const origins = Array.from(expectedOrigins);
 
+    // 1) Caller identity
     const token = readAccessToken();
     if (!token) return NextResponse.json({ ok: false, error: 'Unauthorized' }, { status: 401 });
     const claims = decodeJWT(token);
@@ -74,6 +76,7 @@ export async function POST(req: Request) {
     if (!userId) return NextResponse.json({ ok: false, error: 'Unauthorized' }, { status: 401 });
     if (exp && exp * 1000 < Date.now()) return NextResponse.json({ ok: false, error: 'Session expired' }, { status: 401 });
 
+    // 2) Payload + challenge
     const payload = await req.json();
     const credential: RegistrationResponseJSON | null = extractRegistrationCredential(payload);
     if (!credential) return NextResponse.json({ ok: false, error: 'Bad payload' }, { status: 400 });
@@ -81,6 +84,7 @@ export async function POST(req: Request) {
     const challenge = readChallengeCookie(cookieHeader);
     if (!challenge) return NextResponse.json({ ok: false, error: 'Missing challenge' }, { status: 400 });
 
+    // 3) Verify attestation
     const verification = await verifyRegistrationResponse({
       expectedChallenge: challenge,
       expectedOrigin: origins,
@@ -88,7 +92,6 @@ export async function POST(req: Request) {
       response: credential,
       requireUserVerification: false,
     });
-
     if (!verification.verified || !verification.registrationInfo) {
       return NextResponse.json({ ok: false, error: 'Verification failed' }, { status: 400 });
     }
@@ -105,8 +108,10 @@ export async function POST(req: Request) {
     const credIdStr = toBase64Url(credentialID);
     const pubKeyStr = toBase64Url(credentialPublicKey);
 
+    // 4) Persist: credentials + user_security
     const supabase = supabaseServer();
 
+    // 4a) Upsert credential (FK → auth.users)
     const { error: upsertErr } = await supabase
       .from('webauthn_credentials')
       .upsert(
@@ -118,6 +123,7 @@ export async function POST(req: Request) {
           device_type: credentialDeviceType ?? null,
           backed_up: credentialBackedUp ?? null,
           transports: credentialTransports ?? null,
+          last_used_at: new Date().toISOString(),
         },
         { onConflict: 'credential_id' }
       );
@@ -126,33 +132,60 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: false, error: 'DB upsert failed' }, { status: 500 });
     }
 
-    const { data: urow, error: urowErr } = await supabase
-      .from('users')
+    // 4b) Upsert/Update user passkey flags in public.user_security
+    // Try load existing flags
+    const { data: secRow, error: secSelErr } = await supabase
+      .from('user_security')
       .select('passkey_cred_ids')
-      .eq('id', userId)
-      .single();
-    if (urowErr) {
-      console.error('[webauthn/verify] user row load failed', urowErr);
-      return NextResponse.json({ ok: false, error: 'User row missing' }, { status: 500 });
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    if (secSelErr && secSelErr.code !== 'PGRST116') { // ignore "No rows" code
+      console.error('[webauthn/verify] user_security select failed', secSelErr);
+      return NextResponse.json({ ok: false, error: 'User security read failed' }, { status: 500 });
     }
 
-    const ids: string[] = Array.isArray(urow?.passkey_cred_ids) ? urow.passkey_cred_ids : [];
-    if (!ids.includes(credIdStr)) ids.push(credIdStr);
-
-    const { error: userUpdateErr } = await supabase
-      .from('users')
-      .update({ passkey_enabled: true, passkey_cred_ids: ids })
-      .eq('id', userId);
-    if (userUpdateErr) {
-      console.error('[webauthn/verify] users update failed', userUpdateErr);
-      return NextResponse.json({ ok: false, error: 'User update failed' }, { status: 500 });
+    if (!secRow) {
+      // No row yet → insert
+      const { error: secInsErr } = await supabase
+        .from('user_security')
+        .insert({
+          user_id: userId,
+          passkey_enabled: true,
+          passkey_cred_ids: [credIdStr],
+          updated_at: new Date().toISOString(),
+        });
+      if (secInsErr) {
+        console.error('[webauthn/verify] user_security insert failed', secInsErr);
+        return NextResponse.json({ ok: false, error: 'User flags insert failed' }, { status: 500 });
+      }
+    } else {
+      // Row exists → idempotent update
+      const ids: string[] = Array.isArray(secRow.passkey_cred_ids) ? secRow.passkey_cred_ids : [];
+      if (!ids.includes(credIdStr)) ids.push(credIdStr);
+      const { error: secUpdErr } = await supabase
+        .from('user_security')
+        .update({
+          passkey_enabled: true,
+          passkey_cred_ids: ids,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('user_id', userId);
+      if (secUpdErr) {
+        console.error('[webauthn/verify] user_security update failed', secUpdErr);
+        return NextResponse.json({ ok: false, error: 'User flags update failed' }, { status: 500 });
+      }
     }
 
+    // 5) Success
     const res = NextResponse.json({ ok: true, credential_id: credIdStr });
     clearChallengeCookie(res);
     return res;
   } catch (err: any) {
     console.error('[webauthn/verify] error', err);
-    return NextResponse.json({ ok: false, error: 'Verification exception', detail: String(err?.message || err) }, { status: 500 });
+    return NextResponse.json(
+      { ok: false, error: 'Verification exception', detail: String(err?.message || err) },
+      { status: 500 }
+    );
   }
 }
