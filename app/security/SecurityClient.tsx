@@ -54,8 +54,12 @@ export default function SecurityClient() {
         <p className="text-xs uppercase tracking-widest text-sky-300/80">GatishilNepal.org</p>
         <h1 className="text-2xl md:text-4xl font-bold mt-2">Security</h1>
         <p className="text-slate-300/90 mt-2">
-          You proved your identity with OTP/email/OAuth. Now set a password so next time your device
-          can unlock it with biometrics (no OTP loops).
+          You proved your identity with OTP or Magic Link/OAuth. Now set a password so next time your device
+          can unlock it with biometrics (no OTP or Magic Link loops).
+        </p>
+        <p className="text-slate-300/90 mt-2">
+          Your device can unlock with Face ID, Touch ID, Android Biometric Prompt, or Windows Hello (laptop + desktop).
+          If that’s not available, your 4-digit PIN works anywhere.
         </p>
 
         {!hasSession ? (
