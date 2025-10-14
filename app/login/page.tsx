@@ -4,12 +4,24 @@ import { getServerSupabase } from '@/lib/supabaseServer';
 
 export const dynamic = 'force-dynamic';
 
-export default async function LoginPage() {
+function safeNext(searchParams?: Record<string, string | string[] | undefined>) {
+  const raw = (searchParams?.next && typeof searchParams.next === 'string')
+    ? searchParams.next
+    : undefined;
+  if (raw && raw.startsWith('/')) return raw;
+  return '/dashboard';
+}
+
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams?: Record<string, string | string[] | undefined>;
+}) {
   const supabase = getServerSupabase();
   const { data } = await supabase.auth.getSession();
 
   if (data?.session) {
-    redirect('/dashboard');
+    redirect(safeNext(searchParams));
   }
 
   return (

@@ -1,7 +1,8 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useRef, useState, useMemo } from 'react';
 import { supabase } from '@/lib/supabaseClient';
+import { useSearchParams } from 'next/navigation';
 
 export default function LoginClient() {
   const [identifier, setIdentifier] = useState(''); // email or phone
@@ -12,6 +13,13 @@ export default function LoginClient() {
   const [err, setErr] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const pwRef = useRef<HTMLInputElement>(null);
+  const search = useSearchParams();
+
+  const nextPath = useMemo(() => {
+    const n = search.get('next');
+    if (n && n.startsWith('/')) return n;
+    return '/dashboard';
+  }, [search]);
 
   // --- Handle login with password ---
   async function doLogin(e: React.FormEvent) {
@@ -30,7 +38,7 @@ export default function LoginClient() {
 
       // Ensure session finalized then hard redirect (avoids stale router state)
       await supabase.auth.getSession();
-      window.location.href = '/dashboard';
+      window.location.href = nextPath;
     } catch (e: any) {
       const m = String(e?.message || '');
       if (/invalid login/i.test(m) || /invalid credentials/i.test(m)) {
@@ -56,10 +64,8 @@ export default function LoginClient() {
     }
     try {
       setOtpLoading(true);
-      const redirectTo =
-        typeof window !== 'undefined'
-          ? `${window.location.origin}/dashboard`
-          : undefined;
+      const site = typeof window !== 'undefined' ? window.location.origin : undefined;
+      const redirectTo = site ? `${site}${nextPath}` : undefined;
 
       const { error } = await supabase.auth.signInWithOtp({
         email: id,
@@ -85,10 +91,8 @@ export default function LoginClient() {
       return;
     }
     try {
-      const redirectTo =
-        typeof window !== 'undefined'
-          ? `${window.location.origin}/login`
-          : undefined;
+      const site = typeof window !== 'undefined' ? window.location.origin : undefined;
+      const redirectTo = site ? `${site}/login?next=${encodeURIComponent(nextPath)}` : undefined;
       const { error } = await supabase.auth.resetPasswordForEmail(id, {
         redirectTo,
       });
