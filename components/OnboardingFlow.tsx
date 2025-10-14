@@ -131,7 +131,7 @@ export default function OnboardingFlow({ lang = 'en' }: Props) {
 
   if (step === 'trust') {
     return (
-      <TrustStep onDone={() => router.replace('/dashboard')} />
+      <TrustStep onDone={() => router.push('/dashboard')} />
     )
   }
 
