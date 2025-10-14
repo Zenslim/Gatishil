@@ -126,7 +126,7 @@ export default function TrustStep({ onDone }) {
         ) : (
           <div className="mt-6">
             <p className="text-sm text-amber-300">
-              This device doesn’t support platform passkeys. Use OTP for now.
+              This device doesn’t support platform passkeys. Use OTP or Magic Link for now.
             </p>
           </div>
         )}
@@ -137,7 +137,7 @@ export default function TrustStep({ onDone }) {
         <div className="mt-6">
           <button onClick={() => (onDone ? onDone() : router.replace('/dashboard'))}
             className="w-full py-3 rounded-xl border border-white/20 hover:bg-white/10">
-            Not now → Use OTP next time
+            Not now → Use OTP or Magic Link next time
           </button>
         </div>
       </div>

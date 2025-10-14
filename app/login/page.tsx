@@ -24,6 +24,12 @@ export default async function LoginPage() {
             You can also tap <span className="whitespace-nowrap">🖐️ Use Biometric</span> to sign in with your passkey,
             or use the <span className="whitespace-nowrap">“Email me a magic link”</span> option.
           </p>
+          <p className="mt-3">
+            Passkeys use your device’s built-in authenticator (Face ID, Touch ID, Android Biometric Prompt, or Windows Hello on laptops and desktops).
+          </p>
+          <p className="mt-2">
+            If biometric isn’t available, use your 4-digit PIN.
+          </p>
         </div>
       </div>
     </>

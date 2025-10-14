@@ -155,8 +155,8 @@ export default function LoginClient() {
               </button>
             </div>
             <p className="mt-1 text-xs text-white/60">
-              Don’t remember setting a password? Click <span className="underline underline-offset-2">Forgot Password</span> to create one now,
-              or use the magic link (no password).
+              Don’t remember setting a password? Click <span className="underline underline-offset-2">Forgot Password</span> to create one now.
+              Verify with OTP or Magic Link to reset, or use the magic link (no password).
             </p>
           </label>
 
@@ -195,6 +195,13 @@ export default function LoginClient() {
           >
             🖐️ Use Biometric
           </button>
+
+          <p className="text-xs text-white/60 mt-2">
+            Passkeys use your device’s built-in authenticator (Face ID, Touch ID, Android Biometric Prompt, or Windows Hello on laptops and desktops).
+          </p>
+          <p className="text-xs text-white/60 mt-1">
+            If biometric isn’t available, use your 4-digit PIN.
+          </p>
 
           {/* Passwordless via email magic link */}
           <button

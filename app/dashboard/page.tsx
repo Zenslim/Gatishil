@@ -142,6 +142,12 @@ export default async function DashboardPage() {
             <div>
               <div className="text-2xl font-semibold">Security</div>
               <p className="text-white/70 mt-1">Passkeys make your visits effortless and safe.</p>
+              <p className="text-white/60 text-sm mt-2">
+                Passkeys use your device’s built-in authenticator (Face ID, Touch ID, Android Biometric Prompt, or Windows Hello on laptops and desktops).
+              </p>
+              <p className="text-white/60 text-sm mt-1">
+                If biometric isn’t available, your 4-digit PIN is the universal fallback.
+              </p>
             </div>
             <a href="/onboard?src=dashboard&step=trust" className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 transition">
               {/* @ts-ignore */}
