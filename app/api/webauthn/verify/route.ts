@@ -1,9 +1,10 @@
-// Next.js 14 App Router — WebAuthn Registration Verify (auth via Supabase JWT; writes to user_security)
+// Next.js 14 App Router — WebAuthn Registration Verify (Service Role + explicit auth.users check)
 export const runtime = 'nodejs';
 
 import { cookies, headers } from 'next/headers';
 import { NextResponse } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
+import { createClient as createSupabaseService } from '@supabase/supabase-js';
 import type { Database } from '@/types/supabase';
 
 import {
@@ -18,7 +19,8 @@ import {
 import { verifyRegistrationResponse } from '@simplewebauthn/server';
 import type { RegistrationResponseJSON } from '@simplewebauthn/types';
 
-function supabaseServer() {
+// ── Cookie-bound SSR client (safe for reads)
+function supabaseSSR() {
   const cookieStore = cookies();
   return createServerClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -33,16 +35,27 @@ function supabaseServer() {
   );
 }
 
-// Read token from cookies or Authorization
+// ── Service Role client (bypasses RLS; NEVER expose this key to the browser)
+function supabaseService() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+  return createSupabaseService<Database>(url, serviceKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+}
+
+// ── Read token from cookies or Authorization
 function readAccessToken(): string | null {
   const jar = cookies();
   const h = headers();
   const sb = jar.get('sb-access-token')?.value;
   if (sb) return sb;
+
   const legacy = jar.get('supabase-auth-token')?.value;
   if (legacy) {
     try { const parsed = JSON.parse(legacy); if (parsed?.access_token) return parsed.access_token as string; } catch {}
   }
+
   const auth = h.get('authorization') || h.get('Authorization');
   if (auth) {
     const m = auth.match(/^Bearer\s+(.+)$/i);
@@ -51,6 +64,7 @@ function readAccessToken(): string | null {
   return null;
 }
 
+// ── Unsafe first-party JWT decode (we only need sub/email/exp)
 function decodeJWT(token: string): { sub?: string; email?: string; exp?: number } | null {
   try {
     const [, p2] = token.split('.');
@@ -92,6 +106,7 @@ export async function POST(req: Request) {
       response: credential,
       requireUserVerification: false,
     });
+
     if (!verification.verified || !verification.registrationInfo) {
       return NextResponse.json({ ok: false, error: 'Verification failed' }, { status: 400 });
     }
@@ -108,11 +123,32 @@ export async function POST(req: Request) {
     const credIdStr = toBase64Url(credentialID);
     const pubKeyStr = toBase64Url(credentialPublicKey);
 
-    // 4) Persist: credentials + user_security
-    const supabase = supabaseServer();
+    // 4) Persist using SERVICE ROLE (bypass RLS/policies)
+    const svc = supabaseService();
 
-    // 4a) Upsert credential (FK → auth.users)
-        const { error: upsertErr } = await supabase
+    // 4a) Assert this user exists in THIS project (avoids FK ambiguity)
+    const { data: authUser, error: authErr } = await svc
+      .from('auth.users' as any) // Supabase exposes auth schema via PostgREST; service key required
+      .select('id')
+      .eq('id', userId)
+      .maybeSingle();
+
+    if (authErr) {
+      console.error('[webauthn/verify] auth.users check failed →', authErr);
+      return NextResponse.json(
+        { ok: false, error: 'Auth lookup failed', detail: authErr },
+        { status: 500 }
+      );
+    }
+    if (!authUser) {
+      return NextResponse.json(
+        { ok: false, error: 'Unknown user for this Supabase project', detail: { userId } },
+        { status: 409 }
+      );
+    }
+
+    // 4b) Upsert credential
+    const { error: upsertErr } = await svc
       .from('webauthn_credentials')
       .upsert(
         {
@@ -129,7 +165,6 @@ export async function POST(req: Request) {
       );
 
     if (upsertErr) {
-      // ⬇️ Surface exact PostgREST/Supabase error so we see what's wrong
       console.error('[webauthn/verify] credential upsert failed →', upsertErr);
       return NextResponse.json(
         {
@@ -146,22 +181,23 @@ export async function POST(req: Request) {
       );
     }
 
-    // 4b) Upsert/Update user passkey flags in public.user_security
-    // Try load existing flags
-    const { data: secRow, error: secSelErr } = await supabase
+    // 4c) Passkey flags (user_security) — still via service role; idempotent
+    const { data: secRow, error: secSelErr } = await svc
       .from('user_security')
       .select('passkey_cred_ids')
       .eq('user_id', userId)
       .maybeSingle();
 
-    if (secSelErr && secSelErr.code !== 'PGRST116') { // ignore "No rows" code
-      console.error('[webauthn/verify] user_security select failed', secSelErr);
-      return NextResponse.json({ ok: false, error: 'User security read failed' }, { status: 500 });
+    if (secSelErr && (secSelErr as any).code !== 'PGRST116') {
+      console.error('[webauthn/verify] user_security select failed →', secSelErr);
+      return NextResponse.json(
+        { ok: false, error: 'User flags read failed', detail: secSelErr },
+        { status: 500 }
+      );
     }
 
     if (!secRow) {
-      // No row yet → insert
-      const { error: secInsErr } = await supabase
+      const { error: secInsErr } = await svc
         .from('user_security')
         .insert({
           user_id: userId,
@@ -170,14 +206,16 @@ export async function POST(req: Request) {
           updated_at: new Date().toISOString(),
         });
       if (secInsErr) {
-        console.error('[webauthn/verify] user_security insert failed', secInsErr);
-        return NextResponse.json({ ok: false, error: 'User flags insert failed' }, { status: 500 });
+        console.error('[webauthn/verify] user_security insert failed →', secInsErr);
+        return NextResponse.json(
+          { ok: false, error: 'User flags insert failed', detail: secInsErr },
+          { status: 500 }
+        );
       }
     } else {
-      // Row exists → idempotent update
       const ids: string[] = Array.isArray(secRow.passkey_cred_ids) ? secRow.passkey_cred_ids : [];
       if (!ids.includes(credIdStr)) ids.push(credIdStr);
-      const { error: secUpdErr } = await supabase
+      const { error: secUpdErr } = await svc
         .from('user_security')
         .update({
           passkey_enabled: true,
@@ -186,8 +224,11 @@ export async function POST(req: Request) {
         })
         .eq('user_id', userId);
       if (secUpdErr) {
-        console.error('[webauthn/verify] user_security update failed', secUpdErr);
-        return NextResponse.json({ ok: false, error: 'User flags update failed' }, { status: 500 });
+        console.error('[webauthn/verify] user_security update failed →', secUpdErr);
+        return NextResponse.json(
+          { ok: false, error: 'User flags update failed', detail: secUpdErr },
+          { status: 500 }
+        );
       }
     }
 
