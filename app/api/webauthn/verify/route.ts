@@ -112,7 +112,7 @@ export async function POST(req: Request) {
     const supabase = supabaseServer();
 
     // 4a) Upsert credential (FK → auth.users)
-    const { error: upsertErr } = await supabase
+        const { error: upsertErr } = await supabase
       .from('webauthn_credentials')
       .upsert(
         {
@@ -127,9 +127,23 @@ export async function POST(req: Request) {
         },
         { onConflict: 'credential_id' }
       );
+
     if (upsertErr) {
-      console.error('[webauthn/verify] credential upsert failed', upsertErr);
-      return NextResponse.json({ ok: false, error: 'DB upsert failed' }, { status: 500 });
+      // ⬇️ Surface exact PostgREST/Supabase error so we see what's wrong
+      console.error('[webauthn/verify] credential upsert failed →', upsertErr);
+      return NextResponse.json(
+        {
+          ok: false,
+          error: 'DB upsert failed',
+          detail: {
+            message: upsertErr.message ?? null,
+            code: upsertErr.code ?? null,
+            hint: upsertErr.hint ?? null,
+            details: upsertErr.details ?? null,
+          },
+        },
+        { status: 500 }
+      );
     }
 
     // 4b) Upsert/Update user passkey flags in public.user_security
