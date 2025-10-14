@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { startRegistration } from '@simplewebauthn/browser';
 import { createBrowserClient } from '@supabase/ssr';
 import { useRouter } from 'next/navigation';
+import { createLocalPin, hasLocalPin } from '@/lib/localPin';
 
 function supabaseBrowser() {
   return createBrowserClient(
@@ -17,6 +18,13 @@ export default function TrustStep({ onDone }) {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState(null);
   const [err, setErr] = useState(null);
+  const [toast, setToast] = useState(null);
+  const [pin, setPin] = useState('');
+  const [pinConfirm, setPinConfirm] = useState('');
+  const [pinErr, setPinErr] = useState(null);
+  const [pinBusy, setPinBusy] = useState(false);
+  const [existingPin, setExistingPin] = useState(false);
+  const [passkeyReady, setPasskeyReady] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
@@ -30,11 +38,22 @@ export default function TrustStep({ onDone }) {
     })();
   }, []);
 
-  const finish = () => {
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    setExistingPin(hasLocalPin());
+  }, []);
+
+  useEffect(() => {
+    if (!toast) return;
+    const id = setTimeout(() => setToast(null), 2200);
+    return () => clearTimeout(id);
+  }, [toast]);
+
+  const goDashboard = () => {
     setTimeout(() => {
       if (onDone) onDone();
-      else router.replace('/dashboard');
-    }, 900);
+      else router.push('/dashboard');
+    }, 650);
   };
 
   const getFreshSession = async () => {
@@ -92,8 +111,8 @@ export default function TrustStep({ onDone }) {
       const j2 = await r2.json().catch(() => ({}));
       if (!r2.ok || !j2?.ok) throw new Error(j2?.error || `Verify failed (${r2.status})`);
 
-      setMsg('🌿 Your voice is now sealed to this device.');
-      finish();
+      setMsg('Passkey ready on this device. Add a PIN to finish.');
+      setPasskeyReady(true);
     } catch (e) {
       console.error('Passkey setup failed:', e);
       setErr(e?.message || 'Passkey setup failed');
@@ -102,13 +121,49 @@ export default function TrustStep({ onDone }) {
     }
   };
 
+  const pinLengthOk = pin.length >= 4 && pin.length <= 8;
+
+  const savePin = async (e) => {
+    e.preventDefault();
+    if (pinBusy) return;
+    setPinErr(null);
+
+    if (!pinLengthOk) {
+      setPinErr('Use a 4-8 digit PIN.');
+      return;
+    }
+    if (pin !== pinConfirm) {
+      setPinErr('PINs do not match.');
+      return;
+    }
+
+    setPinBusy(true);
+    try {
+      await createLocalPin(pin);
+      setExistingPin(true);
+      setToast('Your voice is now sealed to this device.');
+      goDashboard();
+    } catch (error) {
+      console.error('PIN save failed:', error);
+      setPinErr(error?.message || 'Could not save PIN. Try again.');
+    } finally {
+      setPinBusy(false);
+    }
+  };
+
   return (
     <div className="min-h-[80vh] bg-neutral-950 text-white grid place-items-center p-6">
       <div className="w-full max-w-xl p-6 rounded-2xl bg-black/40 border border-white/10">
+        {toast && (
+          <div className="mb-4 rounded-lg bg-emerald-500/15 px-3 py-2 text-sm text-emerald-300">
+            {toast}
+          </div>
+        )}
         <div className="text-4xl mb-2">🌳</div>
         <h2 className="text-2xl font-semibold">Welcome under the tree</h2>
         <p className="text-white/70 mt-2">
-          You’ve shared your name, roots, and skills. Now, let’s seal your voice to this device so it recognizes you every time you return.
+          You’ve shared your name, roots, and skills. Now, let’s seal your voice to this device so it recognizes you every time
+ you return.
         </p>
 
         {supported === null ? (
@@ -122,6 +177,9 @@ export default function TrustStep({ onDone }) {
             <p className="mt-3 text-xs text-white/60">
               Your secret stays on your device. Passkeys make your Chautarī visits effortless.
             </p>
+            {passkeyReady && (
+              <p className="mt-3 text-sm text-emerald-300">Passkey saved for this device.</p>
+            )}
           </div>
         ) : (
           <div className="mt-6">
@@ -134,12 +192,57 @@ export default function TrustStep({ onDone }) {
         {msg && <p className="mt-4 text-emerald-400">{msg}</p>}
         {err && <p className="mt-4 text-red-400">{err}</p>}
 
-        <div className="mt-6">
-          <button onClick={() => (onDone ? onDone() : router.replace('/dashboard'))}
-            className="w-full py-3 rounded-xl border border-white/20 hover:bg-white/10">
-            Not now → Use OTP or Magic Link next time
+        <form className="mt-8 space-y-4" onSubmit={savePin}>
+          <div>
+            <label className="block text-sm font-medium text-gray-300">Create a PIN (4-8 digits)</label>
+            <input
+              value={pin}
+              onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 8))}
+              inputMode="numeric"
+              autoComplete="new-password"
+              className="mt-1 w-full rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              placeholder="••••"
+              maxLength={8}
+              required
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-300">Confirm PIN</label>
+            <input
+              value={pinConfirm}
+              onChange={(e) => setPinConfirm(e.target.value.replace(/\D/g, '').slice(0, 8))}
+              inputMode="numeric"
+              autoComplete="new-password"
+              className="mt-1 w-full rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              placeholder="••••"
+              maxLength={8}
+              required
+            />
+          </div>
+          {pinErr && <p className="text-sm text-red-400">{pinErr}</p>}
+          <button
+            type="submit"
+            disabled={pinBusy}
+            className="w-full py-3 rounded-xl bg-emerald-500 hover:bg-emerald-600 disabled:opacity-60"
+          >
+            {pinBusy ? 'Saving…' : 'Save PIN → Continue'}
           </button>
-        </div>
+          <p className="text-xs text-white/50">
+            We use this PIN whenever biometrics aren’t available. It stays encrypted on this device.
+          </p>
+        </form>
+
+        {existingPin && (
+          <div className="mt-6">
+            <button
+              type="button"
+              onClick={() => { setToast('Your voice is now sealed to this device.'); goDashboard(); }}
+              className="w-full py-3 rounded-xl border border-white/20 hover:bg-white/10"
+            >
+              Keep existing PIN → Continue
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
