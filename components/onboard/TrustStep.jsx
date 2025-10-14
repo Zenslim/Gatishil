@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { startRegistration } from '@simplewebauthn/browser';
+import { startRegistration, platformAuthenticatorIsAvailable } from '@simplewebauthn/browser';
 import { createBrowserClient } from '@supabase/ssr';
 import { useRouter } from 'next/navigation';
 import { createLocalPin, hasLocalPin } from '@/lib/localPin';
@@ -29,11 +29,25 @@ export default function TrustStep({ onDone }) {
 
   useEffect(() => {
     (async () => {
+      if (typeof window === 'undefined') return;
+      if (!window.PublicKeyCredential) {
+        setSupported(false);
+        setPasskeyReady('skip');
+        return;
+      }
+
       try {
-        const ok = await window?.PublicKeyCredential?.isUserVerifyingPlatformAuthenticatorAvailable?.();
-        setSupported(!!ok);
+        const ok = await platformAuthenticatorIsAvailable();
+        if (ok) {
+          setSupported(true);
+          setPasskeyReady(false);
+        } else {
+          setSupported(false);
+          setPasskeyReady('skip');
+        }
       } catch {
         setSupported(false);
+        setPasskeyReady('skip');
       }
     })();
   }, []);
@@ -51,8 +65,8 @@ export default function TrustStep({ onDone }) {
 
   const goDashboard = () => {
     setTimeout(() => {
+      router.push('/dashboard');
       if (onDone) onDone();
-      else router.push('/dashboard');
     }, 650);
   };
 
@@ -111,7 +125,7 @@ export default function TrustStep({ onDone }) {
       const j2 = await r2.json().catch(() => ({}));
       if (!r2.ok || !j2?.ok) throw new Error(j2?.error || `Verify failed (${r2.status})`);
 
-      setMsg('Passkey ready on this device. Add a PIN to finish.');
+      setMsg('Passkey saved for this device. Add a PIN to finish.');
       setPasskeyReady(true);
     } catch (e) {
       console.error('Passkey setup failed:', e);
@@ -122,6 +136,7 @@ export default function TrustStep({ onDone }) {
   };
 
   const pinLengthOk = pin.length >= 4 && pin.length <= 8;
+  const showPinForm = passkeyReady === true || passkeyReady === 'skip';
 
   const savePin = async (e) => {
     e.preventDefault();
@@ -177,9 +192,6 @@ export default function TrustStep({ onDone }) {
             <p className="mt-3 text-xs text-white/60">
               Your secret stays on your device. Passkeys make your Chautarī visits effortless.
             </p>
-            {passkeyReady && (
-              <p className="mt-3 text-sm text-emerald-300">Passkey saved for this device.</p>
-            )}
           </div>
         ) : (
           <div className="mt-6">
@@ -192,56 +204,60 @@ export default function TrustStep({ onDone }) {
         {msg && <p className="mt-4 text-emerald-400">{msg}</p>}
         {err && <p className="mt-4 text-red-400">{err}</p>}
 
-        <form className="mt-8 space-y-4" onSubmit={savePin}>
-          <div>
-            <label className="block text-sm font-medium text-gray-300">Create a PIN (4-8 digits)</label>
-            <input
-              value={pin}
-              onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 8))}
-              inputMode="numeric"
-              autoComplete="new-password"
-              className="mt-1 w-full rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-              placeholder="••••"
-              maxLength={8}
-              required
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-300">Confirm PIN</label>
-            <input
-              value={pinConfirm}
-              onChange={(e) => setPinConfirm(e.target.value.replace(/\D/g, '').slice(0, 8))}
-              inputMode="numeric"
-              autoComplete="new-password"
-              className="mt-1 w-full rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-              placeholder="••••"
-              maxLength={8}
-              required
-            />
-          </div>
-          {pinErr && <p className="text-sm text-red-400">{pinErr}</p>}
-          <button
-            type="submit"
-            disabled={pinBusy}
-            className="w-full py-3 rounded-xl bg-emerald-500 hover:bg-emerald-600 disabled:opacity-60"
-          >
-            {pinBusy ? 'Saving…' : 'Save PIN → Continue'}
-          </button>
-          <p className="text-xs text-white/50">
-            We use this PIN whenever biometrics aren’t available. It stays encrypted on this device.
-          </p>
-        </form>
+        {showPinForm && (
+          <>
+            <form className="mt-8 space-y-4" onSubmit={savePin}>
+              <div>
+                <label className="block text-sm font-medium text-gray-300">Create a PIN (4-8 digits)</label>
+                <input
+                  value={pin}
+                  onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 8))}
+                  inputMode="numeric"
+                  autoComplete="new-password"
+                  className="mt-1 w-full rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  placeholder="••••"
+                  maxLength={8}
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-300">Confirm PIN</label>
+                <input
+                  value={pinConfirm}
+                  onChange={(e) => setPinConfirm(e.target.value.replace(/\D/g, '').slice(0, 8))}
+                  inputMode="numeric"
+                  autoComplete="new-password"
+                  className="mt-1 w-full rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  placeholder="••••"
+                  maxLength={8}
+                  required
+                />
+              </div>
+              {pinErr && <p className="text-sm text-red-400">{pinErr}</p>}
+              <button
+                type="submit"
+                disabled={pinBusy}
+                className="w-full py-3 rounded-xl bg-emerald-500 hover:bg-emerald-600 disabled:opacity-60"
+              >
+                {pinBusy ? 'Saving…' : 'Save PIN → Continue'}
+              </button>
+              <p className="text-xs text-white/50">
+                We use this PIN whenever biometrics aren’t available. It stays encrypted on this device.
+              </p>
+            </form>
 
-        {existingPin && (
-          <div className="mt-6">
-            <button
-              type="button"
-              onClick={() => { setToast('Your voice is now sealed to this device.'); goDashboard(); }}
-              className="w-full py-3 rounded-xl border border-white/20 hover:bg-white/10"
-            >
-              Keep existing PIN → Continue
-            </button>
-          </div>
+            {existingPin && (
+              <div className="mt-6">
+                <button
+                  type="button"
+                  onClick={() => { setToast('Your voice is now sealed to this device.'); goDashboard(); }}
+                  className="w-full py-3 rounded-xl border border-white/20 hover:bg-white/10"
+                >
+                  Keep existing PIN → Continue
+                </button>
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>
