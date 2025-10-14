@@ -1,192 +1,85 @@
-export const runtime = "nodejs";
+// Next.js 14 App Router — WebAuthn Registration Verify (self-authenticating)
+export const runtime = 'nodejs';
 
-import { cookies, headers } from "next/headers";
-import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
-import { verifyRegistrationResponse } from "@simplewebauthn/server";
-import type { RegistrationResponseJSON } from "@simplewebauthn/types";
+import { cookies, headers } from 'next/headers';
+import { NextResponse } from 'next/server';
+import { createServerClient } from '@supabase/ssr';
+import type { Database } from '@/types/supabase';
 
 import {
-  clearChallengeCookie,
   deriveRpID,
   expectedOrigins,
-  extractRegistrationCredential,
   readChallengeCookie,
+  clearChallengeCookie,
+  extractRegistrationCredential,
   toBase64Url,
-} from "@/lib/webauthn";
+} from '@/lib/webauthn';
 
-class UnauthorizedError extends Error {
-  constructor(message = "Unauthorized") {
-    super(message);
-  }
-}
+import { verifyRegistrationResponse } from '@simplewebauthn/server';
+import type { RegistrationResponseJSON } from '@simplewebauthn/types';
 
-type JwtPayload = {
-  sub?: unknown;
-  email?: unknown;
-  exp?: unknown;
-  user_metadata?: { email?: unknown } | null;
-};
-
-type SupabaseIdentity = {
-  userId: string;
-  email: string | null;
-};
-
-function normalizeBase64Url(segment: string): string {
-  const normalized = segment.replace(/-/g, "+").replace(/_/g, "/");
-  const padding = normalized.length % 4 === 0 ? 0 : 4 - (normalized.length % 4);
-  return normalized + "=".repeat(padding);
-}
-
-function decodeJwtPayload(token: string): JwtPayload {
-  const parts = token.split(".");
-  if (parts.length !== 3) {
-    throw new UnauthorizedError();
-  }
-
-  const payloadSegment = normalizeBase64Url(parts[1]);
-
-  try {
-    let json: string;
-    if (typeof Buffer !== "undefined") {
-      json = Buffer.from(payloadSegment, "base64").toString("utf-8");
-    } else if (typeof atob === "function") {
-      const binary = atob(payloadSegment);
-      const bytes = new Uint8Array(binary.length);
-      for (let i = 0; i < binary.length; i += 1) {
-        bytes[i] = binary.charCodeAt(i);
-      }
-      json = new TextDecoder().decode(bytes);
-    } else {
-      throw new Error("No base64 decoder available");
-    }
-
-    const parsed = JSON.parse(json);
-    return parsed && typeof parsed === "object" ? (parsed as JwtPayload) : {};
-  } catch (error) {
-    throw new UnauthorizedError();
-  }
-}
-
-function assertTokenNotExpired(payload: JwtPayload) {
-  const { exp } = payload;
-  if (typeof exp === "number") {
-    if (exp * 1000 <= Date.now()) {
-      throw new UnauthorizedError();
-    }
-  } else if (typeof exp === "string") {
-    const asNumber = Number(exp);
-    if (!Number.isNaN(asNumber) && asNumber * 1000 <= Date.now()) {
-      throw new UnauthorizedError();
-    }
-  }
-}
-
-function extractIdentity(payload: JwtPayload): SupabaseIdentity {
-  const rawSub = payload.sub;
-  if (typeof rawSub !== "string" || rawSub.length === 0) {
-    throw new UnauthorizedError();
-  }
-
-  const primaryEmail = typeof payload.email === "string" ? payload.email : null;
-  const metadataEmail =
-    payload.user_metadata && typeof payload.user_metadata.email === "string"
-      ? payload.user_metadata.email
-      : null;
-
-  return {
-    userId: rawSub,
-    email: primaryEmail || metadataEmail || null,
-  };
-}
-
-function resolveSupabaseIdentity(token: string): SupabaseIdentity {
-  const payload = decodeJwtPayload(token);
-  assertTokenNotExpired(payload);
-  return extractIdentity(payload);
-}
-
-function resolveAccessToken(
-  hdrs: Headers,
-  cookieStore: ReturnType<typeof cookies>,
-): string {
-  const authHeader = hdrs.get("authorization");
-  if (authHeader) {
-    const match = authHeader.match(/^Bearer\s+(.+)$/i);
-    if (match && match[1]) {
-      return match[1].trim();
-    }
-  }
-
-  const cookieToken = cookieStore.get("sb-access-token")?.value;
-  if (cookieToken && cookieToken.length > 0) {
-    return cookieToken;
-  }
-
-  const legacyCookie = cookieStore.get("supabase-auth-token")?.value;
-  if (legacyCookie) {
-    try {
-      const parsed = JSON.parse(legacyCookie);
-      const legacyToken = parsed?.access_token;
-      if (typeof legacyToken === "string" && legacyToken.length > 0) {
-        return legacyToken;
-      }
-    } catch (error) {
-      console.error("[webauthn/verify] failed to parse supabase-auth-token", error);
-    }
-  }
-
-  throw new UnauthorizedError();
-}
-
-function createSupabaseClient(accessToken: string) {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-  if (!url || !anon) {
-    throw new Error("Missing Supabase environment variables");
-  }
-
-  return createClient(url, anon, {
-    global: {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
+function supabaseServer() {
+  const cookieStore = cookies();
+  return createServerClient<Database>(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        get(name: string) { return cookieStore.get(name)?.value; },
+        set(name: string, value: string, options: any) { cookieStore.set({ name, value, ...options }); },
+        remove(name: string, options: any) { cookieStore.set({ name, value: '', ...options }); },
       },
-    },
-    auth: {
-      persistSession: false,
-      autoRefreshToken: false,
-      detectSessionInUrl: false,
-    },
-  });
+    }
+  );
+}
+
+function readAccessToken(): string | null {
+  const jar = cookies();
+  const h = headers();
+  const sb = jar.get('sb-access-token')?.value;
+  if (sb) return sb;
+  const legacy = jar.get('supabase-auth-token')?.value;
+  if (legacy) {
+    try { const parsed = JSON.parse(legacy); if (parsed?.access_token) return parsed.access_token as string; } catch {}
+  }
+  const auth = h.get('authorization') || h.get('Authorization');
+  if (auth) {
+    const m = auth.match(/^Bearer\s+(.+)$/i);
+    if (m) return m[1];
+  }
+  return null;
+}
+
+function decodeJWT(token: string): { sub?: string; email?: string; exp?: number } | null {
+  try {
+    const [, p2] = token.split('.');
+    if (!p2) return null;
+    const json = Buffer.from(p2, 'base64url').toString('utf8');
+    return JSON.parse(json);
+  } catch { return null; }
 }
 
 export async function POST(req: Request) {
-  const hdrs = headers();
-  const cookieStore = cookies();
-
   try {
-    const accessToken = resolveAccessToken(hdrs, cookieStore);
-    const { userId } = resolveSupabaseIdentity(accessToken);
-
-    const host = hdrs.get("host");
-    const cookieHeader = hdrs.get("cookie");
+    const host = headers().get('host');
+    const cookieHeader = headers().get('cookie');
     const rpID = deriveRpID(host);
     const origins = Array.from(expectedOrigins);
 
+    const token = readAccessToken();
+    if (!token) return NextResponse.json({ ok: false, error: 'Unauthorized' }, { status: 401 });
+    const claims = decodeJWT(token);
+    const userId = claims?.sub;
+    const exp = claims?.exp ?? null;
+    if (!userId) return NextResponse.json({ ok: false, error: 'Unauthorized' }, { status: 401 });
+    if (exp && exp * 1000 < Date.now()) return NextResponse.json({ ok: false, error: 'Session expired' }, { status: 401 });
+
     const payload = await req.json();
     const credential: RegistrationResponseJSON | null = extractRegistrationCredential(payload);
-    if (!credential) {
-      return NextResponse.json({ ok: false, error: "Bad payload" }, { status: 400 });
-    }
+    if (!credential) return NextResponse.json({ ok: false, error: 'Bad payload' }, { status: 400 });
 
     const challenge = readChallengeCookie(cookieHeader);
-    if (!challenge) {
-      return NextResponse.json({ ok: false, error: "Missing challenge" }, { status: 400 });
-    }
-
-    const supabase = createSupabaseClient(accessToken);
+    if (!challenge) return NextResponse.json({ ok: false, error: 'Missing challenge' }, { status: 400 });
 
     const verification = await verifyRegistrationResponse({
       expectedChallenge: challenge,
@@ -197,7 +90,7 @@ export async function POST(req: Request) {
     });
 
     if (!verification.verified || !verification.registrationInfo) {
-      return NextResponse.json({ ok: false, error: "Verification failed" }, { status: 400 });
+      return NextResponse.json({ ok: false, error: 'Verification failed' }, { status: 400 });
     }
 
     const {
@@ -212,8 +105,10 @@ export async function POST(req: Request) {
     const credIdStr = toBase64Url(credentialID);
     const pubKeyStr = toBase64Url(credentialPublicKey);
 
-    const { error: upsertError } = await supabase
-      .from("webauthn_credentials")
+    const supabase = supabaseServer();
+
+    const { error: upsertErr } = await supabase
+      .from('webauthn_credentials')
       .upsert(
         {
           user_id: userId,
@@ -224,50 +119,40 @@ export async function POST(req: Request) {
           backed_up: credentialBackedUp ?? null,
           transports: credentialTransports ?? null,
         },
-        { onConflict: "credential_id" },
+        { onConflict: 'credential_id' }
       );
-
-    if (upsertError) {
-      console.error("[webauthn/verify] credential upsert failed", upsertError);
-      return NextResponse.json({ ok: false, error: "DB upsert failed" }, { status: 500 });
+    if (upsertErr) {
+      console.error('[webauthn/verify] credential upsert failed', upsertErr);
+      return NextResponse.json({ ok: false, error: 'DB upsert failed' }, { status: 500 });
     }
 
-    const { data: userRow, error: userRowError } = await supabase
-      .from("users")
-      .select("passkey_cred_ids")
-      .eq("id", userId)
+    const { data: urow, error: urowErr } = await supabase
+      .from('users')
+      .select('passkey_cred_ids')
+      .eq('id', userId)
       .single();
-
-    if (userRowError) {
-      console.error("[webauthn/verify] user row load failed", userRowError);
-      return NextResponse.json({ ok: false, error: "User row missing" }, { status: 500 });
+    if (urowErr) {
+      console.error('[webauthn/verify] user row load failed', urowErr);
+      return NextResponse.json({ ok: false, error: 'User row missing' }, { status: 500 });
     }
 
-    const ids: string[] = Array.isArray(userRow?.passkey_cred_ids) ? userRow.passkey_cred_ids : [];
+    const ids: string[] = Array.isArray(urow?.passkey_cred_ids) ? urow.passkey_cred_ids : [];
     if (!ids.includes(credIdStr)) ids.push(credIdStr);
 
-    const { error: userUpdateError } = await supabase
-      .from("users")
+    const { error: userUpdateErr } = await supabase
+      .from('users')
       .update({ passkey_enabled: true, passkey_cred_ids: ids })
-      .eq("id", userId);
-
-    if (userUpdateError) {
-      console.error("[webauthn/verify] users update failed", userUpdateError);
-      return NextResponse.json({ ok: false, error: "User update failed" }, { status: 500 });
+      .eq('id', userId);
+    if (userUpdateErr) {
+      console.error('[webauthn/verify] users update failed', userUpdateErr);
+      return NextResponse.json({ ok: false, error: 'User update failed' }, { status: 500 });
     }
 
-    const response = NextResponse.json({ ok: true, credential_id: credIdStr });
-    clearChallengeCookie(response);
-    return response;
-  } catch (error) {
-    if (error instanceof UnauthorizedError) {
-      return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
-    }
-
-    console.error("[webauthn/verify] error", error);
-    return NextResponse.json(
-      { ok: false, error: "Verification exception" },
-      { status: 500 },
-    );
+    const res = NextResponse.json({ ok: true, credential_id: credIdStr });
+    clearChallengeCookie(res);
+    return res;
+  } catch (err: any) {
+    console.error('[webauthn/verify] error', err);
+    return NextResponse.json({ ok: false, error: 'Verification exception', detail: String(err?.message || err) }, { status: 500 });
   }
 }
