@@ -1,4 +1,4 @@
-// Next.js 14 App Router — WebAuthn Registration Verify (Service Role + explicit auth.users check)
+// Next.js 14 App Router — WebAuthn Registration Verify (Service Role + Auth Admin API check)
 export const runtime = 'nodejs';
 
 import { cookies, headers } from 'next/headers';
@@ -19,7 +19,7 @@ import {
 import { verifyRegistrationResponse } from '@simplewebauthn/server';
 import type { RegistrationResponseJSON } from '@simplewebauthn/types';
 
-// ── Cookie-bound SSR client (safe for reads)
+// ── Cookie-bound SSR client (reads under anon/edge context)
 function supabaseSSR() {
   const cookieStore = cookies();
   return createServerClient<Database>(
@@ -35,7 +35,7 @@ function supabaseSSR() {
   );
 }
 
-// ── Service Role client (bypasses RLS; NEVER expose this key to the browser)
+// ── Service Role client (bypasses RLS; NEVER expose key to browser)
 function supabaseService() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -64,7 +64,7 @@ function readAccessToken(): string | null {
   return null;
 }
 
-// ── Unsafe first-party JWT decode (we only need sub/email/exp)
+// ── Unsafe first-party decode (we only need sub/email/exp)
 function decodeJWT(token: string): { sub?: string; email?: string; exp?: number } | null {
   try {
     const [, p2] = token.split('.');
@@ -126,21 +126,16 @@ export async function POST(req: Request) {
     // 4) Persist using SERVICE ROLE (bypass RLS/policies)
     const svc = supabaseService();
 
-    // 4a) Assert this user exists in THIS project (avoids FK ambiguity)
-    const { data: authUser, error: authErr } = await svc
-      .from('auth.users' as any) // Supabase exposes auth schema via PostgREST; service key required
-      .select('id')
-      .eq('id', userId)
-      .maybeSingle();
-
-    if (authErr) {
-      console.error('[webauthn/verify] auth.users check failed →', authErr);
+    // 4a) Assert the user exists in this project using Auth Admin API
+    const { data: userAdmin, error: adminErr } = await svc.auth.admin.getUserById(userId);
+    if (adminErr) {
+      console.error('[webauthn/verify] auth admin getUserById failed →', adminErr);
       return NextResponse.json(
-        { ok: false, error: 'Auth lookup failed', detail: authErr },
+        { ok: false, error: 'Auth lookup failed', detail: adminErr },
         { status: 500 }
       );
     }
-    if (!authUser) {
+    if (!userAdmin?.user) {
       return NextResponse.json(
         { ok: false, error: 'Unknown user for this Supabase project', detail: { userId } },
         { status: 409 }
@@ -181,13 +176,14 @@ export async function POST(req: Request) {
       );
     }
 
-    // 4c) Passkey flags (user_security) — still via service role; idempotent
+    // 4c) Passkey flags (user_security) — via service role; idempotent
     const { data: secRow, error: secSelErr } = await svc
       .from('user_security')
       .select('passkey_cred_ids')
       .eq('user_id', userId)
       .maybeSingle();
 
+    // Ignore "No rows" code; otherwise surface details
     if (secSelErr && (secSelErr as any).code !== 'PGRST116') {
       console.error('[webauthn/verify] user_security select failed →', secSelErr);
       return NextResponse.json(
