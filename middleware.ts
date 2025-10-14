@@ -23,9 +23,21 @@ function resolveAccessToken(req: NextRequest): string | null {
 }
 
 const PROTECTED_PATHS = ['/dashboard'];
+const AUTH_COOKIE_NAMES = ['sb-access-token', 'sb-refresh-token', 'supabase-auth-token'];
 
 function isProtectedPath(pathname: string) {
   return PROTECTED_PATHS.some((path) => pathname === path || pathname.startsWith(`${path}/`));
+}
+
+function clearAuthCookies(response: NextResponse) {
+  for (const name of AUTH_COOKIE_NAMES) {
+    response.cookies.set({
+      name,
+      value: '',
+      path: '/',
+      expires: new Date(0),
+    });
+  }
 }
 
 export async function middleware(req: NextRequest) {
@@ -45,35 +57,40 @@ export async function middleware(req: NextRequest) {
     return res;
   }
 
+  if (!isProtectedPath(req.nextUrl.pathname)) {
+    return NextResponse.next();
+  }
+
   const res = NextResponse.next();
 
-  if (isProtectedPath(req.nextUrl.pathname)) {
-    const supabase = createServerClient<any>(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          get(name: string) {
-            return req.cookies.get(name)?.value;
-          },
-          set(name: string, value: string, options: any) {
-            res.cookies.set({ name, value, ...options });
-          },
-          remove(name: string, options: any) {
-            res.cookies.set({ name, value: '', ...options, maxAge: 0 });
-          },
+  const supabase = createServerClient<any>(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        get(name: string) {
+          return req.cookies.get(name)?.value;
         },
-      }
-    );
-
-    const { data: { user }, error } = await supabase.auth.getUser();
-
-    if (error || !user) {
-      const loginUrl = new URL('/login', req.nextUrl);
-      const nextPath = `${req.nextUrl.pathname}${req.nextUrl.search}`;
-      loginUrl.searchParams.set('next', nextPath);
-      return NextResponse.redirect(loginUrl);
+        set(name: string, value: string, options: any) {
+          res.cookies.set({ name, value, ...options });
+        },
+        remove(name: string, options: any) {
+          res.cookies.set({ name, value: '', ...options, maxAge: 0 });
+        },
+      },
     }
+  );
+
+  const { data: { user }, error } = await supabase.auth.getUser();
+
+  if (error || !user) {
+    const loginUrl = new URL('/login', req.nextUrl);
+    const nextPath = `${req.nextUrl.pathname}${req.nextUrl.search}`;
+    loginUrl.searchParams.set('next', nextPath);
+
+    const redirectResponse = NextResponse.redirect(loginUrl);
+    clearAuthCookies(redirectResponse);
+    return redirectResponse;
   }
 
   return res;
