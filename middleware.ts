@@ -1,45 +1,78 @@
-import { NextResponse } from "next/server";
-import type { NextRequest } from "next/server";
+import { NextResponse } from "next/server"
+import type { NextRequest } from "next/server"
 
+/**
+ * Minimal session detector for Supabase on the Edge.
+ * Reads cookies; does not mutate them (middleware is read-only for cookies).
+ */
 function hasSupabaseSession(req: NextRequest): boolean {
-  const sb = req.cookies.get("sb-access-token")?.value;
-  if (sb) return true;
+  // Newer cookie set by @supabase/ssr helpers
+  const sb = req.cookies.get("sb-access-token")?.value
+  if (sb) return true
 
-  const legacy = req.cookies.get("supabase-auth-token")?.value;
-  if (!legacy) return false;
+  // Legacy GoTrue cookie (JSON with access_token)
+  const legacy = req.cookies.get("supabase-auth-token")?.value
+  if (!legacy) return false
   try {
-    const parsed = JSON.parse(legacy);
-    return typeof parsed?.access_token === "string" && parsed.access_token.length > 0;
+    const parsed = JSON.parse(legacy)
+    return typeof parsed?.access_token === "string" && parsed.access_token.length > 0
   } catch {
-    return false;
+    return false
   }
 }
 
-export function middleware(req: NextRequest) {
-  const { pathname, search } = req.nextUrl;
+export async function middleware(req: NextRequest) {
+  const url = req.nextUrl
+  const { pathname, search } = url
 
-  // Allow static assets and auth callbacks freely
-  if (
-    pathname.startsWith("/_next") ||
-    pathname.startsWith("/static") ||
-    pathname.startsWith("/favicon") ||
-    pathname.startsWith("/auth/callback") ||
-    pathname.startsWith("/api/webauthn")
-  ) {
-    return NextResponse.next();
+  // (1) Canonicalize host: force apex domain to keep cookies + WebAuthn RP ID aligned
+  if (url.hostname === "www.gatishilnepal.org") {
+    url.hostname = "gatishilnepal.org"
+    return NextResponse.redirect(url, 301)
   }
 
-  // ONLY guard dashboard/settings (keep /onboard and /join open pre-login)
+  // (2) Skip static assets and general APIs (APIs handle auth themselves)
+  if (
+    pathname.startsWith("/_next") ||
+    pathname.startsWith("/favicon") ||
+    pathname.startsWith("/assets") ||
+    pathname.startsWith("/images") ||
+    pathname.startsWith("/fonts") ||
+    pathname === "/robots.txt" ||
+    pathname === "/sitemap.xml" ||
+    pathname.startsWith("/api") // let routes API-enforce as needed
+  ) {
+    return NextResponse.next()
+  }
+
+  // (3) Public routes — always allowed without a session
+  const publicPaths = new Set<string>(["/", "/join", "/login", "/about", "/contact"])
+  if (publicPaths.has(pathname)) {
+    return NextResponse.next()
+  }
+
+  // (4) Require session for onboarding (includes Trust Step: ?step=trust)
+  if (pathname === "/onboard") {
+    if (!hasSupabaseSession(req)) {
+      const next = encodeURIComponent(pathname + search)
+      return NextResponse.redirect(new URL(`/login?next=${next || "/onboard"}`, req.url))
+    }
+    return NextResponse.next()
+  }
+
+  // (5) Protect app areas
   if (pathname.startsWith("/dashboard") || pathname.startsWith("/settings")) {
     if (!hasSupabaseSession(req)) {
-      const next = encodeURIComponent(pathname + search);
-      return NextResponse.redirect(new URL(`/login?next=${next}`, req.url));
+      const next = encodeURIComponent(pathname + search)
+      return NextResponse.redirect(new URL(`/login?next=${next || "/dashboard"}`, req.url))
     }
   }
 
-  return NextResponse.next();
+  // (6) Default: allow
+  return NextResponse.next()
 }
 
 export const config = {
-  matcher: ["/((?!_next|static|favicon.ico).*)"],
-};
+  // Run on all routes so we can canonicalize host; static/assets/api are short-circuited above.
+  matcher: "/:path*",
+}
