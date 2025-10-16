@@ -1,87 +1,47 @@
-import { NextResponse, type NextRequest } from 'next/server';
-import { createServerClient } from '@supabase/ssr';
+import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
 
-// ⚠️ This middleware NEVER redirects or rewrites.
-// It only refreshes Supabase cookies so server components (e.g., /dashboard)
-// can see an up-to-date session. That makes it loop-proof.
+function hasSupabaseSession(req: NextRequest): boolean {
+  const sb = req.cookies.get("sb-access-token")?.value;
+  if (sb) return true;
 
-export async function middleware(req: NextRequest) {
-  const url = req.nextUrl;
-  const pathname = url.pathname;
+  const legacy = req.cookies.get("supabase-auth-token")?.value;
+  if (!legacy) return false;
+  try {
+    const parsed = JSON.parse(legacy);
+    return typeof parsed?.access_token === "string" && parsed.access_token.length > 0;
+  } catch {
+    return false;
+  }
+}
 
-  // Skip static and obvious non-HTML assets early (cheap exit).
+export function middleware(req: NextRequest) {
+  const { pathname, search } = req.nextUrl;
+
+  // Allow static assets and auth callbacks freely
   if (
-    pathname.startsWith('/_next/static') ||
-    pathname.startsWith('/_next/image') ||
-    pathname.startsWith('/assets') ||
-    pathname.startsWith('/images') ||
-    pathname === '/favicon.ico' ||
-    pathname === '/robots.txt' ||
-    pathname === '/sitemap.xml'
+    pathname.startsWith("/_next") ||
+    pathname.startsWith("/static") ||
+    pathname.startsWith("/favicon") ||
+    pathname.startsWith("/auth/callback") ||
+    pathname.startsWith("/api/webauthn")
   ) {
     return NextResponse.next();
   }
 
-  // Prepare a pass-through response. We only add cookies to it.
-  const res = NextResponse.next();
-
-  // Compute a safe cookie domain:
-  // - On production apex/www, use a shared domain for both hosts.
-  // - On previews (vercel.app) or localhost, omit domain so the browser accepts it.
-  const hostname = url.hostname || '';
-  const cookieDomain =
-    hostname.endsWith('gatishilnepal.org') ? '.gatishilnepal.org' : undefined;
-
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        get: (name: string) => req.cookies.get(name)?.value,
-        set: (name: string, value: string, options?: any) => {
-          // Write robust cookies without triggering redirects.
-          res.cookies.set({
-            name,
-            value,
-            // Only set domain on production so previews/localhost work.
-            ...(cookieDomain ? { domain: cookieDomain } : {}),
-            path: '/',
-            httpOnly: true,
-            secure: true,
-            sameSite: 'lax',
-            ...options,
-          });
-        },
-        remove: (name: string, options?: any) => {
-          res.cookies.set({
-            name,
-            value: '',
-            ...(cookieDomain ? { domain: cookieDomain } : {}),
-            path: '/',
-            httpOnly: true,
-            secure: true,
-            sameSite: 'lax',
-            expires: new Date(0),
-            ...options,
-          });
-        },
-      },
+  // ONLY guard dashboard/settings (keep /onboard and /join open pre-login)
+  if (pathname.startsWith("/dashboard") || pathname.startsWith("/settings")) {
+    if (!hasSupabaseSession(req)) {
+      const next = encodeURIComponent(pathname + search);
+      return NextResponse.redirect(new URL(`/login?next=${next}`, req.url));
     }
-  );
-
-  // Touch the session (refresh tokens when needed); never throw or redirect.
-  try {
-    await supabase.auth.getSession();
-  } catch {
-    // Swallow errors; public pages must not break.
   }
 
-  return res;
+  return NextResponse.next();
 }
 
-// Keep this matcher narrow enough to avoid static, but broad for pages.
 export const config = {
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|robots.txt|sitemap.xml|assets/|images/).*)',
+    "/((?!_next|static|favicon.ico).*)",
   ],
 };

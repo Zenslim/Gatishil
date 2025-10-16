@@ -1,0 +1,11 @@
+{
+  "overwrite": [
+    "app/auth/callback/Client.tsx",
+    "app/auth/callback/page.tsx",
+    "app/login/LoginClient.tsx",
+    "components/OnboardingFlow.tsx",
+    "components/onboard/TrustStep.jsx",
+    "lib/auth/next.ts",
+    "middleware.ts"
+  ]
+}

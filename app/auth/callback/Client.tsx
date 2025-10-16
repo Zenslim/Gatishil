@@ -1,30 +1,33 @@
-// Client side logic for /auth/callback
-'use client';
-import { useEffect, useState } from 'react';
-import { useSearchParams, useRouter } from 'next/navigation';
-import { supabaseBrowser } from '@/lib/supabaseBrowser';
-import Card from '@/components/Card';
+"use client";
 
-export default function Client() {
-  const params = useSearchParams();
+import * as React from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { getValidatedNext } from "@/lib/auth/next";
+import { createBrowserClient } from "@/lib/supabase/client";
+
+export default function AuthCallbackClient() {
   const router = useRouter();
-  const [msg, setMsg] = useState('Finishing sign-in…');
-  const name = params.get('name') ?? '';
-  const role = params.get('role') ?? '';
+  const params = useSearchParams();
+  const supabase = createBrowserClient();
+  const [status, setStatus] = React.useState("Finalizing sign-in…");
 
-  useEffect(() => {
+  React.useEffect(() => {
     (async () => {
-      const code = params.get('code');
-      if (!code) { setMsg('Missing code'); return; }
-      const { error } = await supabaseBrowser.auth.exchangeCodeForSession(code);
-      if (error) { setMsg('Sign-in failed: ' + error.message); return; }
-      router.replace(`/welcome?name=${encodeURIComponent(name)}&role=${encodeURIComponent(role)}`);
-    })();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+      try {
+        const code = params.get("code");
+        const next = getValidatedNext(window.location.href, "/dashboard");
 
-  return (
-    <Card title="🔑 Sign-in">
-      <div style={{opacity:.8}}>{msg}</div>
-    </Card>
-  );
+        if (code) {
+          const { error } = await supabase.auth.exchangeCodeForSession(code);
+          if (error) throw error;
+        }
+        setStatus("Done. Redirecting…");
+        router.replace(next);
+      } catch (e:any) {
+        setStatus(e?.message || "Sign-in failed. Try again.");
+      }
+    })();
+  }, [router, params, supabase]);
+
+  return <p className="p-6 text-sm text-gray-600">{status}</p>;
 }
