@@ -1,13 +1,13 @@
-import { Suspense } from "react";
+// app/auth/callback/page.tsx
 import Client from "./Client";
 
-// Prevent prerender/export issues on OAuth/email callbacks
 export const dynamic = "force-dynamic";
 
-export default function Page() {
+export default function AuthCallbackPage() {
+  // Server component: renders a tiny shell; the client does the token exchange.
   return (
-    <Suspense fallback={null}>
+    <main className="min-h-screen grid place-items-center px-6 py-10">
       <Client />
-    </Suspense>
+    </main>
   );
 }
