@@ -2,15 +2,15 @@ import { NextResponse } from "next/server"
 import type { NextRequest } from "next/server"
 
 /**
- * Minimal session detector for Supabase on the Edge.
- * Reads cookies; does not mutate them (middleware is read-only for cookies).
+ * Minimal read-only session detector for Supabase.
+ * Works in Edge middleware by checking known cookies.
  */
 function hasSupabaseSession(req: NextRequest): boolean {
   // Newer cookie set by @supabase/ssr helpers
   const sb = req.cookies.get("sb-access-token")?.value
   if (sb) return true
 
-  // Legacy GoTrue cookie (JSON with access_token)
+  // Legacy GoTrue cookie (JSON string containing access_token)
   const legacy = req.cookies.get("supabase-auth-token")?.value
   if (!legacy) return false
   try {
@@ -21,37 +21,14 @@ function hasSupabaseSession(req: NextRequest): boolean {
   }
 }
 
-export async function middleware(req: NextRequest) {
+export function middleware(req: NextRequest) {
   const url = req.nextUrl
   const { pathname, search } = url
 
-  // (1) Canonicalize host: force apex domain to keep cookies + WebAuthn RP ID aligned
-  if (url.hostname === "www.gatishilnepal.org") {
-    url.hostname = "gatishilnepal.org"
-    return NextResponse.redirect(url, 301)
-  }
+  // Public safety: never interfere with the login page itself.
+  if (pathname === "/login") return NextResponse.next()
 
-  // (2) Skip static assets and general APIs (APIs handle auth themselves)
-  if (
-    pathname.startsWith("/_next") ||
-    pathname.startsWith("/favicon") ||
-    pathname.startsWith("/assets") ||
-    pathname.startsWith("/images") ||
-    pathname.startsWith("/fonts") ||
-    pathname === "/robots.txt" ||
-    pathname === "/sitemap.xml" ||
-    pathname.startsWith("/api") // let routes API-enforce as needed
-  ) {
-    return NextResponse.next()
-  }
-
-  // (3) Public routes — always allowed without a session
-  const publicPaths = new Set<string>(["/", "/join", "/login", "/about", "/contact"])
-  if (publicPaths.has(pathname)) {
-    return NextResponse.next()
-  }
-
-  // (4) Require session for onboarding (includes Trust Step: ?step=trust)
+  // 1) Gate /onboard (includes Trust Step via ?step=trust)
   if (pathname === "/onboard") {
     if (!hasSupabaseSession(req)) {
       const next = encodeURIComponent(pathname + search)
@@ -60,7 +37,7 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next()
   }
 
-  // (5) Protect app areas
+  // 2) Gate primary app areas
   if (pathname.startsWith("/dashboard") || pathname.startsWith("/settings")) {
     if (!hasSupabaseSession(req)) {
       const next = encodeURIComponent(pathname + search)
@@ -68,11 +45,14 @@ export async function middleware(req: NextRequest) {
     }
   }
 
-  // (6) Default: allow
+  // Default allow
   return NextResponse.next()
 }
 
+/**
+ * Very narrow matcher to avoid accidental loops.
+ * We only run on the pages that actually need auth gating.
+ */
 export const config = {
-  // Run on all routes so we can canonicalize host; static/assets/api are short-circuited above.
-  matcher: "/:path*",
+  matcher: ["/onboard", "/dashboard/:path*", "/settings/:path*"],
 }
