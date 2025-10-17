@@ -447,7 +447,7 @@ export default function HomePage() {
             </motion.div>
           </div>
 
-          <p className="mt-8 text-center text-[14px] text-slate-400">
+          <p className="mt-8 text-center text-[16px] text-slate-400">
             Keep your vows in your heart, but navigate the world with your eyes wide open to its realities.
           </p>
         </div>
@@ -499,6 +499,9 @@ export default function HomePage() {
   </p>
             </motion.div>
           </div>
+       <p className="mt-8 text-center text-[16px] text-slate-400">
+            A prince must combine the qualities of a lion and a fox.
+          </p>  
         </div>
       </section>
 
