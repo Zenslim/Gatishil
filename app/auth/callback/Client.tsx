@@ -3,30 +3,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { createClient } from "@supabase/supabase-js";
-
-type OtpType =
-  | "signup"
-  | "magiclink"
-  | "recovery"
-  | "email_change"
-  | "sms"
-  | null;
-
-function makeSupabaseClient() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-  if (!url || !anon) {
-    throw new Error("Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY");
-  }
-  return createClient(url, anon, {
-    auth: {
-      autoRefreshToken: true,
-      persistSession: true,
-      detectSessionInUrl: false, // we’re doing the exchange manually here
-    },
-  });
-}
+import { verifyOtpAndSync } from "@/lib/auth/verifyOtpClient";
+import { getSupabaseBrowser } from "@/lib/supabaseClient";
 
 export default function Client() {
   const router = useRouter();
@@ -37,12 +15,11 @@ export default function Client() {
 
   const code = sp.get("code"); // OAuth / PKCE
   const token_hash = sp.get("token_hash"); // Email magic link / OTP
-  const type = (sp.get("type") as OtpType) ?? null;
   const next = sp.get("next") || "/onboard?src=join";
 
   const supabase = useMemo(() => {
     try {
-      return makeSupabaseClient();
+      return getSupabaseBrowser();
     } catch (e) {
       console.error(e);
       return null;
@@ -69,8 +46,8 @@ export default function Client() {
         return;
       }
 
-      // We must have either ?code=… or ?token_hash=…&type=…
-      if (!code && !(token_hash && type)) {
+      // We must have either ?code=… or ?token_hash=…
+      if (!code && !token_hash) {
         setStatus("error");
         setMessage("No authentication credentials found. Please log in again.");
         return;
@@ -81,20 +58,29 @@ export default function Client() {
         if (code) {
           const { error } = await supabase.auth.exchangeCodeForSession(code);
           if (error) throw error;
-        } else if (token_hash && type) {
-          const { error } = await supabase.auth.verifyOtp({ type, token_hash });
-          if (error) throw error;
-        }
-
-        // Double-check session now exists
-        const { data: after } = await supabase.auth.getSession();
-        if (!after.session) {
-          throw new Error("Session was not established.");
-        }
-
-        if (!cancelled) {
-          setStatus("done");
-          router.replace(next);
+          const { data: after } = await supabase.auth.getSession();
+          if (!after.session?.access_token) {
+            throw new Error("Session was not established.");
+          }
+          await fetch("/api/auth/sync", {
+            method: "POST",
+            credentials: "include",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              access_token: after.session.access_token,
+              refresh_token: after.session.refresh_token ?? null,
+            }),
+          });
+          if (!cancelled) {
+            setStatus("done");
+            router.replace(next);
+          }
+        } else if (token_hash) {
+          await verifyOtpAndSync({ type: "email", token_hash });
+          if (!cancelled) {
+            setStatus("done");
+            router.replace(next);
+          }
         }
       } catch (err: any) {
         console.error("[/auth/callback] exchange failed:", err);
@@ -109,7 +95,7 @@ export default function Client() {
     return () => {
       cancelled = true;
     };
-  }, [supabase, code, token_hash, type, next, router]);
+    }, [supabase, code, token_hash, next, router]);
 
   // Minimal UI feedback
   return (
