@@ -1,8 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { isEmail, isPhone } from '@/lib/auth/validate';
-import { supabase } from '@/lib/supabase/client';
+import { supabase, resetLocalSessionIfInvalid } from '@/lib/supabase/client';
 
 const SMS_ENABLED = process.env.NEXT_PUBLIC_AUTH_SMS_ENABLED === 'true';
 
@@ -12,10 +12,14 @@ export default function JoinClient() {
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
-  async function send() {
-    setErr(null);
-    setMsg(null);
+  // On first render, clear any stale/invalid local session to avoid
+  // background refresh-token errors that can spook users or block OTP send.
+  useEffect(() => {
+    resetLocalSessionIfInvalid();
+  }, []);
 
+  async function send() {
+    setErr(null); setMsg(null);
     const id = identifier.trim();
 
     if (!isEmail(id) && !isPhone(id)) {
@@ -25,8 +29,6 @@ export default function JoinClient() {
 
     setBusy(true);
     try {
-      // One rule: always try Supabase OTP.
-      // If phone + SMS disabled → show helper and do nothing destructive.
       if (isPhone(id) && !SMS_ENABLED) {
         setMsg('SMS is temporarily paused. Please enter your email to receive the 6-digit code.');
         return;
@@ -37,13 +39,15 @@ export default function JoinClient() {
           ? { email: id, options: { shouldCreateUser: true } }
           : { phone: id }
       );
-
       if (error) throw error;
 
-      // Store chosen identifier for /verify
       sessionStorage.setItem('pending_id', id);
       window.location.href = '/verify';
     } catch (e: any) {
+      // If we hit a refresh-token corner case here, clear and let user retry.
+      if (String(e?.message || '').includes('Refresh Token')) {
+        try { await supabase.auth.signOut({ scope: 'local' }); } catch {}
+      }
       setErr(e?.message ?? 'Could not send code. Try again in a moment.');
     } finally {
       setBusy(false);
@@ -53,9 +57,7 @@ export default function JoinClient() {
   return (
     <main className="mx-auto max-w-md p-6">
       <h1 className="text-2xl font-semibold mb-2">Join Gatishil Nepal</h1>
-      <p className="text-sm text-gray-400 mb-6">
-        We’ll send a <b>6-digit code</b> to confirm it’s you.
-      </p>
+      <p className="text-sm text-gray-400 mb-6">We’ll send a <b>6-digit code</b> to confirm it’s you.</p>
       <input
         className="w-full border rounded px-3 py-2 mb-3"
         placeholder="Email or +977…"
@@ -71,11 +73,8 @@ export default function JoinClient() {
       </button>
       {msg && <p className="text-sm text-emerald-500 mt-3">{msg}</p>}
       {err && <p className="text-sm text-rose-500 mt-3">{err}</p>}
-
       {!SMS_ENABLED && (
-        <p className="text-xs text-gray-500 mt-6">
-          SMS is paused. Use <b>email</b> to receive your code.
-        </p>
+        <p className="text-xs text-gray-500 mt-6">SMS is paused. Use <b>email</b> to receive your code.</p>
       )}
     </main>
   );
