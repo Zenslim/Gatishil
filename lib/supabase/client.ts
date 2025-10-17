@@ -18,19 +18,22 @@ export const supabase = createClient(
   }
 );
 
-// Clears any stale/invalid local session that can cause
-// "Invalid Refresh Token: Refresh Token Not Found" on app init.
+/**
+ * Clears any stale/invalid local session that can cause
+ * "Invalid Refresh Token: Refresh Token Not Found" on app init.
+ * Only clears local state; does not revoke server-side sessions/cookies.
+ */
 export async function resetLocalSessionIfInvalid() {
   try {
-    const { data, error } = await supabase.auth.getSession();
-    // If the SDK attempted to refresh and failed, error will be present.
+    const { error } = await supabase.auth.getSession();
     if (error) {
-      // Clear ONLY local state; do not revoke server session/cookies.
+      // If refresh failed or client is in a bad state, nuke local-only session.
       await supabase.auth.signOut({ scope: 'local' });
     }
-    // If there's no active session and local storage has remnants,
-    // getSession above already attempted refresh; we still keep local clear.
-  } catch {
-    try { await supabase.auth.signOut({ scope: 'local' }); } catch: ...
+  } catch (e) {
+    // Defensive: if anything throws here, clear local session to recover.
+    try {
+      await supabase.auth.signOut({ scope: 'local' });
+    } catch {}
   }
 }
