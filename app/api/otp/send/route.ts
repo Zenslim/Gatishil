@@ -42,6 +42,8 @@ export async function POST(req: Request) {
     const body = await req.json().catch(() => ({}));
     const { type, email, phone, mode, redirectTo, _debug } = normalize(body);
 
+    const smsEnabled = process.env.NEXT_PUBLIC_AUTH_SMS_ENABLED === 'true';
+
     if (type !== 'sms' && type !== 'email') {
       return NextResponse.json(
         {
@@ -49,6 +51,17 @@ export async function POST(req: Request) {
           error: 'Invalid type',
           hint: "Send { type:'sms', phone:'+97798…' } OR { type:'email', email:'you@example.com', mode:'otp'|'magic' }",
           received: _debug,
+        },
+        { status: 400 }
+      );
+    }
+
+    if (type === 'sms' && !smsEnabled) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: 'SMS auth is disabled',
+          hint: 'Use email (OTP or Magic Link) while we finish SMS provider setup.',
         },
         { status: 400 }
       );
