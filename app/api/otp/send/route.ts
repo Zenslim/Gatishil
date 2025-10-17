@@ -1,91 +1,84 @@
-// app/api/otp/send/route.ts — AakashSMS v3 send using auth_token (per docs)
-// ELI15: We create a 6-digit code, save it, then call AakashSMS with {auth_token, to, text}.
-// IMPORTANT: In Vercel env, set AAKASH_SMS_API_KEY to your AakashSMS "auth_token" value.
-
+// app/api/otp/send/route.ts
 import { NextResponse } from 'next/server';
-import { getServerSupabase } from '@/lib/supabaseServer';
+import { cookies } from 'next/headers';
+import { createServerClient } from '@supabase/ssr';
 
-export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
-
-const AAKASH_API_KEY = process.env.AAKASH_SMS_API_KEY || ''; // <-- your AakashSMS auth_token
-const AAKASH_FROM = process.env.AAKASH_SMS_FROM || 'GATISHIL'; // used only in text, not as sender id
-
-export async function OPTIONS() {
-  return new NextResponse('ok', {
-    status: 200,
-    headers: {
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-    },
-  });
-}
-
-function sixDigit() {
-  return Math.floor(100000 + Math.random() * 900000).toString();
-}
-
-// Convert +97798XXXXXXXX → 98XXXXXXXX (10 digits). If other format, keep last 10 digits.
-function toNepalLocal(phone: string): string {
-  const digits = phone.replace(/\D/g, '');
-  if (digits.startsWith('977') && digits.length >= 12) return digits.slice(-10);
-  return digits.slice(-10);
-}
-
+/**
+ * Sends an OTP (SMS/email code) or magic link.
+ * Body (one of):
+ *  - { type: 'sms', phone: '+977...' }
+ *  - { type: 'email', email: 'user@example.com', mode: 'otp' | 'magic', redirectTo?: string }
+ *
+ * Notes:
+ *  - For email 'magic', a magic-link is sent (verify later via { type:'email', token_hash }).
+ *  - For email 'otp', a 6-digit code is sent (verify later via { type:'email', email, token }).
+ *  - For SMS, a code is sent to the phone (verify via { type:'sms', phone, token }).
+ */
 export async function POST(req: Request) {
   try {
-    const { phone } = (await req.json().catch(() => ({}))) as { phone?: string };
-    if (!phone || !/^\+\d{8,15}$/.test(phone)) {
-      return NextResponse.json({ ok: false, error: 'Invalid phone' }, { status: 400 });
+    const body = await req.json();
+    const type: 'sms' | 'email' = body?.type;
+    const phone: string | undefined = body?.phone;
+    const email: string | undefined = body?.email;
+    const mode: 'otp' | 'magic' = body?.mode ?? 'otp';
+    const redirectTo: string | undefined = body?.redirectTo; // e.g. 'https://www.gatishilnepal.org/onboard?src=join'
+
+    if (type !== 'sms' && type !== 'email') {
+      return NextResponse.json({ ok: false, error: 'Invalid type' }, { status: 400 });
     }
 
-    const code = sixDigit();
-    const supabase = getServerSupabase();
+    const cookieStore = cookies();
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          get(name: string) {
+            return cookieStore.get(name)?.value;
+          },
+          set(name: string, value: string, options: any) {
+            cookieStore.set({ name, value, ...options });
+          },
+          remove(name: string, options: any) {
+            cookieStore.set({ name, value: '', ...options, maxAge: 0 });
+          },
+        },
+      }
+    );
 
-    // store OTP (so /verify can read it)
-    const { error: ierr } = await supabase.from('otps').insert([{ phone, code }]);
-    if (ierr) return NextResponse.json({ ok: false, error: ierr.message }, { status: 500 });
-
-    if (!AAKASH_API_KEY) {
-      // No key set: return ok with warning so UI continues, but tell you why SMS didn’t go.
-      return NextResponse.json({ ok: true, warn: 'AAKASH_SMS_API_KEY not set' }, { status: 200 });
+    if (type === 'sms') {
+      if (!phone) return NextResponse.json({ ok:false, error:'Missing phone' }, { status:400 });
+      const { error } = await supabase.auth.signInWithOtp({ phone, options: { channel: 'sms' } });
+      if (error) return NextResponse.json({ ok:false, error: error.message }, { status: 400 });
+      return NextResponse.json({ ok:true });
     }
 
-    const local = toNepalLocal(phone);
-    const message = `Your Gatishil verification code is ${code}. It expires in 5 minutes. - ${AAKASH_FROM}`;
+    // email branch
+    if (!email) return NextResponse.json({ ok:false, error:'Missing email' }, { status:400 });
 
-    // Per AakashSMS docs: POST /sms/v3/send with form or query: auth_token, to (comma-separated 10-digit), text
-    // We'll send application/x-www-form-urlencoded
-    const body = new URLSearchParams({
-      auth_token: AAKASH_API_KEY,
-      to: local,            // single 10-digit
-      text: message,
+    if (mode === 'magic') {
+      const { error } = await supabase.auth.signInWithOtp({
+        email,
+        options: {
+          emailRedirectTo: redirectTo ?? process.env.NEXT_PUBLIC_MAGIC_REDIRECT_URL ?? 'https://www.gatishilnepal.org/onboard?src=join',
+          shouldCreateUser: true,
+        },
+      });
+      if (error) return NextResponse.json({ ok:false, error: error.message }, { status: 400 });
+      return NextResponse.json({ ok:true, channel:'magic' });
+    }
+
+    // mode === 'otp'
+    const { error } = await supabase.auth.signInWithOtp({
+      email,
+      options: {
+        shouldCreateUser: true,
+        // emailRedirectTo can be omitted for code flow
+      },
     });
-
-    const resp = await fetch('https://sms.aakashsms.com/sms/v3/send', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body,
-    });
-
-    const contentType = resp.headers.get('content-type') || '';
-    const payload = contentType.includes('application/json')
-      ? await resp.json().catch(() => ({}))
-      : await resp.text().catch(() => '');
-
-    // AakashSMS typically returns JSON with fields like 'error' or 'success'
-    if (!resp.ok) {
-      const errMsg =
-        (typeof payload === 'object' && (payload.error || payload.message)) ||
-        (typeof payload === 'string' && payload) ||
-        `HTTP ${resp.status}`;
-      return NextResponse.json({ ok: true, warn: `Provider error: ${errMsg}` }, { status: 200 });
-    }
-
-    // Provider success (but still surface any non-standard messages)
-    return NextResponse.json({ ok: true, info: typeof payload === 'string' ? payload : undefined }, { status: 200 });
+    if (error) return NextResponse.json({ ok:false, error: error.message }, { status: 400 });
+    return NextResponse.json({ ok:true, channel:'email_otp' });
   } catch (e: any) {
-    return NextResponse.json({ ok: false, error: e?.message || 'server error' }, { status: 500 });
+    return NextResponse.json({ ok:false, error: e?.message || 'OTP send failed' }, { status: 500 });
   }
 }
