@@ -1,54 +1,62 @@
-export const runtime = 'nodejs';
-
-import { cookies } from 'next/headers';
+// app/api/auth/sync/route.ts
 import { NextResponse } from 'next/server';
+import { cookies } from 'next/headers';
+import { createServerClient } from '@supabase/ssr';
 
-function setCookie(name: string, value: string, maxAgeSeconds: number) {
-  const jar = cookies();
-  jar.set({
-    name,
-    value,
-    httpOnly: true,
-    secure: true,
-    sameSite: 'lax',
-    path: '/',
-    maxAge: maxAgeSeconds,
-  });
-}
+function getServerClient() {
+  const cookieStore = cookies();
 
-function decodeJwtExp(token: string): number | null {
-  try {
-    const [, payload] = token.split('.');
-    if (!payload) return null;
-    const json = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
-    const exp = Number(json?.exp);
-    return Number.isFinite(exp) ? exp : null;
-  } catch {
-    return null;
-  }
+  return createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        get(name: string) {
+          return cookieStore.get(name)?.value;
+        },
+        set(name: string, value: string, options: any) {
+          cookieStore.set({ name, value, ...options });
+        },
+        remove(name: string, options: any) {
+          cookieStore.set({ name, value: '', ...options, maxAge: 0 });
+        },
+      },
+    }
+  );
 }
 
 export async function POST(req: Request) {
   try {
     const body = await req.json().catch(() => ({}));
-    const access_token: string | null = body?.access_token ?? null;
-    const refresh_token: string | null = body?.refresh_token ?? null;
+    const access_token: string | undefined = body?.access_token;
+    const refresh_token: string | undefined = body?.refresh_token;
 
     if (!access_token) {
-      return NextResponse.json({ ok: false, error: 'Missing access token' }, { status: 400 });
+      return NextResponse.json(
+        { ok: false, error: 'Missing access_token' },
+        { status: 400 }
+      );
     }
 
-    const exp = decodeJwtExp(access_token);
-    const now = Math.floor(Date.now() / 1000);
-    const maxAgeAccess = exp && exp > now ? exp - now : 3600;
-    const maxAgeRefresh = 60 * 60 * 24 * 7;
+    const supabase = getServerClient();
+    const { data, error } = await supabase.auth.setSession({
+      access_token,
+      refresh_token,
+    });
 
-    setCookie('sb-access-token', access_token, maxAgeAccess);
-    if (refresh_token) setCookie('sb-refresh-token', refresh_token, maxAgeRefresh);
+    if (error) {
+      return NextResponse.json(
+        { ok: false, error: error.message },
+        { status: 401 }
+      );
+    }
 
-    return NextResponse.json({ ok: true });
-  } catch (err: any) {
-    console.error('[auth/sync] error:', err);
-    return NextResponse.json({ ok: false, error: 'Sync failed', detail: String(err?.message || err) }, { status: 500 });
+    const { data: userData } = await supabase.auth.getUser().catch(() => ({ data: null }));
+    return NextResponse.json({ ok: true, user: userData?.user ?? null });
+  } catch (e: any) {
+    return NextResponse.json(
+      { ok: false, error: e?.message || 'Auth sync failed' },
+      { status: 500 }
+    );
   }
 }
