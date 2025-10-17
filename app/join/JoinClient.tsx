@@ -4,6 +4,8 @@
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
+import { verifyOtpAndSync } from '@/lib/auth/verifyOtpClient';
+import { waitForSession } from '@/lib/auth/waitForSession';
 import { COUNTRIES } from '@/app/data/countries';
 
 type Country = { flag: string; dial: string; name: string };
@@ -16,17 +18,13 @@ function e164(countryDial: string, raw: string) {
   return `+${d}${digits}`;
 }
 
-async function waitForSession(timeoutMs = 8000) {
-  const start = Date.now();
-  while (Date.now() - start < timeoutMs) {
-    const { data } = await supabase.auth.getSession();
-    const s = data?.session ?? null;
-    if (s) return s;
-    // tiny delay
-    // eslint-disable-next-line no-await-in-loop
-    await new Promise((r) => setTimeout(r, 200));
-  }
-  return null;
+async function waitForSupabaseSession(timeoutMs = 8000) {
+  const delayMs = 250;
+  const tries = Math.ceil(timeoutMs / delayMs);
+  const ready = await waitForSession(supabase, tries, delayMs);
+  if (!ready) return null;
+  const { data } = await supabase.auth.getSession();
+  return data?.session ?? null;
 }
 
 function httpErr(res: Response, data: any) {
@@ -105,7 +103,7 @@ function JoinClientBody() {
       if (!hasAccessToken) return;
 
       // wait for Supabase to hydrate the session from hash
-      const session = await waitForSession();
+      const session = await waitForSupabaseSession();
       if (!session) return;
 
       // strip hash, then continue to onboard
@@ -157,25 +155,8 @@ function JoinClientBody() {
     setErr(null); setMsg(null); setLoading(true);
 
     try {
-      const res = await safeFetch('/api/otp/verify', {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          'accept': 'application/json',
-          'x-idempotency-key': mkIdKey('otp-verify'),
-        },
-        credentials: 'same-origin',
-        cache: 'no-store',
-        body: JSON.stringify({ phone: otpSentTo, code: otp.trim() }),
-      });
-
-      const data = await safeJson(res);
-      if (!res.ok || data?.ok !== true) throw new Error(httpErr(res, data));
-
-      const session = await waitForSession();
-      if (!session) throw new Error('Session not ready. Please try again.');
-
-      router.replace('/onboard?src=otp');
+      await verifyOtpAndSync({ type: 'sms', phone: otpSentTo, token: otp.trim() });
+      router.push('/onboard?src=join');
     } catch (e: any) {
       setErr(e?.message || 'Invalid or expired code.');
       // eslint-disable-next-line no-console

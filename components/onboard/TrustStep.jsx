@@ -2,15 +2,28 @@
 
 import React, { useEffect, useState } from 'react';
 import { startRegistration, platformAuthenticatorIsAvailable } from '@simplewebauthn/browser';
-import { createBrowserClient } from '@supabase/ssr';
 import { useRouter } from 'next/navigation';
+import { getSupabaseBrowser } from '@/lib/supabaseClient';
 import { createLocalPin, hasLocalPin } from '@/lib/localPin';
 
-function supabaseBrowser() {
-  return createBrowserClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-  );
+async function syncToServerCookies() {
+  const supabase = getSupabaseBrowser();
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.access_token) throw new Error('No active session');
+  const res = await fetch('/api/auth/sync', {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      access_token: session.access_token,
+      refresh_token: session.refresh_token ?? null,
+    }),
+  });
+  if (!res.ok) {
+    const j = await res.json().catch(() => ({}));
+    throw new Error(j?.error || `Auth sync failed (${res.status})`);
+  }
+  return session.access_token;
 }
 
 export default function TrustStep({ onDone }) {
@@ -63,44 +76,20 @@ export default function TrustStep({ onDone }) {
     return () => clearTimeout(id);
   }, [toast]);
 
-  const goDashboard = () => {
-    setTimeout(() => {
-      router.push('/dashboard');
-      if (onDone) onDone();
-    }, 650);
-  };
-
-  const getFreshSession = async () => {
-    const supabase = supabaseBrowser();
-    let { data: { session } } = await supabase.auth.getSession();
-    if (!session) {
-      const { data, error } = await supabase.auth.refreshSession();
-      if (error) throw new Error('Please sign in again');
-      session = data.session;
-    }
-    if (!session?.access_token) throw new Error('Missing access token');
-    return { access_token: session.access_token, refresh_token: session.refresh_token ?? null };
-  };
-
-  const syncToServerCookies = async () => {
-    const { access_token, refresh_token } = await getFreshSession();
-    const res = await fetch('/api/auth/sync', {
-      method: 'POST',
-      credentials: 'include',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ access_token, refresh_token }),
-    });
-    if (!res.ok) {
-      const j = await res.json().catch(() => ({}));
-      throw new Error(j?.error || `Auth sync failed (${res.status})`);
-    }
-    return access_token;
+  const goDashboard = async () => {
+    await syncToServerCookies();
+    router.push('/dashboard');
+    if (onDone) onDone();
   };
 
   const doPasskey = async () => {
     setBusy(true); setErr(null); setMsg(null);
     try {
-      const token = await syncToServerCookies();
+      const supabase = getSupabaseBrowser();
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) throw new Error('No active session');
+      const token = session.access_token;
+      await syncToServerCookies();
 
       const r1 = await fetch('/api/webauthn/options', {
         method: 'POST',
@@ -157,7 +146,7 @@ export default function TrustStep({ onDone }) {
       await createLocalPin(pin);
       setExistingPin(true);
       setToast('Your voice is now sealed to this device.');
-      goDashboard();
+      await goDashboard();
     } catch (error) {
       console.error('PIN save failed:', error);
       setPinErr(error?.message || 'Could not save PIN. Try again.');
@@ -250,7 +239,10 @@ export default function TrustStep({ onDone }) {
               <div className="mt-6">
                 <button
                   type="button"
-                  onClick={() => { setToast('Your voice is now sealed to this device.'); goDashboard(); }}
+                  onClick={async () => {
+                    setToast('Your voice is now sealed to this device.');
+                    await goDashboard();
+                  }}
                   className="w-full py-3 rounded-xl border border-white/20 hover:bg-white/10"
                 >
                   Keep existing PIN → Continue
