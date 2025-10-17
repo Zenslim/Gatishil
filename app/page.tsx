@@ -447,8 +447,8 @@ export default function HomePage() {
             </motion.div>
           </div>
 
-          <p className="mt-8 text-center text-[12px] text-slate-400">
-            Learn it. Share it. Live it.
+          <p className="mt-8 text-center text-[14px] text-slate-400">
+            Keep your vows in your heart, but navigate the world with your eyes wide open to its realities.
           </p>
         </div>
       </section>
