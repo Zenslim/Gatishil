@@ -1,87 +1,78 @@
-import { NextResponse, type NextRequest } from 'next/server';
+// middleware.ts
+import { NextResponse, NextRequest } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 
-// ⚠️ This middleware NEVER redirects or rewrites.
-// It only refreshes Supabase cookies so server components (e.g., /dashboard)
-// can see an up-to-date session. That makes it loop-proof.
+function isPublicPath(pathname: string) {
+  // Public pages that must NEVER be intercepted or rewritten
+  const publicMatchers = [
+    /^\/$/,                       // home
+    /^\/join$/,                   // join page (magic link / OTP entrypoint)
+    /^\/onboard(?:\/.*)?$/,       // onboarding flow
+    /^\/login$/,                  // explicit login
+    /^\/logout$/,                 // explicit logout
+    /^\/verify(?:\/.*)?$/,        // email verification / expired-link pages
+    /^\/api\/.*$/,                // all API routes
+    /^\/_next\/.*$/,              // next.js internals
+    /^\/favicon\.ico$/,           // assets
+    /^\/images\/.*$/,             // assets
+    /^\/assets\/.*$/,             // assets
+  ];
+  return publicMatchers.some((re) => re.test(pathname));
+}
+
+function isProtectedPath(pathname: string) {
+  // Only protect your private app areas. Keep this list tight.
+  const protectedMatchers = [
+    /^\/dashboard(?:\/.*)?$/,
+    /^\/console(?:\/.*)?$/,
+    /^\/settings(?:\/.*)?$/,
+    /^\/security(?:\/.*)?$/,
+    /^\/proposals(?:\/.*)?$/,
+    /^\/polls(?:\/.*)?$/,
+  ];
+  return protectedMatchers.some((re) => re.test(pathname));
+}
 
 export async function middleware(req: NextRequest) {
-  const url = req.nextUrl;
-  const pathname = url.pathname;
+  const { nextUrl, cookies } = req;
+  const pathname = nextUrl.pathname;
 
-  // Skip static and obvious non-HTML assets early (cheap exit).
-  if (
-    pathname.startsWith('/_next/static') ||
-    pathname.startsWith('/_next/image') ||
-    pathname.startsWith('/assets') ||
-    pathname.startsWith('/images') ||
-    pathname === '/favicon.ico' ||
-    pathname === '/robots.txt' ||
-    pathname === '/sitemap.xml'
-  ) {
+  // 1) Never touch public paths
+  if (isPublicPath(pathname)) {
     return NextResponse.next();
   }
 
-  // Prepare a pass-through response. We only add cookies to it.
-  const res = NextResponse.next();
+  // 2) If path isn’t protected, just pass through
+  if (!isProtectedPath(pathname)) {
+    return NextResponse.next();
+  }
 
-  // Compute a safe cookie domain:
-  // - On production apex/www, use a shared domain for both hosts.
-  // - On previews (vercel.app) or localhost, omit domain so the browser accepts it.
-  const hostname = url.hostname || '';
-  const cookieDomain =
-    hostname.endsWith('gatishilnepal.org') ? '.gatishilnepal.org' : undefined;
-
+  // 3) For protected paths, require a Supabase session
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        get: (name: string) => req.cookies.get(name)?.value,
-        set: (name: string, value: string, options?: any) => {
-          // Write robust cookies without triggering redirects.
-          res.cookies.set({
-            name,
-            value,
-            // Only set domain on production so previews/localhost work.
-            ...(cookieDomain ? { domain: cookieDomain } : {}),
-            path: '/',
-            httpOnly: true,
-            secure: true,
-            sameSite: 'lax',
-            ...options,
-          });
-        },
-        remove: (name: string, options?: any) => {
-          res.cookies.set({
-            name,
-            value: '',
-            ...(cookieDomain ? { domain: cookieDomain } : {}),
-            path: '/',
-            httpOnly: true,
-            secure: true,
-            sameSite: 'lax',
-            expires: new Date(0),
-            ...options,
-          });
-        },
-      },
-    }
+    { cookies: { get: (name: string) => cookies.get(name)?.value } }
   );
 
-  // Touch the session (refresh tokens when needed); never throw or redirect.
-  try {
-    await supabase.auth.getSession();
-  } catch {
-    // Swallow errors; public pages must not break.
+  const { data, error } = await supabase.auth.getUser();
+
+  // If we can’t read a session or there’s no user, send to login (NOT chautara)
+  if (error || !data?.user) {
+    const url = req.nextUrl.clone();
+    url.pathname = '/login';
+    url.searchParams.set('next', pathname + (nextUrl.search || ''));
+    return NextResponse.redirect(url);
   }
 
-  return res;
+  // 4) Session present → allow
+  return NextResponse.next();
 }
 
-// Keep this matcher narrow enough to avoid static, but broad for pages.
+// Only run middleware where it’s needed: avoid matching /join, /onboard, etc.
 export const config = {
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|robots.txt|sitemap.xml|assets/|images/).*)',
+    // We let the function logic decide, but keeping matcher broad is fine.
+    // The allowlist above ensures /join and /onboard are never intercepted.
+    '/((?!_next|favicon.ico|images|assets).*)',
   ],
 };
