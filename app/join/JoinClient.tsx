@@ -167,31 +167,25 @@ function JoinClientBody() {
       });
 
       const data = await safeJson(res);
-      if (!res.ok || data?.ok !== true) throw new Error(httpErr(res, data));
-
-      if (data?.session?.access_token) {
-        const { error: setError } = await supabase.auth.setSession({
-          access_token: data.session.access_token,
-          refresh_token: data.session.refresh_token ?? undefined,
-        });
-        if (setError) throw setError;
-
-        await fetch('/api/auth/sync', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json', accept: 'application/json' },
-          credentials: 'same-origin',
-          cache: 'no-store',
-          body: JSON.stringify({
-            access_token: data.session.access_token,
-            refresh_token: data.session.refresh_token ?? undefined,
-          }),
-        }).catch(() => {});
+      if (!res.ok || data?.ok !== true) {
+        throw new Error(httpErr(res, data));
       }
 
-      const session = await waitForSession();
-      if (!session) throw new Error('Session not ready. Please try again.');
+      const accessToken = data?.access_token;
+      const refreshToken = data?.refresh_token;
 
-      router.replace('/onboard?src=otp');
+      if (!accessToken) {
+        throw new Error('Verification succeeded but tokens are missing.');
+      }
+
+      const { error: setError } = await supabase.auth.setSession({
+        access_token: accessToken,
+        refresh_token: refreshToken ?? undefined,
+      });
+
+      if (setError) throw setError;
+
+      router.replace('/dashboard');
     } catch (e: any) {
       setErr(e?.message || 'Invalid or expired code.');
       // eslint-disable-next-line no-console
