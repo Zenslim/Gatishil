@@ -28,25 +28,22 @@ function admin() {
 }
 
 export async function POST(req: Request) {
-  let phone = '';
-  let code = '';
+  let body: any = null;
 
   try {
-    const body = await req.json().catch(() => null);
-    if (body && typeof body === 'object') {
-      phone = typeof (body as any).phone === 'string' ? (body as any).phone : String((body as any).phone ?? '');
-      code = typeof (body as any).code === 'string' ? (body as any).code : String((body as any).code ?? '');
-    }
+    body = await req.json().catch(() => null);
   } catch {
     // ignore malformed JSON; we'll validate below
   }
 
+  const rawCode = body?.code ?? body?.token;
+  const code = typeof rawCode === 'string' ? rawCode : String(rawCode ?? '');
   const trimmedCode = code.trim();
   if (!trimmedCode || trimmedCode.length !== 6 || !/^\d{6}$/.test(trimmedCode)) {
     return badRequest('Enter the 6-digit code.');
   }
 
-  const dbPhone = normalizeNepalToDB(typeof phone === 'string' ? phone : String(phone ?? ''));
+  const dbPhone = normalizeNepalToDB(body?.phone);
 
   if (!dbPhone) {
     return badRequest('Phone OTP is Nepal-only. use email.');

@@ -6,7 +6,7 @@ import { createServerClient } from '@supabase/ssr';
 import { getAdminSupabase } from '@/lib/admin';
 
 const OTP_TTL_MS = 5 * 60 * 1000;
-const NEPAL_MOBILE = /^\+97798\d{8}$/;
+const NEPAL_MOBILE = /^\+9779\d{9}$/;
 
 function normalizePhone(value: string) {
   const trimmed = value.trim();

@@ -190,16 +190,15 @@ function errorResponse(message: string, status: number) {
 }
 
 export async function POST(req: Request) {
-  let phone = '';
+  let body: any = null;
 
   try {
-    const body = await req.json();
-    phone = (body?.phone ?? '').toString();
+    body = await req.json();
   } catch {
     // fall through to validation error
   }
 
-  const dbPhone = normalizeNepalToDB(phone);
+  const dbPhone = normalizeNepalToDB(body?.phone);
 
   if (!dbPhone) {
     return errorResponse('Phone OTP is Nepal-only. use email.', 400);
@@ -226,7 +225,7 @@ export async function POST(req: Request) {
 
   try {
     // eslint-disable-next-line no-console
-    console.log('[otp/send] dbPhone:', dbPhone);
+    console.log('[otp/send] inserting phone form=9779xxxxxxxxx ok');
 
     const { data, error } = await supabase
       .from('otps')
