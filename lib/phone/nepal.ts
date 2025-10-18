@@ -1,4 +1,4 @@
-export function normalizeNepalToDB(input: string | undefined | null) {
+export function normalizeNepalToDB(input?: string | null) {
   const raw = String(input ?? '').trim().replace(/[\s-]/g, '');
   const plus = raw.startsWith('+') ? raw : `+${raw}`;
   if (!plus.startsWith('+977')) return null;

@@ -15,14 +15,10 @@ function hashCode(code: string) {
 }
 
 function admin() {
-  const url = process.env.SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-  if (!url || !key) {
-    throw new Error('NO_SERVICE_ROLE');
-  }
-
+  const url = process.env.SUPABASE_URL!;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY!;
   return createClient(url, key, {
+    db: { schema: 'public' },
     auth: { autoRefreshToken: false, persistSession: false },
   });
 }
@@ -51,21 +47,12 @@ export async function POST(req: Request) {
 
   const codeHash = hashCode(trimmedCode);
   const plusPhone = `+${dbPhone}`;
-  let supabaseAdmin;
-
-  try {
-    supabaseAdmin = admin();
-  } catch (error: any) {
-    if (error?.message === 'NO_SERVICE_ROLE') {
-      return NextResponse.json({ ok: false, message: 'Auth unavailable. Use email.' }, { status: 503 });
-    }
-    throw error;
-  }
+  const supabaseAdmin = admin();
 
   try {
     const { data: otpRow, error: selectError } = await supabaseAdmin
       .from('otps')
-      .select('id, code_hash, attempts')
+      .select('id, code_hash, attempts, expires_at, consumed_at')
       .eq('phone', dbPhone)
       .is('consumed_at', null)
       .gt('expires_at', new Date().toISOString())
@@ -158,10 +145,6 @@ export async function POST(req: Request) {
       { status: 200 },
     );
   } catch (error: any) {
-    if (error?.message === 'NO_SERVICE_ROLE') {
-      return NextResponse.json({ ok: false, message: 'Auth unavailable. Use email.' }, { status: 503 });
-    }
-
     // eslint-disable-next-line no-console
     console.error('[otp/verify] unexpected error', error);
     return NextResponse.json(
