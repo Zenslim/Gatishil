@@ -72,12 +72,10 @@ async function discardOtp(id?: number) {
 }
 
 async function sendAakashSms(providerPhone: string, text: string) {
-  const base = env('AAKASH_SMS_BASE_URL').replace(/\/$/, '');
   const apiKey = env('AAKASH_SMS_API_KEY');
-  const sender = env('AAKASH_SMS_SENDER');
 
-  const payload = { from: sender, to: providerPhone, text };
-  const res = await fetch(`${base}/sms/send`, {
+  const payload = { to: providerPhone, text };
+  const res = await fetch('https://sms.aakashsms.com/v2/sms/send', {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
