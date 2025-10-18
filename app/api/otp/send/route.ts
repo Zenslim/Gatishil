@@ -2,29 +2,13 @@ import { NextResponse } from 'next/server';
 import { randomInt, createHash } from 'node:crypto';
 import { canSendOtp } from '@/lib/auth/rateLimit';
 import { getAdminSupabase } from '@/lib/admin';
+import { NEPAL_MOBILE, normalizeOtpPhone } from '@/lib/auth/phone';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-const NEPAL_MOBILE = /^\+97798\d{8}$/;
 const OTP_TTL_MS = 5 * 60 * 1000;
 const AAKASH_ENDPOINT = 'https://sms.aakashsms.com/sms/v3/send';
-
-function normalizePhone(value: string) {
-  const trimmed = value.trim();
-  if (!trimmed) return '';
-  const raw = trimmed.replace(/[\s-]/g, '');
-  if (!raw) return '';
-  const prefixed = raw.startsWith('+') ? raw : `+${raw}`;
-  const digits = prefixed.replace(/^\+/, '');
-  if (!/^\d+$/.test(digits)) {
-    return '';
-  }
-  if (!prefixed.startsWith('+977')) {
-    return prefixed;
-  }
-  return `+${digits}`;
-}
 
 function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutMs = 6000) {
   const controller = new AbortController();
@@ -241,7 +225,7 @@ export async function POST(req: Request) {
     // fall through to validation error
   }
 
-  const normalized = normalizePhone(phone);
+  const normalized = normalizeOtpPhone(phone);
 
   if (!normalized) {
     return errorResponse('Enter a valid phone number.', 400);
