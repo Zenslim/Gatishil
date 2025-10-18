@@ -91,7 +91,7 @@ export async function POST(req: Request) {
       const hashed = hashOtp(token.trim());
       const { data: rows, error: selectError } = await supabaseAdmin
         .from('otps')
-        .select('id, code, code_hash, created_at, used_at')
+        .select('id, code, code_hash, created_at, used_at, expires_at')
         .eq('phone', normalized)
         .is('used_at', null)
         .order('created_at', { ascending: false })
@@ -107,8 +107,13 @@ export async function POST(req: Request) {
       const now = Date.now();
       const match = (rows ?? []).find((row: any) => {
         if (!row?.created_at) return false;
-        const age = now - new Date(row.created_at).getTime();
-        if (Number.isNaN(age) || age > OTP_TTL_MS) return false;
+        const createdAt = new Date(row.created_at).getTime();
+        if (Number.isNaN(createdAt)) return false;
+        const expiresAtValue = row.expires_at ? new Date(row.expires_at).getTime() : Number.NaN;
+        const expired = Number.isNaN(expiresAtValue)
+          ? now - createdAt > OTP_TTL_MS
+          : now > expiresAtValue;
+        if (expired) return false;
         const storedHash = row.code_hash || row.code;
         if (!storedHash) return false;
         try {
