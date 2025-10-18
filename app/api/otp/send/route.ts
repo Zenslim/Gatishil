@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { isEmail, isPhone } from '@/lib/auth/validate';
+import { isEmail } from '@/lib/auth/validate';
 import { canSendOtp } from '@/lib/auth/rateLimit';
 import { getAdminSupabase } from '@/lib/admin';
 
@@ -9,6 +9,7 @@ const NEPAL_E164 = /^\+977\d{8,11}$/;
 
 function cleanPhone(value: string) {
   const digits = value.replace(/[^\d+]/g, '');
+  if (!digits) return '';
   if (digits.startsWith('+977')) return `+977${digits.slice(4)}`;
   if (digits.startsWith('977')) return `+${digits}`;
   if (digits.startsWith('0')) return `+977${digits.slice(1)}`;
@@ -126,7 +127,60 @@ export async function POST(req: Request) {
     return errorResponse('Invalid JSON body.', 400);
   }
 
-  const email = typeof payload?.email === 'string' ? payload.email.trim() : '';
+  let email = typeof payload?.email === 'string' ? payload.email.trim() : '';
+  let phoneInput = typeof payload?.phone === 'string' ? payload.phone.trim() : '';
+
+  if (!phoneInput && typeof payload?.identifier === 'string') {
+    const identifier = payload.identifier.trim();
+    if (identifier) {
+      if (isEmail(identifier)) {
+        if (!email) {
+          email = identifier;
+        }
+      } else {
+        phoneInput = identifier;
+      }
+    }
+  }
+
+  if (phoneInput) {
+    const phone = cleanPhone(phoneInput);
+    if (!phone) {
+      return errorResponse('Enter a valid phone number.', 400);
+    }
+
+    if (!phone.startsWith('+977')) {
+      return errorResponse('Phone OTP is Nepal-only. use email.', 400);
+    }
+
+    if (!NEPAL_E164.test(phone)) {
+      return errorResponse('Enter a valid phone number.', 400);
+    }
+
+    const ip = (req.headers.get('x-forwarded-for') ?? 'unknown').split(',')[0].trim();
+    const key = `otp:${phone}:${ip}`;
+    if (!canSendOtp(key)) {
+      return errorResponse('Too many attempts. Try again later.', 429);
+    }
+
+    try {
+      const code = await mintSupabaseSmsOtp(phone);
+      const text = `Your Gatishil Nepal code is ${code}. It expires in 5 minutes.`;
+      await sendAakashSms(phone, text);
+      return okResponse();
+    } catch (error: any) {
+      const message = error?.message || 'Could not send OTP. Please use email.';
+      const status = Number(error?.status) ||
+        (typeof error?.message === 'string' && /supabase/i.test(error.message) ? 502 : 500);
+
+      if (message.includes('Missing env')) {
+        return errorResponse('SMS is temporarily unavailable. Please use email.', 503);
+      }
+
+      return errorResponse(message, status >= 400 && status < 600 ? status : 500);
+    }
+  }
+
   if (email) {
     if (!isEmail(email)) {
       return errorResponse('Enter a valid email.', 400);
@@ -134,52 +188,5 @@ export async function POST(req: Request) {
     return okResponse();
   }
 
-  const identifier =
-    typeof payload?.phone === 'string'
-      ? payload.phone
-      : typeof payload?.identifier === 'string'
-        ? payload.identifier
-        : '';
-
-  const id = identifier.trim();
-  if (!id) {
-    return errorResponse('Provide a phone number.', 400);
-  }
-
-  if (isEmail(id)) {
-    return okResponse();
-  }
-
-  if (!isPhone(id)) {
-    return errorResponse('Enter a valid phone number.', 400);
-  }
-
-  const phone = cleanPhone(id);
-  if (!NEPAL_E164.test(phone)) {
-    return errorResponse('Phone OTP is limited to +977 numbers.', 400);
-  }
-
-  const ip = (req.headers.get('x-forwarded-for') ?? 'unknown').split(',')[0].trim();
-  const key = `otp:${phone}:${ip}`;
-  if (!canSendOtp(key)) {
-    return errorResponse('Too many attempts. Try again later.', 429);
-  }
-
-  try {
-    const code = await mintSupabaseSmsOtp(phone);
-    const text = `Your Gatishil Nepal code is ${code}. It expires in 5 minutes.`;
-    await sendAakashSms(phone, text);
-    return okResponse();
-  } catch (error: any) {
-    const message = error?.message || 'Could not send OTP. Please use email.';
-    const status = Number(error?.status) ||
-      (typeof error?.message === 'string' && /supabase/i.test(error.message) ? 502 : 500);
-
-    // For missing envs, convert to 503
-    if (message.includes('Missing env')) {
-      return errorResponse('SMS is temporarily unavailable. Please use email.', 503);
-    }
-
-    return errorResponse(message, status >= 400 && status < 600 ? status : 500);
-  }
+  return errorResponse('Provide phone (+977) or use email.', 400);
 }
