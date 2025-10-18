@@ -1,39 +1,33 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { FormEvent, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase/client';
 import { maskIdentifier } from '@/lib/auth/validate';
 import { OTP_MAX_ATTEMPTS, OTP_RESEND_SECONDS, OTP_TTL_SECONDS } from '@/lib/constants/auth';
 
-const SMS_ENABLED = process.env.NEXT_PUBLIC_AUTH_SMS_ENABLED === 'true';
-
-type Channel = 'email' | 'phone';
+const GENERIC_ERROR = 'That code didn’t work. Try again or resend after 30 seconds.';
+const SOFT_LOCK_ERROR = 'Too many attempts. Please wait 2 minutes, then request a new code.';
 
 export default function VerifyClient() {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
 
   const [identifier, setIdentifier] = useState<string | null>(null);
-  const [channel, setChannel] = useState<Channel | null>(null);
   const [code, setCode] = useState('');
-  const [error, setError] = useState<string | null>(null);
-  const [triesRemaining, setTriesRemaining] = useState(OTP_MAX_ATTEMPTS);
+  const [attempts, setAttempts] = useState(0);
   const [resendIn, setResendIn] = useState(OTP_RESEND_SECONDS);
+  const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const submittingRef = useRef(false);
+  const [lockActive, setLockActive] = useState(false);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const pendingId = sessionStorage.getItem('pending_id');
-    const pendingChannel = sessionStorage.getItem('pending_channel') as Channel | null;
-    setIdentifier(pendingId);
-    setChannel(pendingChannel ?? (pendingId && pendingId.includes('@') ? 'email' : pendingId ? 'phone' : null));
-    setCode('');
-    setError(null);
-    setTriesRemaining(OTP_MAX_ATTEMPTS);
-    setResendIn(OTP_RESEND_SECONDS);
-    setTimeout(() => inputRef.current?.focus(), 20);
+    if (pendingId) {
+      setIdentifier(pendingId);
+    }
+    setTimeout(() => inputRef.current?.focus(), 50);
   }, []);
 
   useEffect(() => {
@@ -43,134 +37,165 @@ export default function VerifyClient() {
   }, [resendIn]);
 
   useEffect(() => {
-    submittingRef.current = submitting;
-  }, [submitting]);
+    if (code.length < 6 && !lockActive) {
+      setError(null);
+    }
+  }, [code, lockActive]);
 
-  async function verify(submittedCode?: string) {
-    if (submittingRef.current) return;
+  const isEmail = !!identifier && identifier.includes('@');
+  const masked = identifier ? maskIdentifier(identifier) : 'your contact';
+  const locked = lockActive;
+
+  useEffect(() => {
+    if (!lockActive) return;
+    const timeout = setTimeout(() => {
+      setLockActive(false);
+      setAttempts(0);
+      setError(null);
+    }, 2 * 60 * 1000);
+    return () => clearTimeout(timeout);
+  }, [lockActive]);
+
+  async function verifyOtp(submitted?: string) {
     if (!identifier) {
-      setError('No pending verification. Go back to Join.');
+      setError('That code didn’t work. Try again or resend after 30 seconds.');
       return;
     }
-    if (triesRemaining <= 0) {
-      setError('Too many attempts. Please wait 2 minutes, then request a new code.');
-      return;
-    }
-    const token = (submittedCode ?? code).replace(/\D/g, '');
-    if (token.length < 6) {
-      setError('Enter the 6-digit code.');
-      return;
-    }
-    const type: Channel = channel ?? (identifier.includes('@') ? 'email' : 'phone');
+    if (submitting || locked) return;
 
-    submittingRef.current = true;
+    const digits = (submitted ?? code).replace(/\D/g, '').slice(0, 6);
+    if (digits.length !== 6) {
+      setError(GENERIC_ERROR);
+      return;
+    }
+
     setSubmitting(true);
     setError(null);
+
     try {
-      const payload = type === 'email'
-        ? { type: 'email' as const, email: identifier, token }
-        : { type: 'sms' as const, phone: identifier, token };
-      const { error: verifyError } = await supabase.auth.verifyOtp(payload);
-      if (verifyError) throw verifyError;
+      if (isEmail) {
+        const { error: verifyError } = await supabase.auth.verifyOtp({
+          type: 'email',
+          email: identifier,
+          token: digits,
+        });
+        if (verifyError) throw verifyError;
+      } else {
+        let response = await fetch('/api/otp/verify', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ phone: identifier, code: digits }),
+        });
+
+        if (!response.ok && response.status !== 202) {
+          response = await fetch('/api/otp/verify', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ type: 'sms', phone: identifier, token: digits }),
+          });
+        }
+
+        if (!response.ok && response.status !== 202) {
+          const payload = await response.json().catch(() => ({}));
+          throw new Error(payload?.error || 'VERIFY_FAILED');
+        }
+      }
 
       if (typeof window !== 'undefined') {
         sessionStorage.removeItem('pending_id');
-        sessionStorage.removeItem('pending_channel');
       }
-
       router.replace('/onboard?src=join');
     } catch (err: any) {
-      setTriesRemaining((current) => {
-        const next = current - 1;
-        if (next <= 0) {
-          setError('Too many attempts. Please wait 2 minutes, then request a new code.');
+      setAttempts((current) => {
+        const next = current + 1;
+        if (next >= OTP_MAX_ATTEMPTS) {
+          setLockActive(true);
+          setError(SOFT_LOCK_ERROR);
         } else {
-          setError('That code didn’t work. Try again or resend after 30 seconds.');
+          setError(GENERIC_ERROR);
         }
-        return Math.max(0, next);
+        return Math.min(next, OTP_MAX_ATTEMPTS);
       });
+      setCode('');
+      setTimeout(() => inputRef.current?.focus(), 50);
     } finally {
-      submittingRef.current = false;
       setSubmitting(false);
     }
   }
 
-  async function resend() {
-    if (!identifier) return;
-    if (resendIn > 0) return;
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    await verifyOtp();
+  }
 
-    const type: Channel = channel ?? (identifier.includes('@') ? 'email' : 'phone');
-
-    if (type === 'phone' && !SMS_ENABLED) {
-      setError('SMS is paused. Use email to receive your code.');
-      return;
-    }
-
-    setError(null);
-    setCode('');
-    setTriesRemaining(OTP_MAX_ATTEMPTS);
+  async function handleResend() {
+    if (!identifier || resendIn > 0 || locked) return;
 
     try {
-      if (type === 'email') {
+      if (isEmail) {
         const { error: sendError } = await supabase.auth.signInWithOtp({
           email: identifier,
           options: { shouldCreateUser: true },
         });
         if (sendError) throw sendError;
       } else {
-        const { error: sendError } = await supabase.auth.signInWithOtp({ phone: identifier });
-        if (sendError) throw sendError;
+        const response = await fetch('/api/otp/send', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ phone: identifier }),
+        });
+        if (!response.ok) {
+          if (response.status === 503) {
+            setError('SMS is unavailable. Use email to receive your code.');
+          } else if (response.status === 400) {
+            setError('Phone OTP is Nepal-only. Enter +977… or use email.');
+          } else {
+            const payload = await response.json().catch(() => ({}));
+            setError(payload?.error || GENERIC_ERROR);
+          }
+          return;
+        }
       }
+
+      setError(null);
+      setCode('');
+      setAttempts(0);
+      setLockActive(false);
       setResendIn(OTP_RESEND_SECONDS);
-      setTimeout(() => inputRef.current?.focus(), 10);
+      setTimeout(() => inputRef.current?.focus(), 50);
     } catch (err: any) {
-      setError(err?.message || 'Could not resend. Try again soon.');
+      setError(err?.message || GENERIC_ERROR);
     }
   }
 
   if (!identifier) {
     return (
-      <main className="min-h-dvh bg-gradient-to-b from-slate-950 via-slate-900 to-black text-white">
-        <section className="max-w-md mx-auto px-6 py-12">
-          <h1 className="text-2xl font-semibold mb-3">Verification needed</h1>
-          <p className="text-sm text-slate-300 mb-6">
-            There’s no pending request. Start again to receive a new code.
+      <main className="min-h-dvh bg-slate-950 text-white">
+        <div className="mx-auto flex min-h-dvh w-full max-w-md flex-col justify-center px-6 py-16">
+          <h1 className="text-2xl font-semibold">Enter your 6-digit code</h1>
+          <p className="mt-3 text-sm text-slate-300">
+            We sent it to {masked}. Expires in {Math.round(OTP_TTL_SECONDS / 60)} minutes.
           </p>
           <button
-            onClick={() => {
-              if (typeof window !== 'undefined') {
-                sessionStorage.removeItem('pending_id');
-                sessionStorage.removeItem('pending_channel');
-              }
-              router.replace('/join');
-            }}
-            className="rounded-2xl px-4 py-3 bg-white text-black font-semibold"
+            onClick={() => router.replace('/join')}
+            className="mt-6 w-full rounded-xl bg-emerald-400 px-4 py-3 text-base font-semibold text-slate-900"
           >
-            Go to Join
+            Go back
           </button>
-        </section>
+        </div>
       </main>
     );
   }
 
-  const masked = maskIdentifier(identifier);
-  const locked = triesRemaining <= 0;
-
   return (
-    <main className="min-h-dvh bg-gradient-to-b from-slate-950 via-slate-900 to-black text-white">
-      <section className="max-w-md mx-auto px-6 py-12">
-        <h1 className="text-2xl font-semibold mb-2">Enter your 6-digit code</h1>
-        <p className="text-sm text-slate-300 mb-6">
-          We sent it to <b>{masked}</b>. Expires in {Math.round(OTP_TTL_SECONDS / 60)} minutes.
+    <main className="min-h-dvh bg-slate-950 text-white">
+      <div className="mx-auto flex min-h-dvh w-full max-w-md flex-col justify-center px-6 py-16">
+        <h1 className="text-2xl font-semibold">Enter your 6-digit code</h1>
+        <p className="mt-3 text-sm text-slate-300">
+          We sent it to <span className="font-semibold text-white">{masked}</span>. Expires in {Math.round(OTP_TTL_SECONDS / 60)} minutes.
         </p>
 
-        <form
-          onSubmit={(event) => {
-            event.preventDefault();
-            verify();
-          }}
-          className="space-y-4"
-        >
+        <form onSubmit={handleSubmit} className="mt-6 space-y-4">
           <input
             ref={inputRef}
             value={code}
@@ -178,42 +203,42 @@ export default function VerifyClient() {
               const digits = event.target.value.replace(/\D/g, '').slice(0, 6);
               setCode(digits);
               if (digits.length === 6) {
-                setTimeout(() => verify(digits), 20);
+                setTimeout(() => verifyOtp(digits), 50);
               }
             }}
             onPaste={(event) => {
               const pasted = event.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6);
-            if (pasted) {
-              event.preventDefault();
-              setCode(pasted);
-              if (pasted.length === 6) {
-                setTimeout(() => verify(pasted), 20);
+              if (pasted) {
+                event.preventDefault();
+                setCode(pasted);
+                if (pasted.length === 6) {
+                  setTimeout(() => verifyOtp(pasted), 50);
+                }
               }
-            }
-          }}
+            }}
+            type="text"
             inputMode="numeric"
             autoComplete="one-time-code"
             maxLength={6}
-            disabled={locked || submitting}
             placeholder="123456"
-            className="w-full rounded-2xl border border-white/15 bg-white text-black dark:bg-neutral-900 dark:text-white px-4 py-3 text-center text-2xl tracking-[0.4em] outline-none focus:ring-2 focus:ring-emerald-400 disabled:opacity-60"
-            aria-label="One-time code"
+            disabled={submitting || locked}
+            className="w-full rounded-xl border border-white/15 bg-white px-4 py-3 text-center text-2xl tracking-[0.4em] text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-400 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-slate-900 dark:text-white"
           />
 
           <button
             type="submit"
-            disabled={locked || submitting || code.length !== 6}
-            className="w-full rounded-2xl bg-emerald-400 text-black font-semibold px-4 py-3 disabled:opacity-60 disabled:cursor-not-allowed"
+            disabled={submitting || locked || code.length !== 6}
+            className="w-full rounded-xl bg-emerald-400 px-4 py-3 text-base font-semibold text-slate-900 transition disabled:cursor-not-allowed disabled:opacity-60"
           >
             {submitting ? 'Verifying…' : 'Continue'}
           </button>
         </form>
 
-        <div className="flex items-center justify-between mt-4 text-sm text-slate-300">
+        <div className="mt-4 flex items-center justify-between text-sm text-slate-300">
           <button
-            onClick={resend}
+            onClick={handleResend}
             disabled={resendIn > 0 || locked}
-            className="underline disabled:opacity-50 disabled:cursor-not-allowed"
+            className="underline disabled:cursor-not-allowed disabled:opacity-50"
           >
             {resendIn > 0 ? `Resend in ${resendIn}s` : 'Resend code'}
           </button>
@@ -221,25 +246,17 @@ export default function VerifyClient() {
             onClick={() => {
               if (typeof window !== 'undefined') {
                 sessionStorage.removeItem('pending_id');
-                sessionStorage.removeItem('pending_channel');
               }
               router.replace('/join');
             }}
             className="underline"
           >
-            Use a different address/number
+            Use a different contact
           </button>
         </div>
 
-        {locked ? (
-          <p className="text-sm text-rose-400 mt-4">
-            Too many attempts. Please wait 2 minutes, then request a new code.
-          </p>
-        ) : null}
-        {error && !locked ? (
-          <p className="text-sm text-rose-400 mt-4">{error}</p>
-        ) : null}
-      </section>
+        {error ? <p className="mt-4 text-sm text-rose-400">{error}</p> : null}
+      </div>
     </main>
   );
 }
