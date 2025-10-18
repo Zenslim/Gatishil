@@ -91,7 +91,7 @@ export async function POST(req: Request) {
       const hashed = hashOtp(token.trim());
       const { data: rows, error: selectError } = await supabaseAdmin
         .from('otps')
-        .select('id, code, created_at, used_at')
+        .select('id, code, code_hash, created_at, used_at')
         .eq('phone', normalized)
         .is('used_at', null)
         .order('created_at', { ascending: false })
@@ -106,13 +106,25 @@ export async function POST(req: Request) {
 
       const now = Date.now();
       const match = (rows ?? []).find((row: any) => {
-        if (!row?.created_at || !row?.code) return false;
+        if (!row?.created_at) return false;
         const age = now - new Date(row.created_at).getTime();
         if (Number.isNaN(age) || age > OTP_TTL_MS) return false;
+        const storedHash = row.code_hash || row.code;
+        if (!storedHash) return false;
         try {
-          return timingSafeEqual(Buffer.from(row.code, 'hex'), Buffer.from(hashed, 'hex'));
+          return timingSafeEqual(Buffer.from(storedHash, 'hex'), Buffer.from(hashed, 'hex'));
         } catch {
-          return row.code === hashed;
+          if (row.code && typeof row.code === 'string') {
+            try {
+              return timingSafeEqual(
+                Buffer.from(hashOtp(row.code), 'hex'),
+                Buffer.from(hashed, 'hex')
+              );
+            } catch {
+              return hashOtp(row.code) === hashed;
+            }
+          }
+          return storedHash === hashed;
         }
       });
 
@@ -141,6 +153,27 @@ export async function POST(req: Request) {
           { ok: false, error: sessionError?.message || 'Could not start session.' },
           { status: 500 }
         );
+      }
+
+      const profilePayload = { phone: normalized, updated_at: new Date().toISOString() };
+
+      const profileResult = await supabaseAdmin
+        .from('profiles')
+        .upsert({ id: user.id, ...profilePayload }, { onConflict: 'id' });
+
+      if (profileResult.error) {
+        const fallback = await supabaseAdmin
+          .from('profiles')
+          .update(profilePayload)
+          .eq('user_id', user.id);
+
+        if (fallback.error) {
+          // eslint-disable-next-line no-console
+          console.warn('Failed to persist phone on profile', {
+            primary: profileResult.error.message,
+            fallback: fallback.error.message,
+          });
+        }
       }
 
       return NextResponse.json(

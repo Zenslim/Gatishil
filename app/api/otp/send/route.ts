@@ -49,11 +49,16 @@ async function persistOtp(phone: string, code: string) {
   const hashed = hashOtp(code);
   const { data, error } = await supabase
     .from('otps')
-    .insert({ phone, code: hashed, meta: { channel: 'sms' } })
+    .insert({ phone, code_hash: hashed, meta: { channel: 'sms' } })
     .select('id')
     .single();
 
   if (error) {
+    // Bubble up a cleaner message for the common constraint mismatch.
+    if (error.message && /otps_code_check/i.test(error.message)) {
+      throw new Error('SMS storage rejected the generated code.');
+    }
+
     throw new Error(error.message || 'Failed to store OTP');
   }
 
