@@ -1,5 +1,0 @@
-{
-  "overwrite": [
-    "app/auth/callback/page.tsx"
-  ]
-}
