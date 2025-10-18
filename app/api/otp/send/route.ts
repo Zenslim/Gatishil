@@ -2,7 +2,8 @@ import { NextResponse } from 'next/server';
 import { randomInt, createHash } from 'node:crypto';
 import { canSendOtp } from '@/lib/auth/rateLimit';
 import { getAdminSupabase } from '@/lib/admin';
-import { NEPAL_MOBILE, normalizeOtpPhone } from '@/lib/auth/phone';
+import { NEPAL_MOBILE } from '@/lib/auth/phone';
+import { normalizeNepal } from '@/lib/phone/nepal';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -225,15 +226,13 @@ export async function POST(req: Request) {
     // fall through to validation error
   }
 
-  const normalized = normalizeOtpPhone(phone);
+  const providerPhone = normalizeNepal(phone);
 
-  if (!normalized) {
-    return errorResponse('Enter a valid phone number.', 400);
-  }
-
-  if (!normalized.startsWith('+977')) {
+  if (!providerPhone) {
     return errorResponse('Phone OTP is Nepal-only. use email.', 400);
   }
+
+  const normalized = `+${providerPhone}`;
 
   if (!NEPAL_MOBILE.test(normalized)) {
     return errorResponse('Enter a valid phone number.', 400);
