@@ -1,155 +1,48 @@
 import { NextResponse } from 'next/server';
-import { createHash } from 'node:crypto';
 import { createClient } from '@supabase/supabase-js';
-import { normalizeNepalToDB } from '@/lib/phone/nepal';
 
-export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
 
-function badRequest(message: string) {
-  return NextResponse.json({ ok: false, message }, { status: 400 });
-}
-
-function hashCode(code: string) {
-  return createHash('sha256').update(code).digest('hex');
-}
-
-function admin() {
-  const url = process.env.SUPABASE_URL!;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-  return createClient(url, key, {
-    db: { schema: 'public' },
-    auth: { autoRefreshToken: false, persistSession: false },
-  });
-}
-
+// Verify 6-digit code for Nepal numbers
 export async function POST(req: Request) {
-  let body: any = null;
-
   try {
-    body = await req.json().catch(() => null);
-  } catch {
-    // ignore malformed JSON; we'll validate below
-  }
+    const { phone, code } = await req.json();
+    if (!phone || !code)
+      return NextResponse.json({ ok: false, error: 'Missing phone or code' });
 
-  const rawCode = body?.code ?? body?.token;
-  const code = typeof rawCode === 'string' ? rawCode : String(rawCode ?? '');
-  const trimmedCode = code.trim();
-  if (!trimmedCode || trimmedCode.length !== 6 || !/^\d{6}$/.test(trimmedCode)) {
-    return badRequest('Enter the 6-digit code.');
-  }
-
-  const dbPhone = normalizeNepalToDB(body?.phone);
-
-  if (!dbPhone) {
-    return badRequest('Phone OTP is Nepal-only. use email.');
-  }
-
-  const codeHash = hashCode(trimmedCode);
-  const plusPhone = `+${dbPhone}`;
-  const supabaseAdmin = admin();
-
-  try {
-    const { data: otpRow, error: selectError } = await supabaseAdmin
+    const { data: rows, error } = await supabase
       .from('otps')
-      .select('id, code_hash, attempts, expires_at, consumed_at')
-      .eq('phone', dbPhone)
-      .is('consumed_at', null)
-      .gt('expires_at', new Date().toISOString())
+      .select('*')
+      .eq('phone', phone)
       .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
+      .limit(1);
 
-    if (selectError) {
-      throw selectError;
-    }
+    if (error || !rows?.length)
+      return NextResponse.json({ ok: false, error: 'Code not found' });
 
-    if (!otpRow) {
-      return badRequest('Code expired or not found.');
-    }
+    const otp = rows[0];
+    const age = (Date.now() - new Date(otp.created_at).getTime()) / 60000;
+    if (age > 5) return NextResponse.json({ ok: false, error: 'Code expired' });
+    if (otp.code !== code)
+      return NextResponse.json({ ok: false, error: 'Invalid code' });
 
-    const storedHash = typeof otpRow.code_hash === 'string' ? otpRow.code_hash : '';
-    if (storedHash !== codeHash) {
-      await supabaseAdmin
-        .from('otps')
-        .update({ attempts: (otpRow.attempts ?? 0) + 1 })
-        .eq('id', otpRow.id)
-        .catch(() => {});
+    await supabase.from('otps').update({ used_at: new Date().toISOString() }).eq('id', otp.id);
 
-      return badRequest('Invalid code.');
-    }
+    const { data: userData, error: authErr } = await supabase.auth.signInWithOtp({
+      phone,
+      options: { shouldCreateUser: true },
+    });
+    if (authErr) throw authErr;
 
-    const { error: consumeError } = await supabaseAdmin
-      .from('otps')
-      .update({ consumed_at: new Date().toISOString() })
-      .eq('id', otpRow.id)
-      .is('consumed_at', null);
-
-    if (consumeError) {
-      throw consumeError;
-    }
-
-    const { data: existingUser, error: getUserError } = await supabaseAdmin.auth.admin.getUserByPhone(plusPhone);
-
-    if (getUserError && !/not found/i.test(getUserError.message ?? '')) {
-      throw getUserError;
-    }
-
-    let userId = existingUser?.user?.id ?? existingUser?.data?.user?.id ?? null;
-
-    if (!userId) {
-      const created = await supabaseAdmin.auth.admin.createUser({
-        phone: plusPhone,
-        phone_confirm: true,
-        user_metadata: { phone_verified: true },
-      });
-
-      if (created.error && !/already exists|registered/i.test(created.error.message ?? '')) {
-        throw created.error;
-      }
-
-      userId = created.data?.user?.id ?? created.user?.id ?? null;
-
-      if (!userId) {
-        const { data: refetched, error: refetchError } = await supabaseAdmin.auth.admin.getUserByPhone(plusPhone);
-        if (refetchError || !refetched?.user) {
-          return NextResponse.json({ ok: false, message: 'Auth unavailable. Use email.' }, { status: 503 });
-        }
-        userId = refetched.user.id;
-      }
-    }
-
-    const { data: sessionData, error: sessionError } = await supabaseAdmin.auth.admin.createSession({ user_id: userId });
-
-    if (sessionError || !sessionData?.session) {
-      return NextResponse.json({ ok: false, message: 'Auth unavailable. Use email.' }, { status: 503 });
-    }
-
-    const session = sessionData.session;
-
-    await supabaseAdmin
-      .from('profiles')
-      .upsert({ id: userId, phone: plusPhone }, { onConflict: 'id' })
-      .catch((profileError) => {
-        // eslint-disable-next-line no-console
-        console.warn('[otp/verify] Failed to upsert profile phone', profileError);
-      });
-
+    return NextResponse.json({ ok: true, user: userData.user });
+  } catch (err) {
+    console.error('OTP verify failed:', err);
     return NextResponse.json(
-      {
-        ok: true,
-        access_token: session.access_token,
-        refresh_token: session.refresh_token,
-        user: session.user,
-      },
-      { status: 200 },
-    );
-  } catch (error: any) {
-    // eslint-disable-next-line no-console
-    console.error('[otp/verify] unexpected error', error);
-    return NextResponse.json(
-      { ok: false, message: 'Could not verify code. Please try again.' },
-      { status: 400 },
+      { ok: false, error: 'Verification failed' },
+      { status: 503 }
     );
   }
 }
