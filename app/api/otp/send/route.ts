@@ -1,58 +1,179 @@
-import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { NextRequest, NextResponse } from 'next/server'
+import { createClient } from '@supabase/supabase-js'
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+type Json =
+  | {
+      ok: true
+      channel: 'email' | 'sms'
+      sent: boolean
+      message: string
+    }
+  | {
+      ok: false
+      channel?: 'email' | 'sms'
+      sent?: false
+      message: string
+      reason?: string
+    }
 
-// Nepal-only AakashSMS OTP sender with 30s resend cooldown per phone
-export async function POST(req: Request) {
+function json(data: Json, status = 200) {
+  return NextResponse.json(data, { status })
+}
+
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
+const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL || 'https://www.gatishilnepal.org').replace(/\/$/, '')
+
+// Gate SMS separately so we can ship email today even if SMS infra is paused
+const AUTH_SMS_ENABLED = String(process.env.NEXT_PUBLIC_AUTH_SMS_ENABLED || '').toLowerCase() === 'true'
+
+// Minimal, local helpers
+const isEmail = (v: string) => /\S+@\S+\.\S+/.test(v)
+const isE164Nepal = (v: string) => /^\+977\d{8,10}$/.test(v) // allow +9779XXXXXXXX etc.
+
+function pickIdentifier(body: any): { email?: string; phone?: string } {
+  const identifier = (body?.identifier || '').trim()
+  const email = (body?.email || '').trim()
+  const phone = (body?.phone || '').trim()
+
+  if (email) return { email }
+  if (phone) return { phone }
+  if (identifier) {
+    if (isEmail(identifier)) return { email: identifier }
+    return { phone: identifier }
+  }
+  return {}
+}
+
+function supabaseClient() {
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+    throw new Error('Supabase env not configured')
+  }
+  return createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    auth: { persistSession: false },
+  })
+}
+
+async function sendEmailViaSupabase(email: string) {
+  const supabase = supabaseClient()
+  // numeric OTP template (not magic-link)
+  const { error } = await supabase.auth.signInWithOtp({
+    email,
+    options: {
+      shouldCreateUser: true,
+      emailRedirectTo: `${SITE_URL}/onboard?src=join`,
+      data: { channel: 'email-otp' },
+    },
+  })
+  if (error) throw error
+}
+
+async function sendPhoneViaSupabase(phone: string) {
+  const supabase = supabaseClient()
+  const { error } = await supabase.auth.signInWithOtp({ phone })
+  if (error) throw error
+}
+
+export async function POST(req: NextRequest) {
   try {
-    const { phone } = await req.json();
-    if (!phone?.startsWith('+977'))
-      return NextResponse.json({ ok: false, error: 'Phone OTP is Nepal-only.' });
+    const body = await req.json().catch(() => ({}))
+    const { email, phone } = pickIdentifier(body)
 
-    // Enforce 30s resend cooldown (server-side)
-    const { data: sent } = await supabase
-      .from('otp_sends')
-      .select('last_sent_at')
-      .eq('phone', phone)
-      .maybeSingle();
+    if (!email && !phone) {
+      return json({ ok: false, message: 'Missing email or phone.' }, 400)
+    }
 
-    if (sent?.last_sent_at) {
-      const last = new Date(sent.last_sent_at).getTime();
-      const now = Date.now();
-      if (now - last < 30_000) {
-        return NextResponse.json({ ok: false, error: 'RESEND_COOLDOWN' }, { status: 429 });
+    // EMAIL FLOW — always available
+    if (email) {
+      try {
+        await sendEmailViaSupabase(email)
+        return json({
+          ok: true,
+          channel: 'email',
+          sent: true,
+          message: 'OTP sent to your email. Expires in 5 minutes.',
+        })
+      } catch (err: any) {
+        console.error('[otp/email] failed:', err?.message || err)
+        // Soft failure → UI can suggest trying phone if in Nepal
+        return json(
+          {
+            ok: false,
+            channel: 'email',
+            sent: false,
+            message: 'Could not send email OTP right now.',
+            reason: 'email_send_failed',
+          },
+          200
+        )
       }
     }
 
-    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    // PHONE FLOW — Nepal-only (+977)
+    if (phone) {
+      if (!isE164Nepal(phone)) {
+        return json(
+          {
+            ok: false,
+            channel: 'sms',
+            sent: false,
+            message: 'Phone OTP is Nepal-only. Enter a +977 number or use email.',
+            reason: 'non_nepal_number',
+          },
+          200
+        )
+      }
 
-    const res = await fetch('https://sms.aakashsms.com/v3/send', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        auth_token: process.env.AAKASH_SMS_API_KEY,
-        to: phone.replace('+977', ''),
-        text: `Your Gatishil code is ${code}`,
-      }),
-    });
+      if (!AUTH_SMS_ENABLED) {
+        return json(
+          {
+            ok: false,
+            channel: 'sms',
+            sent: false,
+            message: 'SMS is temporarily paused. Please use your email to receive the code.',
+            reason: 'sms_disabled',
+          },
+          200
+        )
+      }
 
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok || data.error) throw new Error(data.error || 'SMS gateway failed');
+      try {
+        // Immediate, stable path: Supabase phone OTP
+        await sendPhoneViaSupabase(phone)
+        return json({
+          ok: true,
+          channel: 'sms',
+          sent: true,
+          message: 'OTP sent by SMS. Expires in 5 minutes.',
+        })
+      } catch (err: any) {
+        console.error('[otp/sms] failed:', err?.message || err)
+        // Soft failure: never throw a 503 to the UI
+        return json(
+          {
+            ok: false,
+            channel: 'sms',
+            sent: false,
+            message: 'Could not send SMS right now. Please use email instead.',
+            reason: 'sms_send_failed',
+          },
+          200
+        )
+      }
+    }
 
-    await supabase.from('otps').insert({ phone, code });
-    await supabase.from('otp_sends')
-      .upsert({ phone, last_sent_at: new Date().toISOString() }, { onConflict: 'phone' });
-
-    return NextResponse.json({ ok: true });
-  } catch (err) {
-    console.error('OTP send failed:', err);
-    return NextResponse.json(
-      { ok: false, error: 'Failed to send OTP' },
-      { status: 503 }
-    );
+    // Should not reach here
+    return json({ ok: false, message: 'Unhandled request.' }, 400)
+  } catch (err: any) {
+    console.error('[otp] fatal error:', err?.message || err)
+    // Never leak 500/503 to the UI; keep UX deterministic
+    return json(
+      {
+        ok: false,
+        message: 'Could not process your request. Use email to receive the code.',
+        reason: 'handler_error',
+      },
+      200
+    )
   }
 }
