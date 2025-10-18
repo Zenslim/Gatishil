@@ -3,7 +3,7 @@ import { randomInt, createHash } from 'node:crypto';
 import { canSendOtp } from '@/lib/auth/rateLimit';
 import { getAdminSupabase } from '@/lib/admin';
 import { NEPAL_MOBILE } from '@/lib/auth/phone';
-import { normalizeNepal } from '@/lib/phone/nepal';
+import { normalizeNepalToDB } from '@/lib/phone/nepal';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -28,36 +28,9 @@ function hashOtp(code: string) {
   return createHash('sha256').update(code).digest('hex');
 }
 
-async function persistOtp(phone: string, code: string, expiresAt: string) {
-  const supabase = getAdminSupabase();
-  const hashed = hashOtp(code);
-  const { data, error } = await supabase
-    .from('otps')
-    .insert({ phone, code_hash: hashed, expires_at: expiresAt, meta: { channel: 'sms' } })
-    .select('id')
-    .single();
-
-  if (error) {
-    // Bubble up a cleaner message for the common constraint mismatch.
-    if (error.message && /otps_code_check/i.test(error.message)) {
-      throw new Error('SMS storage rejected the generated code.');
-    }
-
-    throw new Error(error.message || 'Failed to store OTP');
-  }
-
-  return data?.id as number | undefined;
-}
-
-async function discardOtp(id?: number) {
-  if (!id) return;
-  const supabase = getAdminSupabase();
-  await supabase.from('otps').delete().eq('id', id);
-}
-
-async function sendAakashSms(apiKey: string, normalizedPhone: string, text: string) {
-  const e164NoPlus = normalizedPhone.slice(1);
-  const national = e164NoPlus.replace(/^977/, '');
+async function sendAakashSms(apiKey: string, dbPhone: string, text: string) {
+  const e164NoPlus = dbPhone;
+  const national = dbPhone.replace(/^977/, '');
 
   type AttemptStatus = number | string | undefined;
 
@@ -226,31 +199,50 @@ export async function POST(req: Request) {
     // fall through to validation error
   }
 
-  const providerPhone = normalizeNepal(phone);
+  const dbPhone = normalizeNepalToDB(phone);
 
-  if (!providerPhone) {
+  if (!dbPhone) {
     return errorResponse('Phone OTP is Nepal-only. use email.', 400);
   }
 
-  const normalized = `+${providerPhone}`;
+  const plusPhone = `+${dbPhone}`;
 
-  if (!NEPAL_MOBILE.test(normalized)) {
+  if (!NEPAL_MOBILE.test(plusPhone)) {
     return errorResponse('Enter a valid phone number.', 400);
   }
 
   const ip = (req.headers.get('x-forwarded-for') ?? 'unknown').split(',')[0].trim();
-  const key = `otp:${providerPhone}:${ip}`;
+  const key = `otp:${dbPhone}:${ip}`;
 
   if (!canSendOtp(key)) {
     return errorResponse('Too many attempts. Try again later.', 429);
   }
 
   const code = generateOtp();
+  const code_hash = hashOtp(code);
   const expiresAt = new Date(Date.now() + OTP_TTL_MS).toISOString();
+  const supabase = getAdminSupabase();
   let persistedId: number | undefined;
 
   try {
-    persistedId = await persistOtp(providerPhone, code, expiresAt);
+    // eslint-disable-next-line no-console
+    console.log('[otp/send] dbPhone:', dbPhone);
+
+    const { data, error } = await supabase
+      .from('otps')
+      .insert({ phone: dbPhone, code_hash, expires_at: expiresAt })
+      .select('id')
+      .single();
+
+    if (error) {
+      if (error.message && /otps_code_check/i.test(error.message)) {
+        throw new Error('SMS storage rejected the generated code.');
+      }
+
+      throw new Error(error.message || 'Failed to store OTP');
+    }
+
+    persistedId = data?.id as number | undefined;
   } catch (error: any) {
     const message =
       typeof error?.message === 'string' && error.message.trim()
@@ -268,15 +260,23 @@ export async function POST(req: Request) {
   const apiKey = process.env.AAKASH_SMS_API_KEY;
 
   if (!apiKey) {
-    await discardOtp(persistedId).catch(() => {});
+    await supabase
+      .from('otps')
+      .delete()
+      .eq('id', persistedId)
+      .catch(() => {});
     return errorResponse('SMS is temporarily unavailable. Please use email.', 503);
   }
 
   try {
-    await sendAakashSms(apiKey, normalized, text);
+    await sendAakashSms(apiKey, dbPhone, text);
     return okResponse();
   } catch (error) {
-    await discardOtp(persistedId).catch(() => {});
+    await supabase
+      .from('otps')
+      .delete()
+      .eq('id', persistedId)
+      .catch(() => {});
     return errorResponse('Aakash SMS failed', 503);
   }
 }
