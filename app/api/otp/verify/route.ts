@@ -53,6 +53,7 @@ export async function POST(req: Request) {
   }
 
   const codeHash = hashCode(trimmedCode);
+  const plusPhone = `+${providerPhone}`;
   let supabaseAdmin;
 
   try {
@@ -68,7 +69,7 @@ export async function POST(req: Request) {
     const { data: otpRow, error: selectError } = await supabaseAdmin
       .from('otps')
       .select('id, code_hash, attempts')
-      .eq('phone', providerPhone)
+      .eq('phone', plusPhone)
       .is('consumed_at', null)
       .gt('expires_at', new Date().toISOString())
       .order('created_at', { ascending: false })
@@ -103,8 +104,6 @@ export async function POST(req: Request) {
     if (consumeError) {
       throw consumeError;
     }
-
-    const plusPhone = `+${providerPhone}`;
 
     const { data: existingUser, error: getUserError } = await supabaseAdmin.auth.admin.getUserByPhone(plusPhone);
 
