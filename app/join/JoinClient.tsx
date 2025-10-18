@@ -110,6 +110,11 @@ function JoinClientBody() {
 
     try {
       const phone = e164(country.dial, phoneRaw);
+      if (!phone.startsWith('+977')) {
+        setErr('Phone OTP is Nepal-only. use email.');
+        setLoading(false);
+        return;
+      }
       const res = await safeFetch('/api/otp/send', {
         method: 'POST',
         headers: {
