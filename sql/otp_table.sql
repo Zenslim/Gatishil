@@ -12,6 +12,17 @@ create table if not exists public.otps (
 
 create index if not exists idx_otps_phone_created on public.otps (phone, created_at desc);
 
+alter table public.otps
+  drop constraint if exists otps_phone_check;
+
+alter table public.otps
+  add constraint otps_phone_check
+  check ( phone ~ '^9779[0-9]{9}$' );
+
+delete from public.otps where phone !~ '^9779[0-9]{9}$';
+
+notify pgrst, 'reload schema';
+
 alter table public.otps enable row level security;
 do $$ begin
   if not exists (select 1 from pg_policies where schemaname='public' and tablename='otps' and policyname='otps_server_rw') then

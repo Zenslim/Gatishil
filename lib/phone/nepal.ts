@@ -1,5 +1,5 @@
-export function normalizeNepalToDB(phone: string) {
-  const raw = String(phone || '').trim().replace(/[\s-]/g, '');
+export function normalizeNepalToDB(input: string | undefined | null) {
+  const raw = String(input ?? '').trim().replace(/[\s-]/g, '');
   const plus = raw.startsWith('+') ? raw : `+${raw}`;
   if (!plus.startsWith('+977')) return null;
   const e164NoPlus = plus.slice(1);

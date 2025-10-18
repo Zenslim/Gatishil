@@ -1,4 +1,4 @@
-export const NEPAL_MOBILE = /^\+97798\d{8}$/;
+export const NEPAL_MOBILE = /^\+9779\d{9}$/;
 
 export function normalizeOtpPhone(value: string) {
   const trimmed = value.trim();
