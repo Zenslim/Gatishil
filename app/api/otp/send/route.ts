@@ -239,7 +239,7 @@ export async function POST(req: Request) {
   }
 
   const ip = (req.headers.get('x-forwarded-for') ?? 'unknown').split(',')[0].trim();
-  const key = `otp:${normalized}:${ip}`;
+  const key = `otp:${providerPhone}:${ip}`;
 
   if (!canSendOtp(key)) {
     return errorResponse('Too many attempts. Try again later.', 429);
@@ -250,7 +250,7 @@ export async function POST(req: Request) {
   let persistedId: number | undefined;
 
   try {
-    persistedId = await persistOtp(normalized, code, expiresAt);
+    persistedId = await persistOtp(providerPhone, code, expiresAt);
   } catch (error: any) {
     const message =
       typeof error?.message === 'string' && error.message.trim()
