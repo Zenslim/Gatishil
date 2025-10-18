@@ -1,23 +1,31 @@
 import { NextResponse } from 'next/server';
-import { isEmail } from '@/lib/auth/validate';
+import { randomInt, createHash } from 'node:crypto';
 import { canSendOtp } from '@/lib/auth/rateLimit';
 import { getAdminSupabase } from '@/lib/admin';
 
 export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
-const NEPAL_E164 = /^\+977\d{8,11}$/;
+const NEPAL_MOBILE = /^\+97798\d{8}$/;
 
-function cleanPhone(value: string) {
-  const digits = value.replace(/[^\d+]/g, '');
-  if (!digits) return '';
-  if (digits.startsWith('+977')) return `+977${digits.slice(4)}`;
-  if (digits.startsWith('977')) return `+${digits}`;
-  if (digits.startsWith('0')) return `+977${digits.slice(1)}`;
-  return digits.startsWith('+') ? digits : `+${digits}`;
+function normalizePhone(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return '';
+  const raw = trimmed.replace(/[\s-]/g, '');
+  if (!raw) return '';
+  const prefixed = raw.startsWith('+') ? raw : `+${raw}`;
+  const digits = prefixed.replace(/^\+/, '');
+  if (!/^\d+$/.test(digits)) {
+    return '';
+  }
+  if (!prefixed.startsWith('+977')) {
+    return prefixed;
+  }
+  return `+${digits}`;
 }
 
-function formatForGateway(phone: string) {
-  return phone.replace(/^\+/, '');
+function providerFormat(phone: string) {
+  return phone.slice(1);
 }
 
 function env(key: string) {
@@ -28,52 +36,42 @@ function env(key: string) {
   return value;
 }
 
-async function mintSupabaseSmsOtp(phone: string) {
-  const supabase = getAdminSupabase();
-
-  const generate = async () => supabase.auth.admin.generateLink({
-    // @ts-expect-error: supabase typings omit sms body extras in some versions
-    type: 'sms',
-    phone,
-  });
-
-  let { data, error } = await generate();
-  if (error) {
-    const msg = error.message?.toLowerCase() ?? '';
-    if (msg.includes('not found') || msg.includes('no user')) {
-      const create = await supabase.auth.admin.createUser({
-        phone,
-        email: undefined,
-        phone_confirm: false,
-      } as any);
-      if (create.error && !/already exists|registered/i.test(create.error.message ?? '')) {
-        throw new Error(create.error.message);
-      }
-      ({ data, error } = await generate());
-    }
-  }
-
-  if (error) {
-    throw new Error(error.message || 'Failed to generate OTP');
-  }
-
-  const props = (data as any)?.properties ?? {};
-  const otp: string | undefined =
-    props.phone_otp || props.otp || props.sms_otp || props.token || (data as any)?.otp;
-
-  if (!otp) {
-    throw new Error('Supabase OTP missing');
-  }
-
-  return otp;
+function generateOtp() {
+  return randomInt(0, 1_000_000).toString().padStart(6, '0');
 }
 
-async function sendAakashSms(phone: string, text: string) {
+function hashOtp(code: string) {
+  return createHash('sha256').update(code).digest('hex');
+}
+
+async function persistOtp(phone: string, code: string) {
+  const supabase = getAdminSupabase();
+  const hashed = hashOtp(code);
+  const { data, error } = await supabase
+    .from('otps')
+    .insert({ phone, code: hashed, meta: { channel: 'sms' } })
+    .select('id')
+    .single();
+
+  if (error) {
+    throw new Error(error.message || 'Failed to store OTP');
+  }
+
+  return data?.id as number | undefined;
+}
+
+async function discardOtp(id?: number) {
+  if (!id) return;
+  const supabase = getAdminSupabase();
+  await supabase.from('otps').delete().eq('id', id);
+}
+
+async function sendAakashSms(providerPhone: string, text: string) {
   const base = env('AAKASH_SMS_BASE_URL').replace(/\/$/, '');
   const apiKey = env('AAKASH_SMS_API_KEY');
   const sender = env('AAKASH_SMS_SENDER');
 
-  const payload = { from: sender, to: formatForGateway(phone), text };
+  const payload = { from: sender, to: providerPhone, text };
   const res = await fetch(`${base}/sms/send`, {
     method: 'POST',
     headers: {
@@ -100,6 +98,25 @@ async function sendAakashSms(phone: string, text: string) {
         (typeof body.code === 'number' && body.code >= 200 && body.code < 300))) ||
       body === '' || body === null);
 
+  const logBody =
+    body && typeof body === 'object'
+      ? {
+          success: body.success,
+          status: body.status,
+          code: body.code,
+          message: body.message || body.error || body.reason,
+        }
+      : body;
+
+  const logPayload = {
+    status: res.status,
+    ok: success,
+    body: logBody,
+  };
+
+  // eslint-disable-next-line no-console
+  console.info('Aakash SMS response', logPayload);
+
   if (!success) {
     const msg =
       (body && typeof body === 'object' && (body.message || body.error || body.reason)) ||
@@ -107,6 +124,7 @@ async function sendAakashSms(phone: string, text: string) {
       `Aakash SMS failed (${res.status})`;
     const err: any = new Error(msg);
     err.status = res.status;
+    err.provider = logPayload;
     throw err;
   }
 }
@@ -120,72 +138,74 @@ function errorResponse(message: string, status: number) {
 }
 
 export async function POST(req: Request) {
-  let payload: any = null;
+  let email = '';
+  let phone = '';
+
   try {
-    payload = await req.json();
+    const body = await req.json();
+    email = (body?.email ?? '').toString().trim();
+    phone = (body?.phone ?? '').toString().trim();
   } catch {
-    return errorResponse('Invalid JSON body.', 400);
+    // keep empty email/phone
   }
 
-  let email = typeof payload?.email === 'string' ? payload.email.trim() : '';
-  let phoneInput = typeof payload?.phone === 'string' ? payload.phone.trim() : '';
+  if (phone) {
+    const normalized = normalizePhone(phone);
 
-  if (!phoneInput && typeof payload?.identifier === 'string') {
-    const identifier = payload.identifier.trim();
-    if (identifier) {
-      if (isEmail(identifier)) {
-        if (!email) {
-          email = identifier;
-        }
-      } else {
-        phoneInput = identifier;
-      }
-    }
-  }
-
-  if (phoneInput) {
-    const phone = cleanPhone(phoneInput);
-    if (!phone) {
+    if (!normalized) {
       return errorResponse('Enter a valid phone number.', 400);
     }
 
-    if (!phone.startsWith('+977')) {
+    if (!normalized.startsWith('+977')) {
       return errorResponse('Phone OTP is Nepal-only. use email.', 400);
     }
 
-    if (!NEPAL_E164.test(phone)) {
+    if (!NEPAL_MOBILE.test(normalized)) {
       return errorResponse('Enter a valid phone number.', 400);
     }
 
+    const providerPhone = providerFormat(normalized);
     const ip = (req.headers.get('x-forwarded-for') ?? 'unknown').split(',')[0].trim();
-    const key = `otp:${phone}:${ip}`;
+    const key = `otp:${normalized}:${ip}`;
+
     if (!canSendOtp(key)) {
       return errorResponse('Too many attempts. Try again later.', 429);
     }
 
+    let persistedId: number | undefined;
+
     try {
-      const code = await mintSupabaseSmsOtp(phone);
+      const code = generateOtp();
+      persistedId = await persistOtp(normalized, code);
       const text = `Your Gatishil Nepal code is ${code}. It expires in 5 minutes.`;
-      await sendAakashSms(phone, text);
+      await sendAakashSms(providerPhone, text);
       return okResponse();
     } catch (error: any) {
-      const message = error?.message || 'Could not send OTP. Please use email.';
-      const status = Number(error?.status) ||
-        (typeof error?.message === 'string' && /supabase/i.test(error.message) ? 502 : 500);
+      await discardOtp(persistedId).catch(() => {});
 
-      if (message.includes('Missing env')) {
+      let message = error?.message || 'Could not send OTP. Please use email.';
+
+      if (typeof message === 'string' && /email address is required/i.test(message)) {
+        message = 'Could not send OTP. Please use email.';
+      }
+
+      if (typeof message === 'string' && message.includes('Missing env')) {
         return errorResponse('SMS is temporarily unavailable. Please use email.', 503);
       }
+
+      if (typeof message === 'string' && /sms otp unavailable/i.test(message)) {
+        return errorResponse('SMS is temporarily unavailable. Please use email.', 503);
+      }
+
+      const status = Number(error?.status) ||
+        (typeof error?.message === 'string' && /supabase/i.test(error.message) ? 502 : 500);
 
       return errorResponse(message, status >= 400 && status < 600 ? status : 500);
     }
   }
 
   if (email) {
-    if (!isEmail(email)) {
-      return errorResponse('Enter a valid email.', 400);
-    }
-    return okResponse();
+    return errorResponse('Use the email OTP flow (unchanged).', 400);
   }
 
   return errorResponse('Provide phone (+977) or use email.', 400);

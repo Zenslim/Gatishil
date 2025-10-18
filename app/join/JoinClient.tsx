@@ -128,11 +128,18 @@ function JoinClientBody() {
       });
 
       const data = await safeJson(res);
-      if (!res.ok || data?.ok !== true) throw new Error(httpErr(res, data));
+      if (res.ok && data?.ok === true) {
+        setOtpSentTo(phone);
+        setMsg('We sent a 6-digit code (expires in 5 minutes).');
+        setTimeout(() => otpInputRef.current?.focus(), 50);
+        return;
+      }
 
-      setOtpSentTo(phone);
-      setMsg('We sent a 6-digit code (expires in 5 minutes).');
-      setTimeout(() => otpInputRef.current?.focus(), 50);
+      const errMsg = httpErr(res, data);
+      setErr(errMsg);
+      // eslint-disable-next-line no-console
+      console.error('sendOtp error:', { status: res.status, message: errMsg });
+      return;
     } catch (e: any) {
       setErr(e?.message || 'Could not send OTP. Please try again.');
       // eslint-disable-next-line no-console
@@ -161,6 +168,25 @@ function JoinClientBody() {
 
       const data = await safeJson(res);
       if (!res.ok || data?.ok !== true) throw new Error(httpErr(res, data));
+
+      if (data?.session?.access_token) {
+        const { error: setError } = await supabase.auth.setSession({
+          access_token: data.session.access_token,
+          refresh_token: data.session.refresh_token ?? undefined,
+        });
+        if (setError) throw setError;
+
+        await fetch('/api/auth/sync', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', accept: 'application/json' },
+          credentials: 'same-origin',
+          cache: 'no-store',
+          body: JSON.stringify({
+            access_token: data.session.access_token,
+            refresh_token: data.session.refresh_token ?? undefined,
+          }),
+        }).catch(() => {});
+      }
 
       const session = await waitForSession();
       if (!session) throw new Error('Session not ready. Please try again.');
