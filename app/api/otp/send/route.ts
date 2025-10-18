@@ -7,15 +7,6 @@ import { normalizeNepalToDB } from '@/lib/phone/nepal';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-function admin() {
-  const url = process.env.SUPABASE_URL!;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-  return createClient(url, key, {
-    db: { schema: 'public' },
-    auth: { autoRefreshToken: false, persistSession: false },
-  });
-}
-
 async function safeJson(req: Request) {
   try {
     const data = await req.json();
@@ -46,6 +37,44 @@ function generateOtp() {
 
 function hashOtp(code: string) {
   return createHash('sha256').update(code).digest('hex');
+}
+
+type StructuredError = {
+  ok: false;
+  error: {
+    code: string;
+    message: string;
+    details?: Record<string, unknown>;
+  };
+};
+
+function errorResponse(
+  status: number,
+  code: string,
+  message: string,
+  extra?: Record<string, unknown>,
+) {
+  const body: StructuredError = {
+    ok: false,
+    error: {
+      code,
+      message,
+    },
+  };
+
+  if (extra && Object.keys(extra).length > 0) {
+    Object.assign(body.error, { details: extra });
+  }
+
+  return NextResponse.json(body, { status });
+}
+
+function userError(code: string, message: string, extra?: Record<string, unknown>) {
+  return errorResponse(400, code, message, extra);
+}
+
+function infraError(code: string, message: string, extra?: Record<string, unknown>) {
+  return errorResponse(503, code, message, extra);
 }
 
 async function sendAakashSms(apiKey: string, dbPhone: string, text: string) {
@@ -205,85 +234,103 @@ function okResponse() {
   return NextResponse.json({ ok: true }, { status: 200 });
 }
 
-function errorResponse(message: string, status: number) {
-  return NextResponse.json({ ok: false, message }, { status });
-}
-
 export async function POST(req: Request) {
-  const body: any = await safeJson(req);
-  const dbPhone = normalizeNepalToDB(body?.phone);
-
-  if (!dbPhone) {
-    return errorResponse('Phone OTP is Nepal-only. use email.', 400);
-  }
-
-  const ip = (req.headers.get('x-forwarded-for') ?? 'unknown').split(',')[0].trim();
-  const key = `otp:${dbPhone}:${ip}`;
-
-  if (!canSendOtp(key)) {
-    return errorResponse('Too many attempts. Try again later.', 429);
-  }
-
-  const code = generateOtp();
-  const code_hash = hashOtp(code);
-  const sb = admin();
-  const insertPayload = {
-    phone: dbPhone,
-    code_hash,
-    expires_at: new Date(Date.now() + OTP_TTL_MS).toISOString(),
-  };
-
-  const masked = dbPhone.replace(/^9779(\d{5})\d{4}$/, '9779$1••••');
-  // eslint-disable-next-line no-console
-  console.log('[otp/send] about to insert', {
-    dbPhone,
-    masked,
-    len: dbPhone.length,
-    jsRegexOk: /^9779\d{9}$/.test(dbPhone),
-  });
-
-  const { error: insErr } = await sb
-    .from('otps')
-    .insert(insertPayload, { returning: 'minimal' });
-
-  if (insErr) {
-    // eslint-disable-next-line no-console
-    console.error('[otp/send] insert_error', {
-      code: insErr.code,
-      message: insErr.message,
-      details: insErr.details,
-      hint: insErr.hint,
-      insertPayload,
-    });
-    return NextResponse.json(
-      { ok: false, message: 'Phone format rejected by DB.' },
-      { status: 400 },
-    );
-  }
-
-  const text = `Your Gatishil Nepal code is ${code}. It expires in 5 minutes.`;
-  const apiKey = process.env.AAKASH_SMS_API_KEY;
-
-  if (!apiKey) {
-    await sb
-      .from('otps')
-      .delete()
-      .eq('phone', dbPhone)
-      .eq('code_hash', code_hash)
-      .catch(() => {});
-    return errorResponse('SMS is temporarily unavailable. Please use email.', 503);
-  }
-
   try {
-    await sendAakashSms(apiKey, dbPhone, text);
-    return okResponse();
-  } catch (error) {
-    await sb
+    const body: any = await safeJson(req);
+    const dbPhone = normalizeNepalToDB(body?.phone);
+
+    if (!dbPhone) {
+      return userError('invalid_phone', 'Phone OTP is Nepal-only. Use email.');
+    }
+
+    const ip = (req.headers.get('x-forwarded-for') ?? 'unknown').split(',')[0].trim();
+    const key = `otp:${dbPhone}:${ip}`;
+
+    if (!canSendOtp(key)) {
+      return userError('too_many_attempts', 'Too many attempts. Try again later.');
+    }
+
+    const code = generateOtp();
+    const code_hash = hashOtp(code);
+
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    if (!supabaseUrl || !supabaseKey) {
+      return infraError(
+        'supabase_env_missing',
+        'SMS is temporarily unavailable. Please use email.',
+      );
+    }
+
+    const sb = createClient(supabaseUrl, supabaseKey, {
+      db: { schema: 'public' },
+      auth: { autoRefreshToken: false, persistSession: false },
+    });
+
+    const insertPayload = {
+      phone: dbPhone,
+      code_hash,
+      expires_at: new Date(Date.now() + OTP_TTL_MS).toISOString(),
+    };
+
+    const masked = dbPhone.replace(/^9779(\d{5})\d{4}$/, '9779$1••••');
+    // eslint-disable-next-line no-console
+    console.log('[otp/send] about to insert', {
+      dbPhone,
+      masked,
+      len: dbPhone.length,
+      jsRegexOk: /^9779\d{9}$/.test(dbPhone),
+    });
+
+    const { error: insErr } = await sb
       .from('otps')
-      .delete()
-      .eq('phone', dbPhone)
-      .eq('code_hash', code_hash)
-      .catch(() => {});
-    return errorResponse('Aakash SMS failed', 503);
+      .insert(insertPayload, { returning: 'minimal' });
+
+    if (insErr) {
+      // eslint-disable-next-line no-console
+      console.error('[otp/send] insert_error', {
+        code: insErr.code,
+        message: insErr.message,
+        details: insErr.details,
+        hint: insErr.hint,
+        insertPayload,
+      });
+      return userError('invalid_phone_format', 'Phone format rejected by DB.');
+    }
+
+    const text = `Your Gatishil Nepal code is ${code}. It expires in 5 minutes.`;
+    const apiKey = process.env.AAKASH_SMS_API_KEY;
+
+    if (!apiKey) {
+      await sb
+        .from('otps')
+        .delete()
+        .eq('phone', dbPhone)
+        .eq('code_hash', code_hash)
+        .catch(() => {});
+      return infraError('sms_disabled', 'SMS is temporarily unavailable. Please use email.');
+    }
+
+    try {
+      await sendAakashSms(apiKey, dbPhone, text);
+      return okResponse();
+    } catch (error) {
+      await sb
+        .from('otps')
+        .delete()
+        .eq('phone', dbPhone)
+        .eq('code_hash', code_hash)
+        .catch(() => {});
+      const details =
+        error && typeof error === 'object' && 'status' in error
+          ? { provider_status: (error as any).status }
+          : undefined;
+      return infraError('sms_provider_failure', 'Aakash SMS failed', details);
+    }
+  } catch (error) {
+    // eslint-disable-next-line no-console
+    console.error('[otp/send] unexpected_error', error);
+    return infraError('unexpected_error', 'SMS is temporarily unavailable. Please use email.');
   }
 }
