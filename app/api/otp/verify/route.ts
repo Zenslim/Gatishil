@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createHash } from 'node:crypto';
 import { createClient } from '@supabase/supabase-js';
-import { normalizeNepal } from '@/lib/phone/nepal';
+import { normalizeNepalToDB } from '@/lib/phone/nepal';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -46,14 +46,14 @@ export async function POST(req: Request) {
     return badRequest('Enter the 6-digit code.');
   }
 
-  const providerPhone = normalizeNepal(typeof phone === 'string' ? phone : String(phone ?? ''));
+  const dbPhone = normalizeNepalToDB(typeof phone === 'string' ? phone : String(phone ?? ''));
 
-  if (!providerPhone) {
+  if (!dbPhone) {
     return badRequest('Phone OTP is Nepal-only. use email.');
   }
 
   const codeHash = hashCode(trimmedCode);
-  const plusPhone = `+${providerPhone}`;
+  const plusPhone = `+${dbPhone}`;
   let supabaseAdmin;
 
   try {
@@ -69,7 +69,7 @@ export async function POST(req: Request) {
     const { data: otpRow, error: selectError } = await supabaseAdmin
       .from('otps')
       .select('id, code_hash, attempts')
-      .eq('phone', plusPhone)
+      .eq('phone', dbPhone)
       .is('consumed_at', null)
       .gt('expires_at', new Date().toISOString())
       .order('created_at', { ascending: false })
