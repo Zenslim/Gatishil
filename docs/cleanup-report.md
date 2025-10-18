@@ -1,18 +1,27 @@
-# Cleanup Report
+# Minimal Repo Cleanup Report
 
-- **Timestamp:** 2025-10-18T10:15:33Z (UTC)
+✅ **Files removed**
+- `.pre-commit-config.yaml` — Unused; no references found via `git grep`.
+- `CODEOWNERS` — Unused; no references found via `git grep`.
+- `.secretlintrc.json` — Unused; no references found via `git grep`.
+- `.secrets.baseline` — Legacy baseline tied to removed pre-commit hooks; no remaining references.
+- `.gitleaks.toml` — Secret scanner configuration removed alongside its workflow; no remaining references.
+- `.trufflehogignore` — Scanner ignore list removed alongside secret-scans workflow.
+- `vitest.config.ts` — Vitest suite retired; no references after cleanup.
+- `vitest.setup.ts` — Vitest setup removed together with the retired test suite.
+- `.github/workflows/secret-scans.yml` — Secret scanning workflow removed for minimalist production repo.
+- `tests/` — Vitest test suite removed per production-only focus.
 
-| Removed item | Rationale |
-| --- | --- |
-| `OVERWRITE_MANIFEST.json` | `git grep -n "OVERWRITE_MANIFEST"` returned no matches, confirming the manifest is unused. |
-| `PACKAGE_JSON_NOTE.txt` | No references found via `git grep`, and content duplicated information already covered in `package.json`. |
-| `PATCH-OnboardingFlow.after-AtmaDisha.txt` | Historical patch note with no references in the codebase per `git grep`. |
-| `README_API_PATCH.txt` & `README_FORCE_API_ROUTES.txt` | Redundant legacy API instructions; only self-referenced mentions were detected when searching for their filenames. |
-| `git-commit.bat` | Windows helper script never invoked anywhere (`git grep -n "git-commit.bat"` returned no hits). |
-| `next.config.js` | Duplicate of the active `next.config.mjs`; no imports or tooling references relied on the CommonJS variant. |
-| `openapi.yml` | API schema not referenced in repo or build tooling per `git grep -n "openapi.yml"`. |
-| `e2e/` & `playwright.config.ts` | Playwright suite had no package scripts or CI workflows referencing it; only internal imports existed within the deleted files. |
-| `prisma/` | No Prisma packages in dependencies and no `prisma` imports/CLI calls discovered via `git grep`. |
-| `release-please-config.json` & `.release-please-manifest.json` | `git grep -n "release-please"` across workflows/scripts returned no usages, so release-please automation is inactive. |
+🧾 **Reasoning**
+- Verified each deleted path with `git grep -n` to ensure no outstanding references in source files, package scripts, or workflows.
+- Removed dependent workflows/configs together so that no dangling references remain.
 
-`npm run build` was attempted after cleanup, but the process failed early because `npm install` cannot fetch `@simplewebauthn/browser` from the registry in this environment (HTTP 403). No missing-file errors related to the removals were encountered before that registry failure.
+🕒 **Timestamp**
+- 2025-10-18T10:35:38Z (UTC)
+
+🧩 **Confirmed kept configs**
+- `tsconfig.eslint.json` — Required by `eslint.config.mjs` for linting.
+- `.github/workflows/ci.yml` — Retained to ensure build, lint, and typecheck coverage.
+- `.github/workflows/security.yml` — Preserved dependency scanning for releases and PRs.
+- `.github/workflows/vercel-cancel-builds.yml` — Keeps Vercel deployment cancellation automation intact.
+
