@@ -14,13 +14,14 @@ export default function LoginClient() {
   const [password, setPassword] = React.useState("");
   const [otpCode, setOtpCode] = React.useState("");
   const [loading, setLoading] = React.useState(false);
+  const [message, setMessage] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
 
   const nextPath = getValidatedNext(undefined, "/dashboard");
 
   async function onPasswordLogin(e: React.FormEvent) {
     e.preventDefault();
-    setLoading(true); setError(null);
+    setLoading(true); setError(null); setMessage(null);
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     setLoading(false);
     if (error) { setError(error.message); return; }
@@ -42,7 +43,7 @@ export default function LoginClient() {
   async function onOtpLogin(e: React.FormEvent) {
     e.preventDefault();
     if (!otpCode.trim()) return;
-    setLoading(true); setError(null);
+    setLoading(true); setError(null); setMessage(null);
     try {
       await verifyOtpAndSync({ type: "email", email, token: otpCode.trim() });
       router.push(nextPath);
@@ -51,6 +52,21 @@ export default function LoginClient() {
     } finally {
       setLoading(false);
     }
+  }
+
+  async function onMagicLink(e: React.FormEvent) {
+    e.preventDefault();
+    setLoading(true); setError(null); setMessage(null);
+    const origin = typeof window !== "undefined" ? window.location.origin : process.env.NEXT_PUBLIC_SITE_URL || "";
+    const emailRedirectTo = `${origin}/auth/callback?next=${encodeURIComponent(nextPath)}`;
+
+    const { error } = await supabase.auth.signInWithOtp({
+      email,
+      options: { emailRedirectTo }
+    });
+    setLoading(false);
+    if (error) { setError(error.message); return; }
+    setMessage("Magic link sent. Please check your email.");
   }
 
   return (
@@ -71,13 +87,23 @@ export default function LoginClient() {
         className="w-full border px-3 py-2 rounded"
         required
       />
-      <button
-        type="submit"
-        disabled={loading}
-        className="px-4 py-2 rounded bg-black text-white"
-      >
-        {loading ? "Signing in…" : "Login"}
-      </button>
+      <div className="flex gap-2">
+        <button
+          type="submit"
+          disabled={loading}
+          className="px-4 py-2 rounded bg-black text-white"
+        >
+          {loading ? "Signing in…" : "Login"}
+        </button>
+        <button
+          type="button"
+          onClick={onMagicLink}
+          disabled={loading}
+          className="px-4 py-2 rounded border"
+        >
+          Email me a magic link
+        </button>
+      </div>
       <div className="space-y-2 border-t pt-4">
         <label className="block text-sm font-medium">Have a one-time code?</label>
         <input
@@ -95,6 +121,7 @@ export default function LoginClient() {
           {loading ? "Verifying…" : "Verify OTP"}
         </button>
       </div>
+      {message && <p className="text-green-600">{message}</p>}
       {error && <p className="text-red-600">{error}</p>}
     </form>
   );
