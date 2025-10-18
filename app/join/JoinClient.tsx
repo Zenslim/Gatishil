@@ -150,7 +150,8 @@ function JoinClientBody() {
   }
 
   async function verifyOtp() {
-    if (!otpSentTo || loading) return;
+    const trimmed = otp.trim();
+    if (!otpSentTo || loading || trimmed.length !== 6) return;
     setErr(null); setMsg(null); setLoading(true);
 
     try {
@@ -163,12 +164,15 @@ function JoinClientBody() {
         },
         credentials: 'same-origin',
         cache: 'no-store',
-        body: JSON.stringify({ phone: otpSentTo, code: otp.trim() }),
+        body: JSON.stringify({ phone: otpSentTo, code: trimmed }),
       });
 
       const data = await safeJson(res);
       if (!res.ok || data?.ok !== true) {
-        throw new Error(httpErr(res, data));
+        const message = typeof data?.message === 'string' && data.message.trim()
+          ? data.message
+          : httpErr(res, data);
+        throw new Error(message);
       }
 
       const accessToken = data?.access_token;
