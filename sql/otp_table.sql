@@ -3,7 +3,7 @@
 create table if not exists public.otps (
   id bigserial primary key,
   phone text not null,
-  code text not null,
+  code_hash text not null,
   created_at timestamptz not null default now(),
   used_at timestamptz,
   meta jsonb default '{}'
