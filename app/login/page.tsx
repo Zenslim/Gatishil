@@ -34,7 +34,7 @@ export default async function LoginPage({
             <strong>Tip:</strong> If you never created a password for this account,
             click <span className="underline underline-offset-2">Forgot Password</span> to set one now.
             You can also tap <span className="whitespace-nowrap">🖐️ Use Biometric</span> to sign in with your passkey,
-            or use the <span className="whitespace-nowrap">“Email me a magic link”</span> option.
+            or enter the 6-digit code we send to your email.
           </p>
           <p className="mt-3">
             Passkeys use your device’s built-in authenticator (Face ID, Touch ID, Android Biometric Prompt, or Windows Hello on laptops and desktops).
