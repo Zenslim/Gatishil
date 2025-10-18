@@ -42,11 +42,14 @@ export default function VerifyClient() {
     const type = id.includes('@') ? 'email' : 'phone';
 
     try {
-      const { error } = await supabase.auth.verifyOtp({
-        type: type === 'email' ? 'email' : 'sms',
-        [type]: id,
-        token: code,
-      });
+      let params: any;
+      if (type === 'email') {
+        params = { email: id, token: code, type: 'email' };
+      } else {
+        params = { phone: id, token: code, type: 'sms' };
+      }
+
+      const { error } = await supabase.auth.verifyOtp(params);
       if (error) throw error;
 
       // success → /onboard
@@ -70,7 +73,10 @@ export default function VerifyClient() {
     setErr(null);
     try {
       if (id.includes('@')) {
-        await supabase.auth.signInWithOtp({ email: id, options: { shouldCreateUser: true } });
+        await supabase.auth.signInWithOtp({
+          email: id,
+          options: { shouldCreateUser: true },
+        });
       } else {
         await supabase.auth.signInWithOtp({ phone: id });
       }
