@@ -1,16 +1,10 @@
 import { NextResponse } from 'next/server';
 import { createHash } from 'node:crypto';
 import { createClient } from '@supabase/supabase-js';
-import { NEPAL_MOBILE, normalizeOtpPhone } from '@/lib/auth/phone';
+import { normalizeNepal } from '@/lib/phone/nepal';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-
-function safeString(value: unknown) {
-  if (typeof value === 'string') return value;
-  if (value === null || value === undefined) return '';
-  return String(value);
-}
 
 function badRequest(message: string) {
   return NextResponse.json({ ok: false, message }, { status: 400 });
@@ -40,48 +34,37 @@ export async function POST(req: Request) {
   try {
     const body = await req.json().catch(() => null);
     if (body && typeof body === 'object') {
-      phone = safeString((body as any).phone ?? '');
-      code = safeString((body as any).code ?? '');
+      phone = typeof (body as any).phone === 'string' ? (body as any).phone : String((body as any).phone ?? '');
+      code = typeof (body as any).code === 'string' ? (body as any).code : String((body as any).code ?? '');
     }
   } catch {
     // ignore malformed JSON; we'll validate below
   }
 
-  phone = phone.trim();
-  code = code.trim();
-
-  if (!phone) {
-    return badRequest('Enter your phone number.');
+  const trimmedCode = code.trim();
+  if (!trimmedCode || trimmedCode.length !== 6 || !/^\d{6}$/.test(trimmedCode)) {
+    return badRequest('Enter the 6-digit code.');
   }
 
-  const normalized = normalizeOtpPhone(phone);
+  const providerPhone = normalizeNepal(typeof phone === 'string' ? phone : String(phone ?? ''));
 
-  if (!normalized) {
-    return badRequest('Enter a valid phone number.');
-  }
-
-  if (!normalized.startsWith('+977')) {
+  if (!providerPhone) {
     return badRequest('Phone OTP is Nepal-only. use email.');
   }
 
-  if (!NEPAL_MOBILE.test(normalized)) {
-    return badRequest('Enter a valid phone number.');
-  }
-
-  if (!code) {
-    return badRequest('Enter the 6-digit code.');
-  }
-
-  if (!/^\d{6}$/.test(code)) {
-    return badRequest('Enter the 6-digit code.');
-  }
-
-  const providerPhone = normalized;
-  const hashedCode = hashCode(code).toLowerCase();
+  const codeHash = hashCode(trimmedCode);
+  let supabaseAdmin;
 
   try {
-    const supabaseAdmin = admin();
+    supabaseAdmin = admin();
+  } catch (error: any) {
+    if (error?.message === 'NO_SERVICE_ROLE') {
+      return NextResponse.json({ ok: false, message: 'Auth unavailable. Use email.' }, { status: 503 });
+    }
+    throw error;
+  }
 
+  try {
     const { data: otpRow, error: selectError } = await supabaseAdmin
       .from('otps')
       .select('id, code_hash, attempts')
@@ -100,10 +83,8 @@ export async function POST(req: Request) {
       return badRequest('Code expired or not found.');
     }
 
-    const storedHash = typeof otpRow.code_hash === 'string' ? otpRow.code_hash.toLowerCase() : '';
-    const matches = storedHash === hashedCode;
-
-    if (!matches) {
+    const storedHash = typeof otpRow.code_hash === 'string' ? otpRow.code_hash : '';
+    if (storedHash !== codeHash) {
       await supabaseAdmin
         .from('otps')
         .update({ attempts: (otpRow.attempts ?? 0) + 1 })
@@ -113,10 +94,9 @@ export async function POST(req: Request) {
       return badRequest('Invalid code.');
     }
 
-    const consumedAt = new Date().toISOString();
     const { error: consumeError } = await supabaseAdmin
       .from('otps')
-      .update({ consumed_at: consumedAt })
+      .update({ consumed_at: new Date().toISOString() })
       .eq('id', otpRow.id)
       .is('consumed_at', null);
 
@@ -124,50 +104,39 @@ export async function POST(req: Request) {
       throw consumeError;
     }
 
-    const adminAuth = supabaseAdmin.auth.admin as any;
-    if (!adminAuth || typeof adminAuth.createSession !== 'function') {
-      return NextResponse.json({ ok: false, message: 'Auth unavailable. Use email.' }, { status: 503 });
+    const plusPhone = `+${providerPhone}`;
+
+    const { data: existingUser, error: getUserError } = await supabaseAdmin.auth.admin.getUserByPhone(plusPhone);
+
+    if (getUserError && !/not found/i.test(getUserError.message ?? '')) {
+      throw getUserError;
     }
 
-    let user: any = null;
+    let userId = existingUser?.user?.id ?? existingUser?.data?.user?.id ?? null;
 
-    if (typeof adminAuth.listUsers === 'function') {
-      const listed = await adminAuth.listUsers({ page: 1, perPage: 200 });
-      if (listed?.error) {
-        throw new Error(listed.error.message || 'User lookup failed');
-      }
-      const users: any[] = listed?.data?.users ?? listed?.users ?? [];
-      user = users.find((u: any) => u?.phone === normalized) ?? null;
-    }
-
-    if (!user) {
-      const created = await adminAuth.createUser({
-        phone: normalized,
+    if (!userId) {
+      const created = await supabaseAdmin.auth.admin.createUser({
+        phone: plusPhone,
         phone_confirm: true,
         user_metadata: { phone_verified: true },
       });
 
-      if (created?.error && !/already exists|registered/i.test(created.error.message ?? '')) {
-        throw new Error(created.error.message || 'Could not create user');
+      if (created.error && !/already exists|registered/i.test(created.error.message ?? '')) {
+        throw created.error;
       }
 
-      user = created?.data?.user ?? created?.user ?? null;
+      userId = created.data?.user?.id ?? created.user?.id ?? null;
 
-      if (!user && typeof adminAuth.listUsers === 'function') {
-        const listed = await adminAuth.listUsers({ page: 1, perPage: 200 });
-        if (listed?.error) {
-          throw new Error(listed.error.message || 'User lookup failed');
+      if (!userId) {
+        const { data: refetched, error: refetchError } = await supabaseAdmin.auth.admin.getUserByPhone(plusPhone);
+        if (refetchError || !refetched?.user) {
+          return NextResponse.json({ ok: false, message: 'Auth unavailable. Use email.' }, { status: 503 });
         }
-        const users: any[] = listed?.data?.users ?? listed?.users ?? [];
-        user = users.find((u: any) => u?.phone === normalized) ?? null;
+        userId = refetched.user.id;
       }
     }
 
-    if (!user?.id) {
-      return NextResponse.json({ ok: false, message: 'Auth unavailable. Use email.' }, { status: 503 });
-    }
-
-    const { data: sessionData, error: sessionError } = await adminAuth.createSession({ user_id: user.id });
+    const { data: sessionData, error: sessionError } = await supabaseAdmin.auth.admin.createSession({ user_id: userId });
 
     if (sessionError || !sessionData?.session) {
       return NextResponse.json({ ok: false, message: 'Auth unavailable. Use email.' }, { status: 503 });
@@ -175,34 +144,26 @@ export async function POST(req: Request) {
 
     const session = sessionData.session;
 
-    const { error: profileError } = await supabaseAdmin
+    await supabaseAdmin
       .from('profiles')
-      .upsert({ id: user.id, phone: normalized }, { onConflict: 'id' });
-
-    if (profileError) {
-      // eslint-disable-next-line no-console
-      console.warn('[otp/verify] Failed to upsert profile phone', profileError);
-    }
+      .upsert({ id: userId, phone: plusPhone }, { onConflict: 'id' })
+      .catch((profileError) => {
+        // eslint-disable-next-line no-console
+        console.warn('[otp/verify] Failed to upsert profile phone', profileError);
+      });
 
     return NextResponse.json(
       {
         ok: true,
         access_token: session.access_token,
         refresh_token: session.refresh_token,
-        user: session.user ?? user,
+        user: session.user,
       },
       { status: 200 },
     );
   } catch (error: any) {
     if (error?.message === 'NO_SERVICE_ROLE') {
-      return NextResponse.json(
-        { ok: false, message: 'Auth unavailable. Use email.' },
-        { status: 503 },
-      );
-    }
-
-    if (error?.name === 'USER_ERROR' && typeof error.message === 'string') {
-      return NextResponse.json({ ok: false, message: error.message }, { status: 400 });
+      return NextResponse.json({ ok: false, message: 'Auth unavailable. Use email.' }, { status: 503 });
     }
 
     // eslint-disable-next-line no-console
