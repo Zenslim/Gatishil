@@ -37,23 +37,28 @@ function env(key: string) {
 
 async function mintSupabaseSmsOtp(phone: string) {
   const supabase = getAdminSupabase();
+  const admin: any = supabase.auth.admin as any;
 
-  const generate = async () => supabase.auth.admin.generateLink({
-    // @ts-expect-error: supabase typings omit sms body extras in some versions
-    type: 'sms',
-    phone,
-  });
+  if (!admin || typeof admin.createCode !== 'function') {
+    throw new Error('Supabase sms OTP unavailable');
+  }
+
+  const generate = async () => admin.createCode({ type: 'sms', phone });
 
   let { data, error } = await generate();
+
   if (error) {
     const msg = error.message?.toLowerCase() ?? '';
     if (msg.includes('not found') || msg.includes('no user')) {
-      const create = await supabase.auth.admin.createUser({
+      if (typeof admin.createUser !== 'function') {
+        throw new Error('Supabase sms OTP unavailable');
+      }
+
+      const create = await admin.createUser({
         phone,
-        email: undefined,
         phone_confirm: false,
-      } as any);
-      if (create.error && !/already exists|registered/i.test(create.error.message ?? '')) {
+      });
+      if (create?.error && !/already exists|registered/i.test(create.error.message ?? '')) {
         throw new Error(create.error.message);
       }
       ({ data, error } = await generate());
@@ -64,9 +69,12 @@ async function mintSupabaseSmsOtp(phone: string) {
     throw new Error(error.message || 'Failed to generate OTP');
   }
 
-  const props = (data as any)?.properties ?? {};
-  const otp: string | undefined =
-    props.phone_otp || props.otp || props.sms_otp || props.token || (data as any)?.otp;
+  const otp =
+    (data as any)?.code ||
+    (data as any)?.otp ||
+    (data as any)?.properties?.code ||
+    (data as any)?.properties?.phone_otp ||
+    (data as any)?.properties?.otp;
 
   if (!otp) {
     throw new Error('Supabase OTP missing');
@@ -187,9 +195,17 @@ export async function POST(req: Request) {
       await sendAakashSms(providerPhone, text);
       return okResponse();
     } catch (error: any) {
-      const message = error?.message || 'Could not send OTP. Please use email.';
+      let message = error?.message || 'Could not send OTP. Please use email.';
+
+      if (typeof message === 'string' && /email address is required/i.test(message)) {
+        message = 'Could not send OTP. Please use email.';
+      }
 
       if (typeof message === 'string' && message.includes('Missing env')) {
+        return errorResponse('SMS is temporarily unavailable. Please use email.', 503);
+      }
+
+      if (typeof message === 'string' && /sms otp unavailable/i.test(message)) {
         return errorResponse('SMS is temporarily unavailable. Please use email.', 503);
       }
 
