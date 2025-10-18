@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { randomInt, createHash } from 'node:crypto';
 import { canSendOtp } from '@/lib/auth/rateLimit';
 import { getAdminSupabase } from '@/lib/admin';
 
@@ -35,44 +36,34 @@ function env(key: string) {
   return value;
 }
 
-async function mintSupabaseSmsOtp(phone: string) {
+function generateOtp() {
+  return randomInt(0, 1_000_000).toString().padStart(6, '0');
+}
+
+function hashOtp(code: string) {
+  return createHash('sha256').update(code).digest('hex');
+}
+
+async function persistOtp(phone: string, code: string) {
   const supabase = getAdminSupabase();
-
-  const generate = async () => supabase.auth.admin.generateLink({
-    // @ts-expect-error: supabase typings omit sms body extras in some versions
-    type: 'sms',
-    phone,
-  });
-
-  let { data, error } = await generate();
-  if (error) {
-    const msg = error.message?.toLowerCase() ?? '';
-    if (msg.includes('not found') || msg.includes('no user')) {
-      const create = await supabase.auth.admin.createUser({
-        phone,
-        email: undefined,
-        phone_confirm: false,
-      } as any);
-      if (create.error && !/already exists|registered/i.test(create.error.message ?? '')) {
-        throw new Error(create.error.message);
-      }
-      ({ data, error } = await generate());
-    }
-  }
+  const hashed = hashOtp(code);
+  const { data, error } = await supabase
+    .from('otps')
+    .insert({ phone, code: hashed, meta: { channel: 'sms' } })
+    .select('id')
+    .single();
 
   if (error) {
-    throw new Error(error.message || 'Failed to generate OTP');
+    throw new Error(error.message || 'Failed to store OTP');
   }
 
-  const props = (data as any)?.properties ?? {};
-  const otp: string | undefined =
-    props.phone_otp || props.otp || props.sms_otp || props.token || (data as any)?.otp;
+  return data?.id as number | undefined;
+}
 
-  if (!otp) {
-    throw new Error('Supabase OTP missing');
-  }
-
-  return otp;
+async function discardOtp(id?: number) {
+  if (!id) return;
+  const supabase = getAdminSupabase();
+  await supabase.from('otps').delete().eq('id', id);
 }
 
 async function sendAakashSms(providerPhone: string, text: string) {
@@ -181,15 +172,28 @@ export async function POST(req: Request) {
       return errorResponse('Too many attempts. Try again later.', 429);
     }
 
+    let persistedId: number | undefined;
+
     try {
-      const code = await mintSupabaseSmsOtp(normalized);
+      const code = generateOtp();
+      persistedId = await persistOtp(normalized, code);
       const text = `Your Gatishil Nepal code is ${code}. It expires in 5 minutes.`;
       await sendAakashSms(providerPhone, text);
       return okResponse();
     } catch (error: any) {
-      const message = error?.message || 'Could not send OTP. Please use email.';
+      await discardOtp(persistedId).catch(() => {});
+
+      let message = error?.message || 'Could not send OTP. Please use email.';
+
+      if (typeof message === 'string' && /email address is required/i.test(message)) {
+        message = 'Could not send OTP. Please use email.';
+      }
 
       if (typeof message === 'string' && message.includes('Missing env')) {
+        return errorResponse('SMS is temporarily unavailable. Please use email.', 503);
+      }
+
+      if (typeof message === 'string' && /sms otp unavailable/i.test(message)) {
         return errorResponse('SMS is temporarily unavailable. Please use email.', 503);
       }
 
