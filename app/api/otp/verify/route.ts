@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createHash } from 'node:crypto';
-import { getAdminSupabase } from '@/lib/admin';
+import { createClient } from '@supabase/supabase-js';
 import { NEPAL_MOBILE, normalizeOtpPhone } from '@/lib/auth/phone';
 
 export const runtime = 'nodejs';
@@ -16,12 +16,21 @@ function badRequest(message: string) {
   return NextResponse.json({ ok: false, message }, { status: 400 });
 }
 
-function serviceError(message: string) {
-  return NextResponse.json({ ok: false, message }, { status: 503 });
-}
-
 function hashCode(code: string) {
   return createHash('sha256').update(code).digest('hex');
+}
+
+function admin() {
+  const url = process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!url || !key) {
+    throw new Error('NO_SERVICE_ROLE');
+  }
+
+  return createClient(url, key, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
 }
 
 export async function POST(req: Request) {
@@ -67,15 +76,11 @@ export async function POST(req: Request) {
     return badRequest('Enter the 6-digit code.');
   }
 
-  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
-    return serviceError('Auth unavailable. Use email.');
-  }
-
   const providerPhone = normalized;
   const hashedCode = hashCode(code).toLowerCase();
 
   try {
-    const supabaseAdmin = getAdminSupabase();
+    const supabaseAdmin = admin();
 
     const { data: otpRow, error: selectError } = await supabaseAdmin
       .from('otps')
@@ -121,7 +126,7 @@ export async function POST(req: Request) {
 
     const adminAuth = supabaseAdmin.auth.admin as any;
     if (!adminAuth || typeof adminAuth.createSession !== 'function') {
-      return serviceError('Auth unavailable. Use email.');
+      return NextResponse.json({ ok: false, message: 'Auth unavailable. Use email.' }, { status: 503 });
     }
 
     let user: any = null;
@@ -159,13 +164,13 @@ export async function POST(req: Request) {
     }
 
     if (!user?.id) {
-      return serviceError('Auth unavailable. Use email.');
+      return NextResponse.json({ ok: false, message: 'Auth unavailable. Use email.' }, { status: 503 });
     }
 
     const { data: sessionData, error: sessionError } = await adminAuth.createSession({ user_id: user.id });
 
     if (sessionError || !sessionData?.session) {
-      return serviceError('Could not start session.');
+      return NextResponse.json({ ok: false, message: 'Auth unavailable. Use email.' }, { status: 503 });
     }
 
     const session = sessionData.session;
@@ -188,9 +193,23 @@ export async function POST(req: Request) {
       },
       { status: 200 },
     );
-  } catch (error) {
+  } catch (error: any) {
+    if (error?.message === 'NO_SERVICE_ROLE') {
+      return NextResponse.json(
+        { ok: false, message: 'Auth unavailable. Use email.' },
+        { status: 503 },
+      );
+    }
+
+    if (error?.name === 'USER_ERROR' && typeof error.message === 'string') {
+      return NextResponse.json({ ok: false, message: error.message }, { status: 400 });
+    }
+
     // eslint-disable-next-line no-console
     console.error('[otp/verify] unexpected error', error);
-    return serviceError('Verification is temporarily unavailable. Please try again.');
+    return NextResponse.json(
+      { ok: false, message: 'Could not verify code. Please try again.' },
+      { status: 400 },
+    );
   }
 }
