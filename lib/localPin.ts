@@ -1,58 +1,50 @@
 // lib/localPin.ts
-// Device-local 4-digit PIN storage & verification (never sent to server).
-const STORAGE_KEY = 'gn.pin.v1';
-const ITERATIONS = 120000; // ~100-150k recommended for PBKDF2 on web
-const DIGITS_RE = /^\d{4}$/: RegExp;
+const STORE_KEY = 'gn.local.secret'
+const SALT_KEY = 'gn.local.salt'
 
-export type StoredPin = {
-  deviceId: string;
-  pinHash: string; // base64
-  salt: string;    // base64
-  createdAt: string;
-};
-
-function toBase64(buf: ArrayBuffer) {
-  return btoa(String.fromCharCode(...new Uint8Array(buf)));
-}
-function fromString(s: string) { return new TextEncoder().encode(s); }
-
-async function pbkdf2(pin: string, salt: Uint8Array): Promise<string> {
-  const key = await crypto.subtle.importKey('raw', fromString(pin), 'PBKDF2', false, ['deriveBits']);
-  const bits = await crypto.subtle.deriveBits(
-    { name: 'PBKDF2', hash: 'SHA-256', salt, iterations: ITERATIONS },
-    key,
-    256
-  );
-  return toBase64(bits);
+function getSubtle() {
+  if (typeof window === 'undefined' || !window.crypto?.subtle) throw new Error('Crypto not available')
+  return window.crypto.subtle
 }
 
-export async function setPin(deviceId: string, pin: string) {
-  if (!DIGITS_RE.test(pin)) throw new Error('PIN must be 4 digits');
-  const salt = crypto.getRandomValues(new Uint8Array(16));
-  const pinHash = await pbkdf2(pin, salt);
-  const payload: StoredPin = {
-    deviceId,
-    pinHash,
-    salt: toBase64(salt.buffer),
-    createdAt: new Date().toISOString(),
-  };
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
-  return true;
+async function deriveKey(pin: string, salt: Uint8Array) {
+  const enc = new TextEncoder()
+  const keyMaterial = await getSubtle().importKey('raw', enc.encode(pin), { name: 'PBKDF2' }, false, ['deriveKey'])
+  return getSubtle().deriveKey(
+    { name: 'PBKDF2', salt, iterations: 100_000, hash: 'SHA-256' },
+    keyMaterial,
+    { name: 'AES-GCM', length: 256 },
+    false,
+    ['encrypt', 'decrypt']
+  )
 }
 
-export async function hasPin(): Promise<boolean> {
-  return !!localStorage.getItem(STORAGE_KEY);
+export function hasLocalPin(): boolean {
+  if (typeof localStorage === 'undefined') return false
+  return !!localStorage.getItem(STORE_KEY)
 }
 
-export async function verifyPin(pin: string): Promise<boolean> {
-  const raw = localStorage.getItem(STORAGE_KEY);
-  if (!raw) return false;
-  const data: StoredPin = JSON.parse(raw);
-  const salt = Uint8Array.from(atob(data.salt), c => c.charCodeAt(0));
-  const hash = await pbkdf2(pin, salt);
-  return hash === data.pinHash;
+export async function createLocalPin(pin: string) {
+  const secret = crypto.getRandomValues(new Uint8Array(32))
+  const salt = crypto.getRandomValues(new Uint8Array(16))
+  const key = await deriveKey(pin, salt)
+  const iv = crypto.getRandomValues(new Uint8Array(12))
+  const ct = await getSubtle().encrypt({ name: 'AES-GCM', iv }, key, secret)
+  localStorage.setItem(STORE_KEY, JSON.stringify({ iv: Array.from(iv), ct: Array.from(new Uint8Array(ct)) }))
+  localStorage.setItem(SALT_KEY, JSON.stringify({ salt: Array.from(salt) }))
 }
 
-export function clearPin() {
-  localStorage.removeItem(STORAGE_KEY);
+export async function unlockWithPin(pin: string): Promise<boolean> {
+  try {
+    const raw = localStorage.getItem(STORE_KEY)
+    const saltRaw = localStorage.getItem(SALT_KEY)
+    if (!raw || !saltRaw) return false
+    const { iv, ct } = JSON.parse(raw)
+    const { salt } = JSON.parse(saltRaw)
+    const key = await deriveKey(pin, new Uint8Array(salt))
+    const pt = await getSubtle().decrypt({ name: 'AES-GCM', iv: new Uint8Array(iv) }, key, new Uint8Array(ct))
+    return pt.byteLength === 32
+  } catch {
+    return false
+  }
 }

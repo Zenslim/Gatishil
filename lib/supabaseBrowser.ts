@@ -1,3 +1,2 @@
-// lib/supabaseBrowser.ts (shim)
-// Fixes previous re-exports. Only re-export what's actually provided.
-export { getSupabaseBrowser as supabaseBrowser, getSupabaseBrowser } from '@/lib/supabase/browser';
+// Compatibility re-export for older imports
+export { supabase as supabaseBrowser, getBrowserSupabase } from '@/lib/supabase/browser';

@@ -1,25 +1,61 @@
-// lib/blogApi.ts
-// Minimal blog API shims to satisfy editor import paths. Replace with real implementation later.
-export type BlogPost = {
-  id?: string;
-  title: string;
-  body: string;
-  created_at?: string;
-  updated_at?: string;
-};
+"use client";
+import { supabase } from "./supabaseClient";
 
-export async function listDrafts(): Promise<BlogPost[]> {
-  return [];
+// Insert post with authenticated JWT
+export async function sealAndPublish(payload: {
+  title: string; slug: string; excerpt: string; content_mdx: string; tags: string[];
+}) {
+  try {
+    const { data: session } = await supabase.auth.getSession();
+    if (!session?.session) {
+      alert("Please sign in first.");
+      return false;
+    }
+
+    const { error } = await supabase.from("posts").insert({
+      title: payload.title,
+      slug: payload.slug,
+      excerpt: payload.excerpt,
+      content_mdx: payload.content_mdx,
+      tags: payload.tags,
+      status: "published",
+    });
+
+    if (error) {
+      console.error("Publish error:", error);
+      alert("Publish failed. Check console for details.");
+      return false;
+    }
+    return true;
+  } catch (e) {
+    console.error(e);
+    return false;
+  }
 }
 
-export async function getPost(id: string): Promise<BlogPost | null> {
-  return null;
-}
+// Insert comment with authenticated JWT
+export async function sealAndComment(payload: { post_id: string; text: string }) {
+  try {
+    const { data: session } = await supabase.auth.getSession();
+    if (!session?.session) {
+      alert("Please sign in first.");
+      return false;
+    }
 
-export async function savePost(post: BlogPost): Promise<{ ok: boolean; id?: string }> {
-  return { ok: true, id: post.id ?? 'draft' };
-}
+    const { error } = await supabase.from("comments").insert({
+      post_id: payload.post_id,
+      text: payload.text,
+      trust_signature: "demo-signature",
+    });
 
-export async function publishPost(id: string): Promise<{ ok: boolean }> {
-  return { ok: true };
+    if (error) {
+      console.error("Comment error:", error);
+      alert("Comment failed. Check console for details.");
+      return false;
+    }
+    return true;
+  } catch (e) {
+    console.error(e);
+    return false;
+  }
 }

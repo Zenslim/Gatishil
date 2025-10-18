@@ -1,19 +1,30 @@
-// lib/auth/next.ts
-// Minimal SSR helpers used by login/onboard screens.
-// Expand later as needed.
-import { getSupabaseServer } from '@/lib/supabase/server';
+// Single source of truth to validate and resolve the `next` redirect target.
+// Only allow internal paths beginning with a single '/'. Fallback to '/dashboard'.
+export function getValidatedNext(input?: string | URL | null, fallback: string = '/dashboard'): string {
+  try {
+    let nextParam: string | null = null;
 
-export async function getSessionUser() {
-  const supabase = getSupabaseServer();
-  const { data: { user } } = await supabase.auth.getUser();
-  return user ?? null;
-}
+    if (input instanceof URL) {
+      nextParam = input.searchParams.get('next');
+    } else if (typeof input === 'string') {
+      const url = new URL(input, 'http://localhost'); // base ignored if absolute
+      nextParam = url.searchParams.get('next');
+    } else if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      nextParam = url.searchParams.get('next');
+    }
 
-export async function requireNoSessionRedirect(to: string = '/dashboard') {
-  const user = await getSessionUser();
-  if (user) {
-    // In server contexts you might redirect; here just return a flag.
-    return { redirect: to };
+    if (!nextParam || typeof nextParam !== 'string') return fallback;
+
+    // defensive decode (avoid exceptions breaking flow)
+    try { nextParam = decodeURIComponent(nextParam); } catch {}
+
+    // accept only internal paths beginning with exactly one '/'
+    if (!nextParam.startsWith('/') || nextParam.startsWith('//')) return fallback;
+    if (nextParam.trim() === '') return fallback;
+
+    return nextParam;
+  } catch {
+    return fallback;
   }
-  return { ok: true };
 }
