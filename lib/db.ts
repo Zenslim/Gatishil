@@ -1,7 +1,9 @@
-// Consolidated exports used across the codebase.
-// For browser-side usage:
-export { supabase } from '@/lib/supabase/browser';
-// For server-side usage in route handlers / RSC:
-export { getServerSupabase } from '@/lib/supabase/server';
-// Legacy alias expected by existing API routes:
-export { getServerSupabase as getSupabase } from '@/lib/supabase/server';
+// lib/db.ts
+import { getSupabaseServer } from '@/lib/supabase/server';
+
+// Canonical export
+export { getSupabaseServer };
+
+// Back-compat aliases used elsewhere in the codebase
+export const getServerSupabase = getSupabaseServer;
+export const getSupabase = getSupabaseServer;
