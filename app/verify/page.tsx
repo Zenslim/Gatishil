@@ -1,5 +1,8 @@
-import VerifyClient from './VerifyClient';
+'use client';
 
 export default function Page() {
-  return <VerifyClient />;
+  if (typeof window !== 'undefined') {
+    window.location.replace('/join');
+  }
+  return null;
 }

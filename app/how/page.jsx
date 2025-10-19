@@ -77,16 +77,16 @@ export default function How() {
         </ul>
       </Section>
 
-      {/* Trust Step (Passkeys/PIN) */}
+      {/* Trust Step (PIN) */}
       <Section delay={0.1}>
         <h2 className="text-2xl sm:text-3xl font-semibold">Trust, Bound to Your Device</h2>
         <p className="mt-4 text-slate-300/85">
-          After introductions, we invite you to seal your voice to your device using a passkey (FaceID/Fingerprint) or a local PIN fallback.
-          This makes returning effortless and secure.
+          After introductions, we invite you to seal your voice to your device with a 4–8 digit PIN.
+          It makes returning effortless and keeps your presence grounded to this device.
         </p>
         <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-5 sm:p-6">
           <p className="text-amber-300/90 text-sm sm:text-base font-medium">
-            Your secret stays on your device. Passkeys and PINs make your Chautarī visits effortless.
+            Your secret stays on your device. The PIN is all you need when biometrics aren’t available.
           </p>
         </div>
         <div className="mt-6">

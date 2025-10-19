@@ -26,19 +26,11 @@ This document maps the end-to-end authentication journey for the Gatishil Nepal 
     - Tracks OTP focus using refs; manages UI state (`tab`, `otpSentTo`, etc.).
     - Utilises environment `NEXT_PUBLIC_SITE_URL` for canonical host messaging.
     - Accepts query params via `useSearchParams` (currently unused).
-- [`/app/data/countries.ts`](app/data/countries.ts) → Phone country dial data for Join tabs.
 
 ### `/verify`
-- [`/app/verify/page.tsx`](app/verify/page.tsx) → Renders `VerifyClient`.
-- [`/app/verify/VerifyClient.tsx`](app/verify/VerifyClient.tsx) → Client OTP verification fallback.
-  - **Purpose:** Re-verifies OTP using Supabase when sessionStorage carries an identifier.
-  - **Key exports:** default `VerifyClient` component.
-  - **Supabase calls:**
-    - `supabase.auth.verifyOtp({ email | phone, type })`.
-    - `supabase.auth.signInWithOtp` for resends.
-  - **Redirect logic:** On success `window.location.href = '/onboard?src=join'`.
-  - **State touched:** Reads `sessionStorage.pending_id`; tracks resend timer; uses constants from `lib/constants/auth`.
-  - **Gap:** No code in repo sets `sessionStorage.pending_id`, so this route never receives the identifier without external code.
+- [`/app/verify/page.tsx`](app/verify/page.tsx) → Legacy entry that immediately redirects to `/join`.
+  - **Purpose:** Preserve old links while funnelling everyone into the unified `/join` flow.
+  - **Key exports:** default client component with `window.location.replace('/join')`.
 
 ### `/onboard`
 - [`/app/onboard/page.tsx`](app/onboard/page.tsx) → Suspense wrapper rendering `OnboardingFlow`.
@@ -98,7 +90,7 @@ This document maps the end-to-end authentication journey for the Gatishil Nepal 
 - [`/app/api/otp/send/route.ts`](app/api/otp/send/route.ts)
   - **Purpose:** Accepts email or +977 phone to send OTP (Supabase email OTP or Aakash SMS + Supabase table).
   - **Supabase calls:**
-    - `createClient(...).auth.signInWithOtp` (anon key) for email; persists OTP via service role `from('otp_store').insert`.
+    - `createClient(...).auth.signInWithOtp` (anon key) for email; persists phone OTPs via service role `from('otps').insert`.
   - **External services:** `https://sms.aakashsms.com/sms/v3/send` using `AAKASH_SMS_API_KEY` and `AAKASH_SENDER_ID`.
   - **Env vars:** `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE`, `NEXT_PUBLIC_SITE_URL`, `AAKASH_SMS_API_KEY`, `AAKASH_SENDER_ID`.
   - **State/headers:** Requires `x-idempotency-key`; returns JSON `ok`, `channel`, `message`.
@@ -107,7 +99,7 @@ This document maps the end-to-end authentication journey for the Gatishil Nepal 
   - **Purpose:** Validate phone OTP (from `otps` table), enforce lockout, and initiate Supabase sign-in via SMS.
   - **Supabase calls:**
     - Service role `from('otp_attempts')`, `from('otps')` selects/updates; `auth.signInWithOtp({ phone })`.
-  - **Env vars:** `NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`.
+  - **Env vars:** `NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE`.
   - **State:** Returns `{ ok: true, user }` on success (no access/refresh tokens) — mismatch with `JoinClient.verifyOtp` expectation.
   - **Locking:** 5 failed attempts → locks for 2 minutes (status 423).
 
@@ -183,11 +175,11 @@ This document maps the end-to-end authentication journey for the Gatishil Nepal 
 
 - [`/lib/auth/verifyOtpClient.ts`](lib/auth/verifyOtpClient.ts)
   - Calls `/api/otp/verify`, waits for session, then syncs cookies to server.
-  - **Consumers:** `LoginClient`, `/auth/callback`.
+  - **Consumers:** `JoinClient`, `LoginClient`.
 
 - [`/lib/auth/validate.ts`](lib/auth/validate.ts)
   - Email/phone validators and `maskIdentifier` for UI.
-  - **Consumers:** `/verify/VerifyClient.tsx`.
+  - **Consumers:** *(deprecated)*.
 
 - [`/lib/auth/phone.ts`](lib/auth/phone.ts)
   - Nepal mobile regex + normalizer (not directly used in listed flow but relevant for OTP data integrity).
@@ -198,7 +190,7 @@ This document maps the end-to-end authentication journey for the Gatishil Nepal 
 
 - [`/lib/constants/auth.ts`](lib/constants/auth.ts)
   - Provides `OTP_TTL_SECONDS`, `OTP_RESEND_SECONDS`, `OTP_MAX_ATTEMPTS`, `SOFT_LOCK_SECONDS`.
-  - **Consumers:** `/verify/VerifyClient.tsx`.
+  - **Consumers:** *(deprecated)*.
 
 - [`/lib/atmaOptions.ts`](lib/atmaOptions.ts)
   - Supplies default Ātma Diśā options and loader hooking into Supabase tables (occupation/skills etc.).
@@ -211,17 +203,17 @@ This document maps the end-to-end authentication journey for the Gatishil Nepal 
 | Name | Producer | Consumer | Shape / Fields | Notes |
 | --- | --- | --- | --- | --- |
 | OTP Send (Email) Request | `/join/JoinClient.sendEmailOtp` (browser) | `/app/api/otp/send` | `{ email: string }` | Supabase `signInWithOtp` with `shouldCreateUser: true`; expects 200 with `{ ok: true, channel: 'email' }`.
-| OTP Send (Phone) Request | `/join/JoinClient.sendOtp` | `/app/api/otp/send` | `{ phone: string }` | Validates +977; API stores OTP via `otp_store` and sends SMS via Aakash.
-| OTP Send Response | `/app/api/otp/send` | `/join/JoinClient`, `/verify/VerifyClient` | `{ ok: boolean; channel: 'email'|'sms'; sent?: boolean; message: string; reason?: string }` | Generic errors hide enumeration (privacy message in UI).
-| OTP Verify (Phone) Request | `/join/JoinClient.verifyOtp`, `verifyOtpAndSync` | `/app/api/otp/verify` | `{ phone: string; code: string }` | Requires 6-digit code; API currently expects `code` vs `token`.
-| OTP Verify Response | `/app/api/otp/verify` | `/join/JoinClient`, `verifyOtpAndSync` | `{ ok: boolean; user?: object; access_token? refresh_token? }` | API returns `{ ok: true, user }`, but `JoinClient` expects `access_token` + `refresh_token`.
+| OTP Send (Phone) Request | `/join/JoinClient.sendOtp` | `/app/api/otp/send` | `{ phone: string }` | Validates +977; API stores OTP in `public.otps` and sends SMS via Aakash.
+| OTP Send Response | `/app/api/otp/send` | `/join/JoinClient` | `{ ok: boolean; channel: 'email'|'sms'; sent?: boolean; message: string; reason?: string }` | Generic errors hide enumeration (privacy message in UI).
+| OTP Verify (Phone) Request | `/join/JoinClient.verifyPhoneOtp`, `verifyOtpAndSync` | `/app/api/otp/verify` | `{ phone: string; code: string }` | Requires 6-digit code; API returns `{ ok: true }` when code valid.
+| OTP Verify Response | `/app/api/otp/verify` | `/join/JoinClient`, `verifyOtpAndSync` | `{ ok: boolean; message?: string }` | No tokens returned; client calls Supabase `verifyOtp` then `/api/auth/sync`.
 | Email OTP Verify | `supabase.auth.verifyOtp` | Supabase Auth | `{ type: 'email', email, token }` | Returns `{ data, error }`; success populates client session.
 | Magic Link Callback | Supabase redirect to `/auth/callback` | `/auth/callback/Client` | URL params `code`, `token_hash`, `next` | `next` sanitized default `/onboard?src=join`.
 | Cookie Sync Payload | `JoinClient`, `LoginClient`, `TrustStep`, `verifyOtpAndSync`, `/auth/callback` | `/app/api/auth/sync` | `{ access_token: string; refresh_token?: string | null }` | Writes `sb-access-token` (1h), `sb-refresh-token` (30d), `supabase-auth-token` JSON.
 | Supabase Session Object | Supabase | `waitForSession`, `TrustStep.syncToServerCookies` | `{ access_token: string; refresh_token: string | null }` | Derived via `supabase.auth.getSession()`.
 | Local PIN Secret | `TrustStep` | `lib/localPin` | `localStorage['gn.local.secret'] = JSON.stringify({ iv:number[], ct:number[] })` | Encrypted secret; SALT stored as `gn.local.salt`.
 | Supabase Storage Key | `lib/supabase/browser` | Browser `localStorage` | key `gatishil.auth.token` | Contains Supabase session (JSON string) for client persistence.
-| Session Storage Pending ID | *(Missing producer)* | `/verify/VerifyClient` | `sessionStorage['pending_id']` | Should hold email/phone for verify route; never set.
+| Session Storage Pending ID | *(Deprecated)* | *(n/a)* | `sessionStorage['pending_id']` | Legacy artifact; `/verify` no longer consumes it.
 
 ## Mermaid: User Journey
 
@@ -231,20 +223,21 @@ flowchart LR
   B -->|Phone +977| C[Call /api/otp/send]
   C --> D[Receive SMS]
   D --> E[Submit code via /api/otp/verify]
-  E -->|Expect access_token| F[Set Supabase session & cookies]
-  F --> G{Middleware sees cookies?}
-  G -->|Yes| H[/dashboard]
-  G -->|No| I[/login?next=/dashboard]
-  B -->|Email| J[Supabase signInWithOtp email]
-  J --> K[Enter code in Join]
-  K --> L[supabase.auth.verifyOtp]
-  L --> M[waitForSession -> /onboard?src=otp]
-  M --> N[Welcome]
-  N --> O[Name & Photo upload]
-  O --> P[Roots location]
-  P --> Q[Ātma Diśā inputs]
-  Q --> R[Trust Step PIN -> createLocalPin + sync cookies]
-  R --> S[/dashboard]
+  E --> F[Supabase auth.verifyOtp (client)]
+  F --> G[Sync tokens via /api/auth/sync]
+  G --> H{Middleware sees cookies?}
+  H -->|Yes| I[/dashboard]
+  H -->|No| J[/login?next=/dashboard]
+  B -->|Email| K[Supabase signInWithOtp email]
+  K --> L[Enter code in Join]
+  L --> M[supabase.auth.verifyOtp]
+  M --> N[waitForSession -> /onboard?src=otp]
+  N --> O[Welcome]
+  O --> P[Name & Photo upload]
+  P --> Q[Roots location]
+  Q --> R[Ātma Diśā inputs]
+  R --> S[Trust Step PIN -> createLocalPin + sync cookies]
+  S --> T[/dashboard]
 ```
 
 ## Mermaid: Request Swimlane
@@ -263,7 +256,7 @@ sequenceDiagram
   else Phone
     API->>SMS: Send OTP text
     SMS-->>API: 200 OK
-    API->>Supabase: insert otp_store row
+    API->>Supabase: insert `public.otps` row
     Supabase-->>API: inserted
   end
   API-->>Browser: { ok, message }
@@ -346,7 +339,7 @@ graph TD
 
 - No implementation sets `sessionStorage.pending_id` required by `/verify`.
 - `/app/api/otp/verify` does not issue access/refresh tokens needed by `JoinClient.verifyOtp`; session cannot be established for phone OTP.
-- No `/api/webauthn/*` routes present despite passkey references (trust step and security tiles mention passkeys).
+- Passkey helpers removed — trust step now PIN-only; `/security` surfaces should reference PIN.
 
 ## Glossary
 

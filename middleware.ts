@@ -1,56 +1,90 @@
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 
-// Make this middleware minimal: only gate /dashboard if absolutely no session cookie is present.
-export function middleware(req: NextRequest) {
-  const { pathname } = req.nextUrl;
+function decodeAccess(token: string | undefined) {
+  if (!token) return { valid: false, expired: false };
+  try {
+    const [, payload] = token.split('.');
+    if (!payload) return { valid: true, expired: false };
+    const normalized = payload.replace(/-/g, '+').replace(/_/g, '/');
+    const decoded = decodeURIComponent(
+      Array.from(atob(normalized))
+        .map((c) => `%${c.charCodeAt(0).toString(16).padStart(2, '0')}`)
+        .join('')
+    );
+    const json = JSON.parse(decoded);
+    if (typeof json?.exp === 'number') {
+      const expired = json.exp * 1000 <= Date.now();
+      return { valid: !expired, expired };
+    }
+    return { valid: true, expired: false };
+  } catch {
+    return { valid: true, expired: false };
+  }
+}
 
-  // Never touch API auth sync or static files
-  if (pathname.startsWith('/api/auth/sync') || pathname.startsWith('/_next') || pathname.startsWith('/assets')) {
-    return NextResponse.next();
+function readSessionState(req: NextRequest) {
+  const direct = req.cookies.get('sb-access-token')?.value || undefined;
+  if (direct) {
+    return decodeAccess(direct);
   }
 
-  // Allow public routes
-  const publicPrefixes = ['/join', '/verify', '/onboard', '/login', '/health', '/otp'];
-  if (publicPrefixes.some(p => pathname.startsWith(p)) || pathname === '/' ) {
-    return NextResponse.next();
-  }
-
-  // Only protect /dashboard (you can add more private prefixes here)
-  const needsAuth = pathname.startsWith('/dashboard');
-
-  if (!needsAuth) return NextResponse.next();
-
-  // Accept either modern or legacy cookie formats
-  const sb = req.cookies.get('sb-access-token')?.value;
   const legacy = req.cookies.get('supabase-auth-token')?.value;
-
-  const hasLegacyToken = (() => {
-    if (!legacy) return false;
+  if (legacy) {
     try {
       const parsed = JSON.parse(legacy);
-      return typeof parsed?.access_token === 'string' && parsed.access_token.length > 0;
+      if (typeof parsed?.access_token === 'string') {
+        return decodeAccess(parsed.access_token);
+      }
     } catch {
-      return false;
+      return { valid: false, expired: false };
     }
-  })();
+  }
 
-  const hasSession = Boolean(sb) || hasLegacyToken;
+  return { valid: false, expired: false };
+}
 
-  if (hasSession) {
+export function middleware(req: NextRequest) {
+  const { pathname, search } = req.nextUrl;
+
+  if (pathname.startsWith('/api') || pathname.startsWith('/_next') || pathname.startsWith('/assets')) {
     return NextResponse.next();
   }
 
-  // No session → redirect to login with next param
-  const url = req.nextUrl.clone();
-  url.pathname = '/login';
-  url.search = `?next=${encodeURIComponent(pathname + (req.nextUrl.search || ''))}`;
-  return NextResponse.redirect(url);
+  const isOnboard = pathname.startsWith('/onboard');
+  const isDashboard = pathname.startsWith('/dashboard');
+
+  if (!isOnboard && !isDashboard) {
+    return NextResponse.next();
+  }
+
+  const { valid, expired } = readSessionState(req);
+
+  if (!valid) {
+    if (isOnboard) {
+      const url = req.nextUrl.clone();
+      url.pathname = '/join';
+      url.search = '';
+      return NextResponse.redirect(url);
+    }
+    if (isDashboard) {
+      const url = req.nextUrl.clone();
+      url.pathname = '/login';
+      url.search = `?next=${encodeURIComponent('/dashboard' + (search || ''))}`;
+      return NextResponse.redirect(url);
+    }
+  }
+
+  if (isDashboard && expired) {
+    const url = req.nextUrl.clone();
+    url.pathname = '/login';
+    url.search = `?next=${encodeURIComponent('/dashboard' + (search || ''))}`;
+    return NextResponse.redirect(url);
+  }
+
+  return NextResponse.next();
 }
 
 export const config = {
-  matcher: [
-    // Run on everything except static assets; we also early-return in code above
-    '/((?!_next/static|_next/image|favicon.ico).*)',
-  ],
+  matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
 };

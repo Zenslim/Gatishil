@@ -1,37 +1,76 @@
-/**
- * Uses existing backend: /api/otp/send and /api/otp/verify
- * After verifying, waits for a client session, then writes httpOnly cookies via /api/auth/sync.
- */
 import { waitForSession } from '@/lib/auth/waitForSession';
-import { getSupabaseBrowser } from '@/lib/supabaseClient'; // project's primary browser singleton
+import { getSupabaseBrowser } from '@/lib/supabaseClient';
 
-export async function verifyOtpAndSync(args: any) {
-  // 1) Verify via legacy verifier (kept as source of truth)
+type VerifyArgs = {
+  phone?: string;
+  email?: string;
+  code: string;
+};
+
+function readError(data: any, fallback: string) {
+  if (!data) return fallback;
+  if (typeof data.error === 'string' && data.error) return data.error;
+  if (typeof data.message === 'string' && data.message) return data.message;
+  return fallback;
+}
+
+export async function verifyOtpAndSync(args: VerifyArgs) {
+  const phone = typeof args.phone === 'string' ? args.phone.trim() : undefined;
+  const email = typeof args.email === 'string' ? args.email.trim() : undefined;
+  const identifier = phone || email;
+  if (!identifier) {
+    throw new Error('Missing email or phone.');
+  }
+  if (!args.code || args.code.length !== 6) {
+    throw new Error('Enter a valid 6-digit code.');
+  }
+
   const res = await fetch('/api/otp/verify', {
     method: 'POST',
     credentials: 'include',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(args),
+    body: JSON.stringify({
+      phone: phone ?? null,
+      email: email ?? null,
+      code: args.code,
+    }),
   });
-  if (!res.ok && res.status !== 202) {
-    const j = await res.json().catch(() => ({}));
-    throw new Error(j?.error || `OTP verify failed (${res.status})`);
+
+  const payload = await res.json().catch(() => ({}));
+  if (!res.ok || payload?.ok !== true) {
+    throw new Error(readError(payload, `OTP verify failed (${res.status})`));
   }
 
-  // 2) Wait for client session
   const supabase = getSupabaseBrowser();
-  const ready = await waitForSession(supabase, 20, 250);
-  if (!ready) throw new Error('Session not ready. Please try again.');
 
-  // 3) Write httpOnly cookies for server pages like /dashboard
+  if (phone) {
+    const { error } = await supabase.auth.verifyOtp({
+      type: 'sms',
+      phone,
+      token: args.code,
+    });
+    if (error) throw error;
+  } else if (email) {
+    const { error } = await supabase.auth.verifyOtp({
+      type: 'email',
+      email,
+      token: args.code,
+    });
+    if (error) throw error;
+  }
+
+  const session = await waitForSession(supabase, 20, 250);
+  if (!session) throw new Error('Session not ready. Please try again.');
+
   const sync = await fetch('/api/auth/sync', {
     method: 'POST',
     credentials: 'include',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(ready),
+    body: JSON.stringify(session),
   });
+
   if (!sync.ok) {
-    const j = await sync.json().catch(() => ({}));
-    throw new Error(j?.error || `Auth sync failed (${sync.status})`);
+    const data = await sync.json().catch(() => ({}));
+    throw new Error(readError(data, `Auth sync failed (${sync.status})`));
   }
 }

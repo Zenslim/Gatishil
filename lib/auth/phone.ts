@@ -15,3 +15,27 @@ export function normalizeOtpPhone(value: string) {
   }
   return `+${digits}`;
 }
+
+export function normalizeNepalMobile(input: string): string | null {
+  const digits = input.replace(/[^\d+]/g, '');
+  if (!digits) return null;
+
+  let normalized = digits;
+  if (normalized.startsWith('+')) {
+    normalized = normalized.slice(1);
+  }
+
+  if (normalized.startsWith('977')) {
+    normalized = normalized.slice(3);
+  }
+
+  if (normalized.startsWith('0')) {
+    normalized = normalized.replace(/^0+/, '');
+  }
+
+  if (normalized.length !== 10 || !normalized.startsWith('98')) {
+    return null;
+  }
+
+  return `+977${normalized}`;
+}
