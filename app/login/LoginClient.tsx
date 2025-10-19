@@ -45,7 +45,7 @@ export default function LoginClient() {
     if (!otpCode.trim()) return;
     setLoading(true); setError(null); setMessage(null);
     try {
-      await verifyOtpAndSync({ type: "email", email, token: otpCode.trim() });
+      await verifyOtpAndSync({ email: email.trim(), code: otpCode.trim() });
       router.push(nextPath);
     } catch (err: any) {
       setError(err?.message || "OTP verify failed.");

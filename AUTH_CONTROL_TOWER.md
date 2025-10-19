@@ -8,9 +8,8 @@ This control tower distills every moving part of Gatishil Nepal’s authenticati
 | File | Purpose | Key exports / functions | Invoked from | Redirect behavior |
 | --- | --- | --- | --- | --- |
 | `app/join/page.tsx` | Server entry that mounts the client-only join experience. | Default page component. | App Router for `/join`. | Defers to client logic for redirects. |
-| `app/join/JoinClient.tsx` | Implements dual email/phone OTP flows, message UI, and redirect-on-session logic. | `JoinClient`, `sendOtp`, `verifyOtp`, `sendEmailOtp`, `verifyEmailOtp`. | Rendered by `/join`; calls `/api/otp/*` and Supabase browser client. | Redirects signed-in users to `/onboard?src=join`; phone verify expects access/refresh tokens then pushes `/dashboard`; email verify pushes `/onboard`. |
-| `app/verify/page.tsx` | Thin wrapper for legacy verify client. | Default page component. | `/verify`. | None. |
-| `app/verify/VerifyClient.tsx` | Legacy OTP confirmation screen using Supabase verify APIs and sessionStorage hints. | `VerifyClient`, `verify`, `resend`. | `/verify`; triggered after storing `pending_id` elsewhere. | On success sets `window.location` to `/onboard?src=join`. |
+| `app/join/JoinClient.tsx` | Implements dual email/phone OTP flows, message UI, and redirect-on-session logic. | `JoinClient`, `sendPhoneOtp`, `verifyPhoneOtp`, `sendEmailOtp`, `verifyEmailOtp`. | Rendered by `/join`; calls `/api/otp/*` and Supabase browser client. | Redirects signed-in users to `/onboard?src=join`; phone verify replaces `/onboard?src=join`, email verify replaces `/onboard?src=otp`. |
+| `app/verify/page.tsx` | Legacy `/verify` landing now acting as a kill-switch redirect. | Client component. | `/verify`. | Immediately redirects to `/join`. |
 | `app/onboard/page.tsx` | Suspense shell around the onboarding flow. | Default page component with dynamic rendering. | `/onboard`. | None; onboarding flow drives navigation. |
 | `components/OnboardingFlow.tsx` | Orchestrates multi-step onboarding, Supabase code exchange, and final Trust step. | `OnboardingFlow`. | Used by `/onboard`. | Exchanges `code` params for sessions; pushes between steps and finally `/dashboard`. |
 | `components/onboard/NameFaceStep.jsx` | Captures name + selfie, uploads to Supabase Storage, and upserts profile. | `NameFaceStep`, `uploadAvatar`. | Loaded dynamically during onboarding. | Blocks progression until name + photo saved; stays on step otherwise. |
@@ -22,13 +21,13 @@ This control tower distills every moving part of Gatishil Nepal’s authenticati
 | `app/auth/callback/page.tsx` | Server shell for OAuth/OTP callback. | Default page component. | `/auth/callback`. | None. |
 | `app/auth/callback/Client.tsx` | Exchanges Supabase PKCE or token hash and syncs cookies before redirect. | `Client`. | Mounted on `/auth/callback`. | Redirects to `next` (default `/onboard?src=join`) after session sync. |
 | `app/dashboard/page.tsx` | Server-rendered member console requiring Supabase session. | `DashboardPage`. | `/dashboard`. | Redirects anonymous users to `/login?next=/dashboard`. |
-| `middleware.ts` | Global guard that whitelists public auth routes and protects `/dashboard`. | `middleware`. | Runs on all edge requests. | Redirects missing sessions hitting `/dashboard` to `/login?next=…`. |
+| `middleware.ts` | Global guard for `/onboard` and `/dashboard`. | `middleware`. | Runs on all edge requests. | `/onboard` without session → `/join`; `/dashboard` without or expired session → `/login?next=/dashboard`. |
 
 ### API Routes
 | File | Purpose | Key exports / functions | Called by | Redirect / Side effects |
 | --- | --- | --- | --- | --- |
-| `app/api/otp/send/route.ts` | Issues OTP via Supabase email or Aakash SMS and stores codes. | `POST` handler plus helper send/save functions. | `/join` client (phone/email tabs). | Responds with `{ ok, message }`; no redirect, but populates Supabase `otp_store` and triggers SMS/email. |
-| `app/api/otp/verify/route.ts` | Validates phone codes, rate-limits attempts, and signs in with service role. | `POST` handler. | `/join` phone verify flow; `verifyOtpAndSync`. | Returns `{ ok, user }` on success — caller must establish session. |
+| `app/api/otp/send/route.ts` | Sends OTPs (email via Supabase, phone via Aakash) and logs to `public.otps`. | `POST` handler plus helper send/save functions. | `/join` client (phone/email tabs). | Responds with `{ ok, message }`; enforces 60s cooldown and 5‑minute TTL. |
+| `app/api/otp/verify/route.ts` | Validates phone codes against `public.otps`, tracks attempts, no session issuing. | `POST` handler. | `/join` verify flow; `verifyOtpAndSync`. | Returns `{ ok: true }` only; client finalises Supabase session + cookie sync. |
 | `app/api/auth/sync/route.ts` | Writes Supabase access/refresh tokens into secure cookies (plus legacy JSON). | `OPTIONS`, `POST`. | Login flows, TrustStep, Supabase browser sync. | No redirect; response `{ ok: true }` with Set-Cookie. |
 
 ### Shared Libraries & Utilities
@@ -38,14 +37,13 @@ This control tower distills every moving part of Gatishil Nepal’s authenticati
 | `lib/supabase/browser.ts` | Creates singleton browser client and mirrors tokens into cookies. | `getSupabaseBrowser`, `supabase`. | Login & onboarding UIs. | Syncs via `/api/auth/sync` on sign-in/refresh. |
 | `lib/supabase/server.ts` | SSR Supabase client respecting modern & legacy cookies. | `getSupabaseServer`. | `/dashboard`. | Reads `sb-*` cookies, falls back to legacy JSON. |
 | `lib/supabaseServer.ts` | Older server helper with writeable cookies. | `getServerSupabase`. | `/login`. | Supports legacy cookie decoding. |
-| `lib/auth/verifyOtpClient.ts` | Browser helper that verifies OTP then syncs cookies. | `verifyOtpAndSync`. | `/login`, `/auth/callback`. | Waits for session, posts to `/api/auth/sync`. |
+| `lib/auth/verifyOtpClient.ts` | Browser helper that checks `/api/otp/verify`, then verifies with Supabase and syncs cookies. | `verifyOtpAndSync`. | `/join`, `/login`. | Calls Supabase `verifyOtp`, polls for session, then posts to `/api/auth/sync`. |
 | `lib/auth/waitForSession.ts` | Polls Supabase until a session appears. | `waitForSession`. | `verifyOtpAndSync`, `/join` email flow. | Returns tokens for cookie sync. |
 | `lib/auth/next.ts` | Sanitizes `next` redirect values. | `getValidatedNext`. | `/login` client. | Blocks external redirects. |
-| `lib/auth/validate.ts` | Shared identifier helpers. | `isPhone`, `isEmail`, `maskIdentifier`. | `/verify` client, other validators. | Masks for UI. |
+| `lib/auth/validate.ts` | Shared identifier helpers (legacy). | `isPhone`, `isEmail`, `maskIdentifier`. | *(deprecated)*. | Left for potential reuse; not referenced in current flow. |
 | `lib/constants/auth.ts` | OTP timing constants. | `OTP_TTL_SECONDS`, etc. | `/verify`. | 5-minute TTL, resend cooldown. |
 | `lib/ui/OtpInput.tsx` | Reusable 6-digit OTP input. | `OtpInput`. | `/verify`. | Auto-focus & paste-friendly. |
 | `lib/localPin.ts` | Local PIN storage using WebCrypto + localStorage. | `createLocalPin`, `hasLocalPin`, `unlockWithPin`. | TrustStep. | Stores secrets under `gn.local.*`. |
-| `lib/webauthn.ts` | Passkey helpers (cookie + payload normalization). | `deriveRpID`, `setChallengeCookie`, etc. | Future `/security` and passkey flows. | No `/api/webauthn/*` handlers present. |
 
 ### Middleware, Hooks, and Extras
 | File | Purpose | Key exports | Consumed by | Redirect behavior |
@@ -60,8 +58,7 @@ This control tower distills every moving part of Gatishil Nepal’s authenticati
 | Route | No Session | Session | Onboarding Done | PIN Set | Trusted Device |
 | --- | --- | --- | --- | --- | --- |
 | `/join` | allow | → `/onboard?src=join` (client redirect) | → `/onboard?src=join` (no dashboard fast-path) | → `/onboard?src=join` after PIN creation elsewhere | allow (PIN check is local only) |
-| `/verify` | allow | allow (no guard) | allow | allow | allow |
-| `/onboard` | allow (API calls will fail without session) | allow | allow (no completion check) | allow | allow |
+| `/onboard` | → `/join` | allow | allow (no completion check) | allow | allow |
 | `/login` | allow | allow (server redirect only if session detected) | allow | allow | allow |
 | `/dashboard` | → `/login?next=/dashboard` | allow | allow (shows partial profile) | allow | allow |
 
@@ -69,11 +66,10 @@ This control tower distills every moving part of Gatishil Nepal’s authenticati
 
 | User action | Has session? | Identifier status (+977 / email) | Code valid? | Attempts remaining | PIN / device trust | Cookies synced? |
 | --- | --- | --- | --- | --- | --- | --- |
-| Send phone OTP (`/join`) | Existing session triggers instant move to `/onboard?src=join`. | `+977` → success toast, stores `otpSentTo`; non-`+977` → error toast, no API call. | n/a | n/a | n/a | No cookies touched. |
-| Verify phone OTP (`/join`) | Requires fresh session from API response (otherwise throws). | Phone only. | Match expected → tries to set Supabase session then replace `/dashboard`; mismatch → error toast, stay on `/join`. | After 5 failures API locks for 2 min. | n/a | Depends on API returning tokens; without them session sync fails. |
-| Send email OTP (`/join`) | Existing session rerouted before action. | Email only. | n/a | n/a | n/a | Supabase sends OTP, client shows success toast. |
-| Verify email OTP (`/join`) | Waits for Supabase session after `verifyOtp`; if missing, shows error. | Email only. | Valid code → replace `/onboard?src=otp`; invalid → error toast. | Supabase handles attempts internally. | n/a | Does **not** call `/api/auth/sync`; relies on Supabase local storage. |
-| Legacy verify submit (`/verify`) | Independent of current session. | Email or phone from `pending_id`. | Valid → `window.location` `/onboard?src=join`; invalid → decrements tries. | Local counter enforces 5 attempts. | n/a | No cookie sync. |
+| Send phone OTP (`/join`) | Existing session triggers instant move to `/onboard?src=join`. | Normalised to `+97798…` or rejection message. | n/a | n/a | n/a | Persists to `public.otps`, enforces 60 s cooldown and 5 min TTL. |
+| Verify phone OTP (`/join`) | Requires matching record in `public.otps`. | Phone only. | Match → `/onboard?src=join`; mismatch → attempt++ with error toast. | Locks after 5 attempts per OTP. | n/a | `verifyOtpAndSync` calls Supabase `verifyOtp` then `/api/auth/sync`. |
+| Send email OTP (`/join`) | Existing session rerouted before action. | Email only. | n/a | n/a | n/a | API invokes `supabase.auth.signInWithOtp`, UI starts 60 s resend timer. |
+| Verify email OTP (`/join`) | `verifyOtpAndSync` handles Supabase verification + cookie sync. | Email only. | Valid code → replace `/onboard?src=otp`; invalid → error toast. | Supabase handles attempts internally. | n/a | Always posts tokens to `/api/auth/sync`. |
 | Name & face “Continue” | Requires Supabase session to upload; absence throws “No session”. | n/a | n/a | n/a | n/a | Successful save leaves user on `/onboard?step=roots`. |
 | Roots “Continue” | Needs Supabase session for profile update. | Chooses Nepal/Abroad meta. | n/a | n/a | n/a | Remains on `/onboard`, pushes to `step=atmadisha` on save. |
 | Ātma Diśā finish | Session required to persist profile traits. | n/a | n/a | n/a | n/a | Calls `onDone` to enter Trust step; no redirect. |
@@ -116,8 +112,12 @@ sequenceDiagram
     API-->>B: { ok, message }
 
     B->>API: POST /api/otp/verify { phone, code }
-    API->>SB: Lookup otp + auth.signInWithOtp
-    SB-->>API: user session
+    API->>API: Check `public.otps` row + attempts
+    API-->>B: { ok: true }
+    B->>SB: auth.verifyOtp
+    SB-->>B: session tokens
+    B->>API: POST /api/auth/sync { tokens }
+    API-->>B: { ok: true }
     API-->>B: { ok, user }
     B->>SB: auth.setSession / exchange (client)
 
@@ -147,14 +147,13 @@ sequenceDiagram
 | `/api/auth/sync` request | `{ access_token: string, refresh_token?: string|null }` | Login flows, TrustStep, browser sync | Auth sync route | Fails if `access_token` missing; sets modern + legacy cookies. |
 | Supabase browser storage | `localStorage['gatishil.auth.token']` | Supabase client | Supabase auth refresh logic | Mirrors session for SPA persistence. |
 | Local PIN | `localStorage['gn.local.secret']`, `['gn.local.salt']` | TrustStep | `hasLocalPin`, `unlockWithPin` | AES-GCM encrypted secret derived from PIN. |
-| Session Storage | `sessionStorage['pending_id']` | (Legacy flows) | `/verify/VerifyClient` | Determines identifier to verify; now set elsewhere. |
+| Session Storage | `sessionStorage['pending_id']` | (Legacy flows) | *(deprecated)* | Legacy placeholder removed; `/verify` now redirects to `/join`. |
 | Cookies | `sb-access-token`, `sb-refresh-token`, `supabase-auth-token`, `webauthn_challenge` | Auth sync route, WebAuthn helpers | Middleware, server Supabase clients, WebAuthn flows | Legacy cookie ensures backward compatibility. |
 
 ### Risk Heatmap
 | Risk | Impact | Evidence | Mitigation |
 | --- | --- | --- | --- |
 | Phone OTP verify response lacks tokens | Join phone flow throws “tokens missing”, blocking dashboard redirect. | Join client expects `access_token` from `/api/otp/verify`.【F:app/join/JoinClient.tsx†L170-L192】 vs. API returning only `{ user }`.【F:app/api/otp/verify/route.ts†L65-L72】 | Update API to return tokens or swap client to use `verifyOtpAndSync`. |
-| OTP storage mismatch (`otp_store` vs `otps`) | Phone verification may never find matching code. | Send route inserts into `otp_store`.【F:app/api/otp/send/route.ts†L8-L115】 Verify route queries `otps`.【F:app/api/otp/verify/route.ts†L31-L61】 | Align both routes on same table or add migration/cron sync. |
 | Email OTP path skips cookie sync | User reaches `/onboard` but server pages lack tokens. | Email verify redirects without calling `/api/auth/sync`.【F:app/join/JoinClient.tsx†L224-L239】 | Invoke `verifyOtpAndSync` or manual cookie sync before redirect. |
 | Onboarding open to anonymous users | Unauthenticated visitors can hit `/onboard` and trigger storage errors. | Middleware treats `/onboard` as public.【F:middleware.ts†L13-L22】 | Add guard to redirect to `/join` when no Supabase session. |
 | TrustStep fails without Supabase session | Cookie sync throws “No active session”, stranding users. | TrustStep fetches session before sync.【F:components/onboard/TrustStep.jsx†L8-L56】 | Surface retry, or ensure session establishment earlier. |

@@ -38,8 +38,6 @@ export default async function DashboardPage() {
     email: user.email ?? null,
     phone: profile?.phone ?? null,
     person_id: link?.person_id ?? profile?.person_id ?? null,
-    passkey_enabled: profile?.passkey_enabled ?? false,
-    passkey_cred_ids: Array.isArray(profile?.passkey_cred_ids) ? profile?.passkey_cred_ids : [],
   };
 
   const rootLabel =
@@ -101,25 +99,16 @@ export default async function DashboardPage() {
 
           <div className="rounded-2xl border border-white/10 bg-black/30 p-5">
             <h2 className="text-sm font-semibold text-white/80">Security</h2>
-            <div className="mt-3 space-y-2 text-sm">
-              <div className="flex items-center justify-between">
-                <span className="text-white/70">Passkey</span>
-                <span className={`rounded-full px-2 py-0.5 text-xs ${enriched.passkey_enabled ? 'bg-emerald-500/20 text-emerald-300' : 'bg-amber-500/20 text-amber-300'}`}>
-                  {enriched.passkey_enabled ? 'Enabled' : 'Not set'}
-                </span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-white/70">Registered devices</span>
-                <span className="text-white/80">{enriched.passkey_cred_ids?.length ?? 0}</span>
-              </div>
-              <div className="pt-3">
-                <a
-                  href="/security"
-                  className="inline-flex w-full items-center justify-center rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm hover:bg-white/10"
-                >
-                  Open Security
-                </a>
-              </div>
+            <p className="mt-3 text-sm text-white/70">
+              Your device PIN keeps this console trusted. Update it or review devices anytime from the security screen.
+            </p>
+            <div className="pt-4">
+              <a
+                href="/security"
+                className="inline-flex w-full items-center justify-center rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm hover:bg-white/10"
+              >
+                Open Security
+              </a>
             </div>
           </div>
         </div>

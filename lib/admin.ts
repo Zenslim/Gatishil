@@ -1,7 +1,7 @@
 import 'server-only';
 import { createClient } from '@supabase/supabase-js';
 
-type ServerEnvKey = 'NEXT_PUBLIC_SUPABASE_URL' | 'SUPABASE_SERVICE_ROLE_KEY';
+type ServerEnvKey = 'NEXT_PUBLIC_SUPABASE_URL' | 'SUPABASE_SERVICE_ROLE';
 
 function assertServerRuntime() {
   if (typeof window !== 'undefined') {
@@ -20,6 +20,6 @@ function getServerEnv(key: ServerEnvKey): string {
 export function getAdminSupabase() {
   assertServerRuntime();
   const url = getServerEnv('NEXT_PUBLIC_SUPABASE_URL');
-  const service = getServerEnv('SUPABASE_SERVICE_ROLE_KEY');
+  const service = getServerEnv('SUPABASE_SERVICE_ROLE');
   return createClient(url, service, { auth: { persistSession: false } });
 }

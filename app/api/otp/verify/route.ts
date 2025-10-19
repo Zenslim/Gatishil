@@ -1,79 +1,86 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { normalizeNepalMobile } from '@/lib/auth/phone';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const SUPABASE_SERVICE_ROLE = process.env.SUPABASE_SERVICE_ROLE;
 
-// Verify 6-digit code with 5-attempt soft lock (2 minutes)
+if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE) {
+  throw new Error('Supabase environment variables are not configured');
+}
+
+const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE, {
+  auth: { persistSession: false },
+});
+
+function respond(data: any, status = 200) {
+  return NextResponse.json(data, { status });
+}
+
 export async function POST(req: Request) {
-  try {
-    const { phone, code } = await req.json();
-    if (!phone || !code)
-      return NextResponse.json({ ok: false, error: 'Missing phone or code' });
+  const body = await req.json().catch(() => ({}));
+  const code = typeof body.code === 'string' ? body.code.trim() : '';
+  const phoneRaw = typeof body.phone === 'string' ? body.phone : '';
+  const email = typeof body.email === 'string' ? body.email.trim() : '';
 
-    // Check lock status
-    const { data: attempt } = await supabase
-      .from('otp_attempts')
-      .select('fail_count, locked_until')
-      .eq('phone', phone)
-      .maybeSingle();
+  if (code.length !== 6) {
+    return respond({ ok: false, message: 'Invalid OTP code.' }, 400);
+  }
 
-    const now = Date.now();
-    if (attempt?.locked_until) {
-      const until = new Date(attempt.locked_until).getTime();
-      if (until > now) {
-        return NextResponse.json({ ok: false, error: 'LOCKED' }, { status: 423 });
-      }
+  if (phoneRaw) {
+    const normalized = normalizeNepalMobile(phoneRaw);
+    if (!normalized) {
+      return respond({ ok: false, message: 'Phone OTP is Nepal-only. Enter +97798… or use email.' }, 400);
     }
 
-    // Get latest OTP
-    const { data: rows, error } = await supabase
+    const { data, error } = await supabaseAdmin
       .from('otps')
-      .select('id, code, created_at')
-      .eq('phone', phone)
+      .select('id, code, expires_at, status, attempts, created_at')
+      .eq('phone', normalized)
       .order('created_at', { ascending: false })
       .limit(1);
 
-    if (error || !rows?.length)
-      return NextResponse.json({ ok: false, error: 'Code not found' });
-
-    const otp = rows[0];
-    const age = (Date.now() - new Date(otp.created_at).getTime()) / 60000;
-    if (age > 5) return NextResponse.json({ ok: false, error: 'Code expired' });
-
-    if (otp.code !== code) {
-      const fails = (attempt?.fail_count ?? 0) + 1;
-      // lock for 2 minutes after 5 fails
-      if (fails >= 5) {
-        await supabase.from('otp_attempts')
-          .upsert({ phone, fail_count: 0, locked_until: new Date(now + 2 * 60_000).toISOString() }, { onConflict: 'phone' });
-        return NextResponse.json({ ok: false, error: 'LOCKED' }, { status: 423 });
-      } else {
-        await supabase.from('otp_attempts')
-          .upsert({ phone, fail_count: fails, locked_until: null }, { onConflict: 'phone' });
-        return NextResponse.json({ ok: false, error: 'INVALID' }, { status: 400 });
-      }
+    if (error) {
+      return respond({ ok: false, message: 'Could not verify code right now.' }, 503);
     }
 
-    // Success
-    await supabase.from('otps').update({ used_at: new Date().toISOString() }).eq('id', otp.id);
-    // reset attempts on success
-    await supabase.from('otp_attempts').upsert({ phone, fail_count: 0, locked_until: null }, { onConflict: 'phone' });
+    if (!data || data.length === 0) {
+      return respond({ ok: false, message: 'No active code found for this number.' }, 404);
+    }
 
-    const { data: userData, error: authErr } = await supabase.auth.signInWithOtp({
-      phone,
-      options: { shouldCreateUser: true },
-    });
-    if (authErr) throw authErr;
+    const record = data[0];
+    const expiresAt = new Date(record.expires_at).getTime();
+    const now = Date.now();
 
-    return NextResponse.json({ ok: true, user: userData.user });
-  } catch (err) {
-    console.error('OTP verify failed:', err);
-    return NextResponse.json(
-      { ok: false, error: 'Verification failed' },
-      { status: 503 }
-    );
+    if (expiresAt < now) {
+      await supabaseAdmin.from('otps').update({ status: 'expired' }).eq('id', record.id);
+      return respond({ ok: false, message: 'This code expired. Please request a new one.' }, 410);
+    }
+
+    if (record.attempts >= 5) {
+      return respond({ ok: false, message: 'Too many attempts. Request a new code.' }, 429);
+    }
+
+    if (record.code !== code) {
+      await supabaseAdmin
+        .from('otps')
+        .update({ attempts: record.attempts + 1 })
+        .eq('id', record.id);
+      return respond({ ok: false, message: 'Incorrect code. Try again.' }, 400);
+    }
+
+    await supabaseAdmin
+      .from('otps')
+      .update({ status: 'verified', attempts: record.attempts + 1 })
+      .eq('id', record.id);
+
+    return respond({ ok: true });
   }
+
+  if (email) {
+    // Email OTP verification happens client-side with Supabase; this endpoint just normalises the flow.
+    return respond({ ok: true });
+  }
+
+  return respond({ ok: false, message: 'Missing identifier.' }, 400);
 }

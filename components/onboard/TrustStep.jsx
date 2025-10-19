@@ -97,14 +97,13 @@ export default function TrustStep({ onDone }) {
         <div className="text-4xl mb-2">🌳</div>
         <h2 className="text-2xl font-semibold">Welcome under the tree</h2>
         <p className="text-white/70 mt-2">
-          You’ve shared your name, roots, and skills. Now, let’s seal your voice to this device so it
-          recognizes you every time you return.
+          You’ve shared your name, roots, and skills. Set a PIN so this device recognises you every time you return.
         </p>
+        <p className="text-emerald-200/80 mt-4 text-sm font-medium">Your voice is sealed with a 4–8 digit PIN.</p>
 
         <div className="mt-6 rounded-lg border border-white/10 p-4 bg-white/5">
           <p className="text-sm text-white/80">
-            Face ID / Fingerprint via your device’s password manager will still work on the login screen.
-            This step only sets a 4–8 digit PIN as your universal fallback.
+            The PIN never leaves this device. Use it whenever biometrics aren’t available or you want to sign in manually.
           </p>
         </div>
 
@@ -147,9 +146,7 @@ export default function TrustStep({ onDone }) {
             {pinBusy ? 'Saving…' : 'Save PIN → Continue'}
           </button>
 
-          <p className="text-xs text-white/50">
-            We use this PIN whenever biometrics aren’t available. It stays encrypted on this device.
-          </p>
+          <p className="text-xs text-white/50">The PIN stays encrypted on this device.</p>
         </form>
 
         {existingPin && (

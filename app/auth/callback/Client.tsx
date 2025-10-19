@@ -3,7 +3,6 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { verifyOtpAndSync } from "@/lib/auth/verifyOtpClient";
 import { getSupabaseBrowser } from "@/lib/supabaseClient";
 
 export default function Client() {
@@ -76,7 +75,21 @@ export default function Client() {
             router.replace(next);
           }
         } else if (token_hash) {
-          await verifyOtpAndSync({ type: "email", token_hash });
+          const { error } = await supabase.auth.exchangeCodeForSession(token_hash);
+          if (error) throw error;
+          const { data: after } = await supabase.auth.getSession();
+          if (!after.session?.access_token) {
+            throw new Error("Session was not established.");
+          }
+          await fetch("/api/auth/sync", {
+            method: "POST",
+            credentials: "include",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              access_token: after.session.access_token,
+              refresh_token: after.session.refresh_token ?? null,
+            }),
+          });
           if (!cancelled) {
             setStatus("done");
             router.replace(next);
