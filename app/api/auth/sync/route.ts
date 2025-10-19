@@ -18,7 +18,7 @@ function setCookie(
 }
 
 export async function OPTIONS() {
-  // Let browsers preflight without errors
+  // Allow CORS preflight when fetch() runs with credentials
   return new NextResponse(null, { status: 204 });
 }
 
@@ -32,23 +32,20 @@ export async function POST(req: Request) {
 
     const res = NextResponse.json({ ok: true });
 
-    // New cookies used by Supabase SSR helpers
-    setCookie(res, 'sb-access-token', access_token, 60 * 60);               // 1 hour
+    // New canonical Supabase SSR cookies
+    setCookie(res, 'sb-access-token', access_token, 60 * 60);               // 1h
     if (typeof refresh_token === 'string' && refresh_token.length > 0) {
-      setCookie(res, 'sb-refresh-token', refresh_token, 60 * 60 * 24 * 30); // 30 days
+      setCookie(res, 'sb-refresh-token', refresh_token, 60 * 60 * 24 * 30); // 30d
     }
 
-    // Legacy cookie your middleware may still read
-    // (your earlier middleware parsed JSON and grabbed .access_token)
+    // Legacy cookie (some older middleware/pages still read this JSON)
     try {
       const legacy = JSON.stringify({
         access_token,
         refresh_token: typeof refresh_token === 'string' ? refresh_token : null,
       });
       setCookie(res, 'supabase-auth-token', legacy, 60 * 60 * 24 * 30);
-    } catch {
-      // ignore if JSON stringify somehow fails
-    }
+    } catch {}
 
     return res;
   } catch {

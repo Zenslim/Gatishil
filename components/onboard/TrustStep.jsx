@@ -22,16 +22,12 @@ async function syncToServerCookies() {
     const j = await res.json().catch(() => ({}));
     throw new Error(j?.error || `Auth sync failed (${res.status})`);
   }
-  return session.access_token;
+  return true;
 }
 
 export default function TrustStep({ onDone }) {
   const router = useRouter();
-
-  // UI state
   const [toast, setToast] = useState(null);
-
-  // PIN state
   const [pin, setPin] = useState('');
   const [pinConfirm, setPinConfirm] = useState('');
   const [pinErr, setPinErr] = useState(null);
@@ -50,8 +46,12 @@ export default function TrustStep({ onDone }) {
   }, [toast]);
 
   const goDashboard = async () => {
+    // Ensure cookies are written, then hard-replace and refresh so SSR reads them
     await syncToServerCookies();
-    router.push('/dashboard');
+    // small tick to ensure Set-Cookie is committed before navigation
+    await new Promise(r => setTimeout(r, 50));
+    router.replace('/dashboard');
+    router.refresh();
     if (onDone) onDone();
   };
 
@@ -103,13 +103,11 @@ export default function TrustStep({ onDone }) {
 
         <div className="mt-6 rounded-lg border border-white/10 p-4 bg-white/5">
           <p className="text-sm text-white/80">
-            <strong>Biometrics without passkey:</strong> If your device already uses Face ID or
-            Fingerprint through its password manager, you’ll be able to use it on the login screen.
+            Face ID / Fingerprint via your device’s password manager will still work on the login screen.
             This step only sets a 4–8 digit PIN as your universal fallback.
           </p>
         </div>
 
-        {/* PIN form only (passkey fully removed) */}
         <form className="mt-8 space-y-4" onSubmit={savePin}>
           <div>
             <label className="block text-sm font-medium text-gray-300">Create a PIN (4–8 digits)</label>
