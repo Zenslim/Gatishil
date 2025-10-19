@@ -10,5 +10,10 @@ export const requireEnv = (key: string, isPublic = false): string => {
 };
 
 // Public (safe to expose to client) — must be prefixed with NEXT_PUBLIC_
-export const NEXT_PUBLIC_SUPABASE_URL = requireEnv("NEXT_PUBLIC_SUPABASE_URL", true);
-export const NEXT_PUBLIC_SUPABASE_ANON_KEY = requireEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY", true);
+export function getNextPublicSupabaseUrl(): string {
+  return requireEnv("NEXT_PUBLIC_SUPABASE_URL", true);
+}
+
+export function getNextPublicSupabaseAnonKey(): string {
+  return requireEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY", true);
+}

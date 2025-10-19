@@ -1,13 +1,6 @@
 import { cookies } from 'next/headers';
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
 
-const url = process.env.NEXT_PUBLIC_SUPABASE_URL as string;
-const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string;
-
-if (!url || !anon) {
-  throw new Error('Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY');
-}
-
 type LegacyTokenPayload = {
   access_token?: string;
   refresh_token?: string;
@@ -27,6 +20,13 @@ const getLegacyTokens = (raw: string | undefined | null): LegacyTokenPayload | n
 };
 
 export function getServerSupabase() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  if (!url || !anon) {
+    throw new Error('Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY');
+  }
+
   const cookieStore = cookies();
   const legacy = getLegacyTokens(cookieStore.get('supabase-auth-token')?.value);
 
