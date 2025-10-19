@@ -18,7 +18,6 @@ function setCookie(
 }
 
 export async function OPTIONS() {
-  // Allow CORS preflight when fetch() runs with credentials
   return new NextResponse(null, { status: 204 });
 }
 
@@ -32,13 +31,11 @@ export async function POST(req: Request) {
 
     const res = NextResponse.json({ ok: true });
 
-    // New canonical Supabase SSR cookies
     setCookie(res, 'sb-access-token', access_token, 60 * 60);               // 1h
     if (typeof refresh_token === 'string' && refresh_token.length > 0) {
       setCookie(res, 'sb-refresh-token', refresh_token, 60 * 60 * 24 * 30); // 30d
     }
 
-    // Legacy cookie (some older middleware/pages still read this JSON)
     try {
       const legacy = JSON.stringify({
         access_token,

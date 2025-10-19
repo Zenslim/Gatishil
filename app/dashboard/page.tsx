@@ -1,16 +1,15 @@
-// app/dashboard/page.tsx
 import { redirect } from 'next/navigation';
 import Image from 'next/image';
 import { getSupabaseServer } from '@/lib/supabase/server';
 
+export const dynamic = 'force-dynamic';
+
 export default async function DashboardPage() {
   const supabase = getSupabaseServer();
 
-  // 1) Require server session (prevents flicker or client-only auth gaps)
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect('/login?next=/dashboard');
 
-  // 2) Load profile (public.profiles) and person link (public.user_person_links)
   const { data: profile } = await supabase
     .from('profiles')
     .select('*')
@@ -23,7 +22,6 @@ export default async function DashboardPage() {
     .eq('user_id', user.id)
     .maybeSingle();
 
-  // 3) Enrich with authoritative auth email + preferred person_id source
   const enriched = {
     idx: profile?.idx ?? null,
     user_id: user.id,
@@ -37,7 +35,7 @@ export default async function DashboardPage() {
     skill: profile?.skill ?? [],
     passion: profile?.passion ?? [],
     compassion: profile?.compassion ?? [],
-    email: user.email ?? null,                // <- from auth.users
+    email: user.email ?? null,
     phone: profile?.phone ?? null,
     person_id: link?.person_id ?? profile?.person_id ?? null,
     passkey_enabled: profile?.passkey_enabled ?? false,
@@ -81,9 +79,7 @@ export default async function DashboardPage() {
           </div>
         </header>
 
-        {/* Top row: Profile card + Security card */}
         <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
-          {/* Profile */}
           <div className="rounded-2xl border border-white/10 bg-black/30 p-5 md:col-span-2">
             <div className="mb-4 flex flex-wrap items-center gap-2">
               {enriched.name && <Pill>👤 {enriched.name}{enriched.surname ? ` ${enriched.surname}` : ''}</Pill>}
@@ -103,7 +99,6 @@ export default async function DashboardPage() {
             </div>
           </div>
 
-          {/* Security */}
           <div className="rounded-2xl border border-white/10 bg-black/30 p-5">
             <h2 className="text-sm font-semibold text-white/80">Security</h2>
             <div className="mt-3 space-y-2 text-sm">
@@ -129,7 +124,6 @@ export default async function DashboardPage() {
           </div>
         </div>
 
-        {/* Mirror summary placeholder (AI response area) */}
         <div className="mt-6 rounded-2xl border border-white/10 bg-black/30 p-5">
           <h2 className="text-sm font-semibold text-white/80">Mirror</h2>
           <p className="mt-2 text-sm text-white/70">
