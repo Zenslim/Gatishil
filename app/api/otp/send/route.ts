@@ -2,44 +2,31 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { normalizeNepalMobile } from '@/lib/auth/phone';
 
-const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL || '').replace(/\/$/, '');
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-const SUPABASE_SERVICE_ROLE = process.env.SUPABASE_SERVICE_ROLE;
-const AAKASH_SMS_API_KEY = process.env.AAKASH_SMS_API_KEY;
-const AAKASH_SENDER_ID = process.env.AAKASH_SENDER_ID || 'GATISHIL';
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
-if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !SUPABASE_SERVICE_ROLE) {
-  throw new Error('Supabase environment variables are not configured');
-}
-
-const supabasePublic = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-  auth: { persistSession: false },
-});
-
-const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE, {
-  auth: { persistSession: false },
-});
+const DEFAULT_AAKASH_SMS_BASE_URL = 'https://sms.aakashsms.com/sms/v3/send';
 
 function respond(data: any, status = 200) {
   return NextResponse.json(data, { status });
 }
 
-async function sendSms(phone: string, code: string) {
-  if (!AAKASH_SMS_API_KEY) {
-    throw new Error('AAKASH_SMS_API_KEY missing');
-  }
-
+async function sendSms(
+  phone: string,
+  code: string,
+  options: { apiKey: string; senderId: string; baseUrl?: string }
+) {
+  const { apiKey, senderId, baseUrl } = options;
   const message = `Your Gatishil code is ${code}. It expires in 5 minutes.`;
   const body = new URLSearchParams({
-    key: AAKASH_SMS_API_KEY,
+    key: apiKey,
     route: 'sms',
-    sender: AAKASH_SENDER_ID,
+    sender: senderId,
     phone,
     text: message,
   });
 
-  const res = await fetch('https://sms.aakashsms.com/sms/v3/send', {
+  const res = await fetch(baseUrl || DEFAULT_AAKASH_SMS_BASE_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body,
@@ -54,6 +41,38 @@ async function sendSms(phone: string, code: string) {
 }
 
 export async function POST(req: Request) {
+  const {
+    NEXT_PUBLIC_SITE_URL,
+    NEXT_PUBLIC_SUPABASE_URL,
+    NEXT_PUBLIC_SUPABASE_ANON_KEY,
+    SUPABASE_URL,
+    SUPABASE_SERVICE_ROLE_KEY,
+    SUPABASE_SERVICE_ROLE,
+    AAKASH_SMS_API_KEY,
+    AAKASH_SMS_BASE_URL,
+    AAKASH_SENDER_ID,
+  } = process.env;
+
+  const siteUrl = (NEXT_PUBLIC_SITE_URL || '').replace(/\/$/, '');
+  const supabaseUrl = NEXT_PUBLIC_SUPABASE_URL || SUPABASE_URL;
+  const supabaseAnonKey = NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const supabaseServiceRoleKey = SUPABASE_SERVICE_ROLE_KEY || SUPABASE_SERVICE_ROLE;
+
+  if (!supabaseUrl || !supabaseServiceRoleKey || !supabaseAnonKey) {
+    return new Response(
+      JSON.stringify({ error: 'Server auth not configured' }),
+      { status: 500, headers: { 'content-type': 'application/json' } }
+    );
+  }
+
+  const supabasePublic = createClient(supabaseUrl, supabaseAnonKey, {
+    auth: { persistSession: false },
+  });
+
+  const supabaseAdmin = createClient(supabaseUrl, supabaseServiceRoleKey, {
+    auth: { persistSession: false },
+  });
+
   const body = await req.json().catch(() => ({}));
   const rawEmail = typeof body.email === 'string' ? body.email.trim() : '';
   const rawPhone = typeof body.phone === 'string' ? body.phone : '';
@@ -68,7 +87,7 @@ export async function POST(req: Request) {
         email: rawEmail,
         options: {
           shouldCreateUser: true,
-          emailRedirectTo: SITE_URL ? `${SITE_URL}/auth/callback` : undefined,
+          emailRedirectTo: siteUrl ? `${siteUrl}/auth/callback` : undefined,
         },
       });
       if (error) throw error;
@@ -122,7 +141,18 @@ export async function POST(req: Request) {
       throw new Error('Supabase did not issue an OTP code.');
     }
 
-    await sendSms(normalized, code);
+    if (!AAKASH_SMS_API_KEY /* || !AAKASH_SMS_BASE_URL if required */) {
+      return new Response(
+        JSON.stringify({ error: 'SMS gateway not configured' }),
+        { status: 500, headers: { 'content-type': 'application/json' } }
+      );
+    }
+
+    await sendSms(normalized, code, {
+      apiKey: AAKASH_SMS_API_KEY,
+      senderId: AAKASH_SENDER_ID || 'GATISHIL',
+      baseUrl: AAKASH_SMS_BASE_URL,
+    });
 
     const expiresAt = new Date(Date.now() + 5 * 60_000).toISOString();
     const { error: insertError } = await supabaseAdmin.from('otps').insert({
