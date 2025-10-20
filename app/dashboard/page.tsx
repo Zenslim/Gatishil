@@ -62,24 +62,23 @@ function ErrorCard({ title, details }: { title: string; details?: string }) {
 }
 
 export default async function DashboardPage() {
-  // Handle auth/redirects OUTSIDE the try/catch so redirect() can throw normally.
-  const supabase = getSupabaseServer();
-
-  const {
-    data: { user },
-    error: userErr,
-  } = await supabase.auth.getUser();
-
-  if (userErr) {
-    console.error('dashboard:getUser error', userErr);
-    redirect('/login?next=/dashboard');
-  }
-
-  if (!user) {
-    redirect('/login?next=/dashboard');
-  }
-
   try {
+    const supabase = getSupabaseServer();
+
+    const {
+      data: { user },
+      error: userErr,
+    } = await supabase.auth.getUser();
+
+    if (userErr) {
+      console.error('dashboard:getUser error', userErr);
+      redirect('/login?next=/dashboard');
+    }
+
+    if (!user) {
+      redirect('/login?next=/dashboard');
+    }
+
     // ---- below here, only real data fetching/render can fail ----
 
     const {

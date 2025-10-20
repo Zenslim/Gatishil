@@ -15,15 +15,19 @@ const nextConfig = {
     remotePatterns: [
       {
         protocol: 'https',
-        hostname: '**.supabase.co',
+        hostname: '*.supabase.co',
       },
       {
         protocol: 'https',
-        hostname: '**.googleusercontent.com',
+        hostname: '*.googleusercontent.com',
       },
       {
         protocol: 'https',
         hostname: 'avatars.githubusercontent.com',
+      },
+      {
+        protocol: 'https',
+        hostname: '*.githubusercontent.com',
       },
     ],
   },
