@@ -1,11 +1,19 @@
 // middleware.ts
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
+import { createMiddlewareClient } from '@supabase/auth-helpers-nextjs';
 
 type Guard = {
   pattern: RegExp;
   buildRedirect: (req: NextRequest) => URL;
 };
+
+const SESSION_COOKIES = [
+  'sb-access-token',
+  'sb-refresh-token',
+  'sb:token',
+  'supabase-auth-token',
+];
 
 // Only guard routes that truly require server-visible cookies.
 const PROTECTED: Guard[] = [
@@ -33,18 +41,7 @@ const PROTECTED: Guard[] = [
   },
 ];
 
-// Minimal cookie probe; avoid network work in middleware.
-function hasSupabaseSession(req: NextRequest): boolean {
-  const c = req.cookies;
-  return Boolean(
-    c.get('sb-access-token')?.value ||
-    c.get('sb-refresh-token')?.value ||
-    c.get('sb:token')?.value ||
-    c.get('supabase-auth-token')?.value
-  );
-}
-
-export function middleware(req: NextRequest) {
+export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
   // Skip static assets & Next internals & API.
@@ -61,18 +58,40 @@ export function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
-  const authed = hasSupabaseSession(req);
-
-  // Never short-circuit /login here. We rely on the page itself to ask Supabase
-  // if the cookies are still valid so that stale tokens do not cause loops.
-
   // Guard only the routes that truly depend on server-visible cookies.
   const guard = PROTECTED.find(({ pattern }) => pattern.test(pathname));
-  if (guard && !authed) {
-    return NextResponse.redirect(guard.buildRedirect(req));
+  if (!guard) {
+    return NextResponse.next();
   }
 
-  return NextResponse.next();
+  const res = NextResponse.next();
+  const supabase = createMiddlewareClient({ req, res });
+  const {
+    data: { session },
+    error,
+  } = await supabase.auth.getSession();
+
+  if (session && !error) {
+    return res;
+  }
+
+  const redirectResponse = NextResponse.redirect(guard.buildRedirect(req));
+
+  // Clear known Supabase session cookies so the login page starts fresh and
+  // avoids redirect loops caused by stale tokens.
+  for (const name of SESSION_COOKIES) {
+    redirectResponse.cookies.set({
+      name,
+      value: '',
+      path: '/',
+      httpOnly: true,
+      secure: true,
+      sameSite: 'lax',
+      maxAge: 0,
+    });
+  }
+
+  return redirectResponse;
 }
 
 // Keep matcher tight so we don't accidentally trap assets.
