@@ -2,13 +2,35 @@
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 
-// We no longer guard /dashboard in middleware because client-side sessions
-// (localStorage) are invisible to the server at this point and cause false negatives.
-// The dashboard page itself performs a server-side getUser() and redirects cleanly.
-// Keep only truly sensitive routes that you KNOW require cookies visible to the server.
-const PROTECTED: RegExp[] = [
-  /^\/security(?:\/|$)/,
-  // add others later only if they rely on server-visible cookies/tokens
+type Guard = {
+  pattern: RegExp;
+  buildRedirect: (req: NextRequest) => URL;
+};
+
+// Only guard routes that truly require server-visible cookies.
+const PROTECTED: Guard[] = [
+  {
+    pattern: /^\/dashboard(?:\/|$)/,
+    buildRedirect: (req) => {
+      const url = new URL('/login', req.url);
+      const next = req.nextUrl.pathname + req.nextUrl.search;
+      url.searchParams.set('next', next || '/dashboard');
+      return url;
+    },
+  },
+  {
+    pattern: /^\/onboard(?:\/|$)/,
+    buildRedirect: (req) => new URL('/join', req.url),
+  },
+  {
+    pattern: /^\/security(?:\/|$)/,
+    buildRedirect: (req) => {
+      const url = new URL('/login', req.url);
+      const next = req.nextUrl.pathname + req.nextUrl.search;
+      url.searchParams.set('next', next || '/security');
+      return url;
+    },
+  },
 ];
 
 // Minimal cookie probe; avoid network work in middleware.
@@ -23,7 +45,7 @@ function hasSupabaseSession(req: NextRequest): boolean {
 }
 
 export function middleware(req: NextRequest) {
-  const { pathname, searchParams } = req.nextUrl;
+  const { pathname } = req.nextUrl;
 
   // Skip static assets & Next internals & API.
   if (
@@ -41,18 +63,13 @@ export function middleware(req: NextRequest) {
 
   const authed = hasSupabaseSession(req);
 
-  // If an already-signed-in user visits /login, fast-track them to next (/dashboard default).
-  if (pathname === '/login' && authed) {
-    const nextParam = searchParams.get('next') || '/dashboard';
-    const url = new URL(nextParam, req.url);
-    return NextResponse.redirect(url);
-  }
+  // Never short-circuit /login here. We rely on the page itself to ask Supabase
+  // if the cookies are still valid so that stale tokens do not cause loops.
 
   // Guard only the routes that truly depend on server-visible cookies.
-  if (PROTECTED.some((re) => re.test(pathname)) && !authed) {
-    const url = new URL('/login', req.url);
-    url.searchParams.set('next', pathname + (req.nextUrl.search || ''));
-    return NextResponse.redirect(url);
+  const guard = PROTECTED.find(({ pattern }) => pattern.test(pathname));
+  if (guard && !authed) {
+    return NextResponse.redirect(guard.buildRedirect(req));
   }
 
   return NextResponse.next();
