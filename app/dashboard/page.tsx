@@ -1,181 +1,245 @@
-// app/dashboard/page.tsx
-import { redirect } from 'next/navigation';
-import React from 'react';
-import { getSupabaseServer } from '@/lib/supabase/server';
+'use client';
 
-export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
-export const revalidate = 0;
+import React, { useEffect, useMemo, useState } from 'react';
+import { createClient } from '@supabase/supabase-js';
 
-// Heuristic to detect Next.js redirect throws without importing unstable internals
-function isNextRedirect(err: unknown) {
-  // In production, Next attaches a string digest that includes 'NEXT_REDIRECT'
-  // We avoid importing next internals to check this.
-  // If the shape changes in future, throwing the error is still safe — the global handler will manage it.
-  // @ts-ignore
-  const d = err?.digest;
-  return typeof d === 'string' && d.includes('NEXT_REDIRECT');
-}
+type Profile = {
+  user_id: string;
+  name: string | null;
+  surname: string | null;
+  photo_url: string | null;
+  vision: string | null;
+  occupation: string[] | null;
+  skill: string[] | null;
+  passion: string[] | null;
+  compassion: string[] | null;
+  roots_json: any | null;
+  person_id?: string | null;
+  passkey_enabled?: boolean | null;
+  passkey_cred_ids?: string[] | null;
+};
 
-const AVATAR_HOST_SUFFIXES = ['supabase.co', 'googleusercontent.com'];
-const AVATAR_EXACT_HOSTS = new Set([
-  'avatars.githubusercontent.com',
-  'raw.githubusercontent.com',
-  'user-images.githubusercontent.com',
-]);
+export default function DashboardPage() {
+  const supabase = useMemo(() => {
+    // Client-only public keys
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL as string;
+    const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string;
+    return createClient(url, anon, {
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: true,
+      },
+    });
+  }, []);
 
-function getSafeAvatarUrl(raw: string | null) {
-  if (!raw) return null;
-  try {
-    const url = new URL(raw);
-    if (url.protocol !== 'https:') return null;
-    const hostname = url.hostname.toLowerCase();
-    if (AVATAR_EXACT_HOSTS.has(hostname)) return url.toString();
-    const ok = AVATAR_HOST_SUFFIXES.some(
-      (suffix) => hostname === suffix || hostname.endsWith(`.${suffix}`)
-    );
-    return ok ? url.toString() : null;
-  } catch {
-    return null;
-  }
-}
+  const [checking, setChecking] = useState(true);
+  const [loading, setLoading] = useState(true);
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [email, setEmail] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
 
-function Pill({ children }: { children: React.ReactNode }) {
-  return (
-    <span className="inline-flex items-center rounded-full border border-white/15 bg-white/5 px-3 py-1 text-xs text-white/80">
-      {children}
-    </span>
-  );
-}
-
-function ErrorCard({ title, details }: { title: string; details?: string }) {
-  return (
-    <div className="rounded-2xl border border-red-500/30 bg-red-500/10 p-5 text-sm text-red-200">
-      <div className="font-semibold">{title}</div>
-      {details ? (
-        <pre className="mt-2 whitespace-pre-wrap text-red-300/90">{details}</pre>
-      ) : null}
-      <div className="mt-3 text-xs text-red-300/80">
-        If this persists, try reloading or signing in again.
-      </div>
-    </div>
-  );
-}
-
-export default async function DashboardPage() {
-  try {
-    // --- Auth gate ---
-    const supabase = getSupabaseServer();
-    const {
-      data: { user },
-      error: userErr,
-    } = await supabase.auth.getUser();
-
-    if (userErr) {
-      console.error('dashboard:getUser error', userErr);
-      redirect('/login?next=/dashboard');
-    }
-    if (!user) redirect('/login?next=/dashboard');
-
-    // --- Data fetch ---
-    const { data: profile, error: profileErr } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('user_id', user.id)
-      .maybeSingle();
-    if (profileErr) console.error('dashboard:profiles query error', profileErr);
-
-    const { data: link, error: linkErr } = await supabase
-      .from('user_person_links')
-      .select('person_id')
-      .eq('user_id', user.id)
-      .maybeSingle();
-    if (linkErr) console.error('dashboard:user_person_links query error', linkErr);
-
-    const enriched = {
-      idx: profile?.idx ?? null,
-      user_id: user.id,
-      name: profile?.name ?? null,
-      photo_url: profile?.photo_url ?? null,
-      roots_json: (profile?.roots_json as any) ?? null,
-      updated_at: profile?.updated_at ?? null,
-      surname: profile?.surname ?? null,
-      vision: profile?.vision ?? null,
-      occupation: Array.isArray(profile?.occupation) ? profile?.occupation : [],
-      skill: Array.isArray(profile?.skill) ? profile?.skill : [],
-      passion: Array.isArray(profile?.passion) ? profile?.passion : [],
-      compassion: Array.isArray(profile?.compassion) ? profile?.compassion : [],
-      email: user.email ?? null,
-      phone: profile?.phone ?? null,
-      person_id: link?.person_id ?? profile?.person_id ?? null,
-      passkey_enabled: Boolean(profile?.passkey_enabled),
-      passkey_cred_ids: Array.isArray(profile?.passkey_cred_ids) ? profile?.passkey_cred_ids : [],
+  // 1) Verify session in the browser (never on the server).
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const { data, error } = await supabase.auth.getSession();
+        if (!alive) return;
+        if (error) {
+          // If stale tokens: clean local state and route to login
+          await supabase.auth.signOut({ scope: 'local' });
+          window.location.assign('/login?next=/dashboard');
+          return;
+        }
+        if (!data?.session) {
+          window.location.assign('/login?next=/dashboard');
+          return;
+        }
+        setEmail(data.session.user.email ?? null);
+        setChecking(false);
+      } catch (e) {
+        // If anything fails, treat as unauthenticated (no blank screens).
+        window.location.assign('/login?next=/dashboard');
+      }
+    })();
+    return () => {
+      alive = false;
     };
+  }, [supabase]);
 
-    const rootLabel =
-      typeof enriched.roots_json === 'object' && (enriched.roots_json as any)?.label
-        ? (enriched.roots_json as any).label
-        : null;
+  // 2) Load profile with a hard timeout so it never “hangs blank”.
+  useEffect(() => {
+    if (checking) return;
+    let alive = true;
+    let t: ReturnType<typeof setTimeout> | null = null;
 
-    const avatarUrl = getSafeAvatarUrl(enriched.photo_url);
+    (async () => {
+      try {
+        setLoading(true);
+        setErr(null);
 
-    // --- UI ---
-    return (
-      <main className="min-h-[100vh] bg-neutral-950 text-white">
-        <section className="mx-auto max-w-5xl px-4 py-8">
-          <header className="mb-6 flex items-center gap-4">
-            <div className="relative h-14 w-14 overflow-hidden rounded-full ring-1 ring-white/15">
-              {avatarUrl ? (
-                <img
-                  src={avatarUrl}
-                  alt={enriched.name ?? 'Member'}
-                  width={56}
-                  height={56}
-                  className="h-14 w-14 object-cover"
-                  loading="eager"
-                  decoding="async"
-                />
-              ) : (
-                <div className="grid h-full w-full place-items-center bg-white/5 text-xl">🪶</div>
-              )}
+        // Hard timeout (8s): if Supabase/network stalls, we show a clear error.
+        t = setTimeout(() => {
+          if (alive) {
+            setLoading(false);
+            setErr('Network timeout loading your console. Please reload or try again.');
+          }
+        }, 8000);
+
+        const { data: userRes } = await supabase.auth.getUser();
+        const user = userRes?.user;
+        if (!alive) return;
+        if (!user) {
+          window.location.assign('/login?next=/dashboard');
+          return;
+        }
+
+        const { data: prof, error: pErr } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('user_id', user.id)
+          .maybeSingle();
+
+        if (!alive) return;
+        if (pErr) {
+          setErr('We could not load your profile.'); // visible error instead of blank
+          setLoading(false);
+          return;
+        }
+
+        // Optional: person link if you use it (ignore errors silently)
+        let person_id: string | null = null;
+        try {
+          const { data: link } = await supabase
+            .from('user_person_links')
+            .select('person_id')
+            .eq('user_id', user.id)
+            .maybeSingle();
+          person_id = (link as any)?.person_id ?? (prof as any)?.person_id ?? null;
+        } catch {
+          // ignore
+        }
+
+        const enriched: Profile = {
+          user_id: user.id,
+          name: prof?.name ?? null,
+          surname: prof?.surname ?? null,
+          photo_url: safeAvatar(prof?.photo_url ?? null),
+          vision: prof?.vision ?? null,
+          occupation: Array.isArray(prof?.occupation) ? prof?.occupation : [],
+          skill: Array.isArray(prof?.skill) ? prof?.skill : [],
+          passion: Array.isArray(prof?.passion) ? prof?.passion : [],
+          compassion: Array.isArray(prof?.compassion) ? prof?.compassion : [],
+          roots_json: prof?.roots_json ?? null,
+          person_id,
+          passkey_enabled: Boolean(prof?.passkey_enabled),
+          passkey_cred_ids: Array.isArray(prof?.passkey_cred_ids) ? prof?.passkey_cred_ids : [],
+        };
+
+        setProfile(enriched);
+        setLoading(false);
+      } catch (e: any) {
+        if (!alive) return;
+        setErr(typeof e?.message === 'string' ? e.message : 'Unknown error loading your console.');
+        setLoading(false);
+      } finally {
+        if (t) clearTimeout(t);
+      }
+    })();
+
+    return () => {
+      alive = false;
+      if (t) clearTimeout(t);
+    };
+  }, [checking, supabase]);
+
+  return (
+    <main className="min-h-[100vh] bg-neutral-950 text-white">
+      <section className="mx-auto max-w-5xl px-4 py-8">
+        <header className="mb-6 flex items-center gap-4">
+          <div className="relative h-14 w-14 overflow-hidden rounded-full ring-1 ring-white/15">
+            {profile?.photo_url ? (
+              <img
+                src={profile.photo_url}
+                alt={profile.name ?? 'Member'}
+                width={56}
+                height={56}
+                className="h-14 w-14 object-cover"
+                loading="eager"
+                decoding="async"
+              />
+            ) : (
+              <div className="grid h-full w-full place-items-center bg-white/5 text-xl">🪶</div>
+            )}
+          </div>
+          <div>
+            <h1 className="text-xl font-semibold">
+              {checking ? 'Checking session…' : `Welcome, ${email ?? profile?.name ?? 'Member'}`}
+            </h1>
+            <p className="text-sm text-white/60">This is your movement console.</p>
+          </div>
+        </header>
+
+        {/* Loading skeleton */}
+        {loading && !err && (
+          <div className="animate-pulse space-y-4">
+            <div className="h-4 w-1/3 rounded bg-white/10" />
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+              <div className="h-40 rounded bg-white/10 md:col-span-2" />
+              <div className="h-40 rounded bg-white/10" />
             </div>
-            <div>
-              <h1 className="text-xl font-semibold">
-                Welcome, {enriched.email ?? enriched.name ?? 'Member'}
-              </h1>
-              <p className="text-sm text-white/60">This is your movement console.</p>
-            </div>
-          </header>
+            <div className="h-40 rounded bg-white/10" />
+          </div>
+        )}
 
+        {/* Error surface (never blank) */}
+        {err && (
+          <div className="rounded-2xl border border-red-500/30 bg-red-500/10 p-5 text-sm text-red-200">
+            <div className="font-semibold">We hit a problem while loading your console.</div>
+            <pre className="mt-2 whitespace-pre-wrap text-red-300/90">{err}</pre>
+            <div className="mt-3 flex gap-2">
+              <button
+                className="rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm hover:bg-white/10"
+                onClick={() => window.location.reload()}
+              >
+                Reload
+              </button>
+              <a
+                href="/login?next=/dashboard"
+                className="rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm hover:bg-white/10"
+              >
+                Re-authenticate
+              </a>
+            </div>
+          </div>
+        )}
+
+        {/* Main content */}
+        {!loading && !err && profile && (
           <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
             <div className="rounded-2xl border border-white/10 bg-black/30 p-5 md:col-span-2">
               <div className="mb-4 flex flex-wrap items-center gap-2">
-                {enriched.name && (
+                {profile.name && (
                   <Pill>
-                    👤 {enriched.name}
-                    {enriched.surname ? ` ${enriched.surname}` : ''}
+                    👤 {profile.name}
+                    {profile.surname ? ` ${profile.surname}` : ''}
                   </Pill>
                 )}
-                {rootLabel && <Pill>📍 {rootLabel}</Pill>}
-                {enriched.vision && <Pill>🌱 {enriched.vision}</Pill>}
-                {enriched.person_id && <Pill>🧬 person_id: {enriched.person_id}</Pill>}
+                {labelFromRoots(profile.roots_json) && (
+                  <Pill>📍 {labelFromRoots(profile.roots_json)}</Pill>
+                )}
+                {profile.vision && <Pill>🌱 {profile.vision}</Pill>}
+                {profile.person_id && <Pill>🧬 person_id: {profile.person_id}</Pill>}
               </div>
 
               <div className="mt-3">
                 <h2 className="text-sm font-semibold text-white/80">Your Focus & Gifts</h2>
                 <div className="mt-2 flex flex-wrap gap-2">
-                  {enriched.occupation.map((x: string, i: number) => (
-                    <Pill key={`o${i}`}>🏛️ {x}</Pill>
-                  ))}
-                  {enriched.skill.map((x: string, i: number) => (
-                    <Pill key={`s${i}`}>🛠️ {x}</Pill>
-                  ))}
-                  {enriched.passion.map((x: string, i: number) => (
-                    <Pill key={`p${i}`}>✨ {x}</Pill>
-                  ))}
-                  {enriched.compassion.map((x: string, i: number) => (
-                    <Pill key={`c${i}`}>🤝 {x}</Pill>
-                  ))}
+                  {(profile.occupation || []).map((x, i) => <Pill key={`o${i}`}>🏛️ {x}</Pill>)}
+                  {(profile.skill || []).map((x, i) => <Pill key={`s${i}`}>🛠️ {x}</Pill>)}
+                  {(profile.passion || []).map((x, i) => <Pill key={`p${i}`}>✨ {x}</Pill>)}
+                  {(profile.compassion || []).map((x, i) => <Pill key={`c${i}`}>🤝 {x}</Pill>)}
                 </div>
               </div>
             </div>
@@ -183,22 +247,12 @@ export default async function DashboardPage() {
             <div className="rounded-2xl border border-white/10 bg-black/30 p-5">
               <h2 className="text-sm font-semibold text-white/80">Security</h2>
               <div className="mt-3 space-y-2 text-sm">
-                <div className="flex items-center justify-between">
-                  <span className="text-white/70">Passkey</span>
-                  <span
-                    className={`rounded-full px-2 py-0.5 text-xs ${
-                      enriched.passkey_enabled
-                        ? 'bg-emerald-500/20 text-emerald-300'
-                        : 'bg-amber-500/20 text-amber-300'
-                    }`}
-                  >
-                    {enriched.passkey_enabled ? 'Enabled' : 'Not set'}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-white/70">Registered devices</span>
-                  <span className="text-white/80">{enriched.passkey_cred_ids?.length ?? 0}</span>
-                </div>
+                <Row label="Passkey">
+                  <Badge ok={!!profile.passkey_enabled} />
+                </Row>
+                <Row label="Registered devices">
+                  <span className="text-white/80">{profile.passkey_cred_ids?.length ?? 0}</span>
+                </Row>
                 <div className="pt-3">
                   <a
                     href="/security"
@@ -209,66 +263,74 @@ export default async function DashboardPage() {
                 </div>
               </div>
             </div>
-          </div>
 
-          <div className="mt-6 rounded-2xl border border-white/10 bg-black/30 p-5">
-            <h2 className="text-sm font-semibold text-white/80">Mirror</h2>
-            <p className="mt-2 text-sm text-white/70">
-              A short reflection about you will appear here as you write in your journal and complete
-              onboarding.
-            </p>
-            <div className="mt-4 flex flex-wrap gap-3">
-              <a
-                href="/journal"
-                className="inline-flex items-center rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm hover:bg-white/10"
-              >
-                Open Journal
-              </a>
-              <a
-                href="/proposals"
-                className="inline-flex items-center rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm hover:bg-white/10"
-              >
-                View Proposals
-              </a>
-              <a
-                href="/polls"
-                className="inline-flex items-center rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm hover:bg-white/10"
-              >
-                Vote in Polls
-              </a>
+            <div className="md:col-span-3 rounded-2xl border border-white/10 bg-black/30 p-5">
+              <h2 className="text-sm font-semibold text-white/80">Mirror</h2>
+              <p className="mt-2 text-sm text-white/70">
+                A short reflection about you will appear here as you write in your journal and complete onboarding.
+              </p>
+              <div className="mt-4 flex flex-wrap gap-3">
+                <a href="/journal" className="inline-flex items-center rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm hover:bg-white/10">Open Journal</a>
+                <a href="/proposals" className="inline-flex items-center rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm hover:bg-white/10">View Proposals</a>
+                <a href="/polls" className="inline-flex items-center rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm hover:bg-white/10">Vote in Polls</a>
+              </div>
             </div>
           </div>
-        </section>
-      </main>
-    );
-  } catch (err: any) {
-    // If it's a real redirect signal, let Next handle it.
-    if (isNextRedirect(err)) throw err;
+        )}
+      </section>
+    </main>
+  );
+}
 
-    // Render an inline error surface instead of blanking out.
-    console.error('dashboard:render fatal error', err);
-    const msg =
-      typeof err?.message === 'string'
-        ? err.message
-        : 'Unknown error. Check server logs.';
-    return (
-      <main className="min-h-[100vh] bg-neutral-950 text-white">
-        <section className="mx-auto max-w-3xl px-4 py-8">
-          <h1 className="mb-4 text-xl font-semibold">Dashboard</h1>
-          <ErrorCard
-            title="We hit a server issue while loading your console."
-            details={msg}
-          />
-          <div className="mt-4">
-            <a
-              href="/login?next=/dashboard"
-              className="inline-flex items-center rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm hover:bg-white/10"
-            >
-              Re-authenticate
-            </a>
-          </div>
-        </section>
-      </main>
-    );
+/* ——— helpers ——— */
+
+function Pill({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="inline-flex items-center rounded-full border border-white/15 bg-white/5 px-3 py-1 text-xs text-white/80">
+      {children}
+    </span>
+  );
+}
+
+function Row({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex items-center justify-between">
+      <span className="text-white/70">{label}</span>
+      {children}
+    </div>
+  );
+}
+
+function Badge({ ok }: { ok: boolean }) {
+  return (
+    <span
+      className={`rounded-full px-2 py-0.5 text-xs ${
+        ok ? 'bg-emerald-500/20 text-emerald-300' : 'bg-amber-500/20 text-amber-300'
+      }`}
+    >
+      {ok ? 'Enabled' : 'Not set'}
+    </span>
+  );
+}
+
+const ALLOWED_SUFFIX = ['supabase.co', 'googleusercontent.com'];
+const ALLOWED_HOSTS = new Set(['avatars.githubusercontent.com','raw.githubusercontent.com','user-images.githubusercontent.com']);
+
+function safeAvatar(raw: string | null): string | null {
+  if (!raw) return null;
+  try {
+    const u = new URL(raw);
+    if (u.protocol !== 'https:') return null;
+    const h = u.hostname.toLowerCase();
+    if (ALLOWED_HOSTS.has(h)) return u.toString();
+    if (ALLOWED_SUFFIX.some((s) => h === s || h.endsWith(`.${s}`))) return u.toString();
+    return null;
+  } catch {
+    return null;
   }
+}
+
+function labelFromRoots(roots: any): string | null {
+  if (roots && typeof roots === 'object' && roots.label) return String(roots.label);
+  return null;
 }
