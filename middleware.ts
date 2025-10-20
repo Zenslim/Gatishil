@@ -41,12 +41,8 @@ export function middleware(req: NextRequest) {
 
   const authed = hasSupabaseSession(req);
 
-  // If an already-signed-in user visits /login, fast-track them to next (/dashboard default).
-  if (pathname === '/login' && authed) {
-    const nextParam = searchParams.get('next') || '/dashboard';
-    const url = new URL(nextParam, req.url);
-    return NextResponse.redirect(url);
-  }
+  // Never short-circuit /login here. We rely on the page itself to ask Supabase
+  // if the cookies are still valid so that stale tokens do not cause loops.
 
   // Guard only the routes that truly depend on server-visible cookies.
   if (PROTECTED.some((re) => re.test(pathname)) && !authed) {
