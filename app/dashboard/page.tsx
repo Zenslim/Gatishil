@@ -2,14 +2,27 @@
 import { redirect } from 'next/navigation';
 import React from 'react';
 import { getSupabaseServer } from '@/lib/supabase/server';
-import { isRedirectError } from 'next/dist/client/components/redirect';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
+// Heuristic to detect Next.js redirect throws without importing unstable internals
+function isNextRedirect(err: unknown) {
+  // In production, Next attaches a string digest that includes 'NEXT_REDIRECT'
+  // We avoid importing next internals to check this.
+  // If the shape changes in future, throwing the error is still safe — the global handler will manage it.
+  // @ts-ignore
+  const d = err?.digest;
+  return typeof d === 'string' && d.includes('NEXT_REDIRECT');
+}
+
 const AVATAR_HOST_SUFFIXES = ['supabase.co', 'googleusercontent.com'];
-const AVATAR_EXACT_HOSTS = new Set(['avatars.githubusercontent.com', 'raw.githubusercontent.com', 'user-images.githubusercontent.com']);
+const AVATAR_EXACT_HOSTS = new Set([
+  'avatars.githubusercontent.com',
+  'raw.githubusercontent.com',
+  'user-images.githubusercontent.com',
+]);
 
 function getSafeAvatarUrl(raw: string | null) {
   if (!raw) return null;
@@ -18,7 +31,9 @@ function getSafeAvatarUrl(raw: string | null) {
     if (url.protocol !== 'https:') return null;
     const hostname = url.hostname.toLowerCase();
     if (AVATAR_EXACT_HOSTS.has(hostname)) return url.toString();
-    const ok = AVATAR_HOST_SUFFIXES.some((suffix) => hostname === suffix || hostname.endsWith(`.${suffix}`));
+    const ok = AVATAR_HOST_SUFFIXES.some(
+      (suffix) => hostname === suffix || hostname.endsWith(`.${suffix}`)
+    );
     return ok ? url.toString() : null;
   } catch {
     return null;
@@ -37,16 +52,24 @@ function ErrorCard({ title, details }: { title: string; details?: string }) {
   return (
     <div className="rounded-2xl border border-red-500/30 bg-red-500/10 p-5 text-sm text-red-200">
       <div className="font-semibold">{title}</div>
-      {details ? <pre className="mt-2 whitespace-pre-wrap text-red-300/90">{details}</pre> : null}
-      <div className="mt-3 text-xs text-red-300/80">If this persists, try reloading or signing in again.</div>
+      {details ? (
+        <pre className="mt-2 whitespace-pre-wrap text-red-300/90">{details}</pre>
+      ) : null}
+      <div className="mt-3 text-xs text-red-300/80">
+        If this persists, try reloading or signing in again.
+      </div>
     </div>
   );
 }
 
 export default async function DashboardPage() {
   try {
+    // --- Auth gate ---
     const supabase = getSupabaseServer();
-    const { data: { user }, error: userErr } = await supabase.auth.getUser();
+    const {
+      data: { user },
+      error: userErr,
+    } = await supabase.auth.getUser();
 
     if (userErr) {
       console.error('dashboard:getUser error', userErr);
@@ -54,12 +77,19 @@ export default async function DashboardPage() {
     }
     if (!user) redirect('/login?next=/dashboard');
 
-    const { data: profile, error: profileErr } =
-      await supabase.from('profiles').select('*').eq('user_id', user.id).maybeSingle();
+    // --- Data fetch ---
+    const { data: profile, error: profileErr } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('user_id', user.id)
+      .maybeSingle();
     if (profileErr) console.error('dashboard:profiles query error', profileErr);
 
-    const { data: link, error: linkErr } =
-      await supabase.from('user_person_links').select('person_id').eq('user_id', user.id).maybeSingle();
+    const { data: link, error: linkErr } = await supabase
+      .from('user_person_links')
+      .select('person_id')
+      .eq('user_id', user.id)
+      .maybeSingle();
     if (linkErr) console.error('dashboard:user_person_links query error', linkErr);
 
     const enriched = {
@@ -89,6 +119,7 @@ export default async function DashboardPage() {
 
     const avatarUrl = getSafeAvatarUrl(enriched.photo_url);
 
+    // --- UI ---
     return (
       <main className="min-h-[100vh] bg-neutral-950 text-white">
         <section className="mx-auto max-w-5xl px-4 py-8">
@@ -109,7 +140,9 @@ export default async function DashboardPage() {
               )}
             </div>
             <div>
-              <h1 className="text-xl font-semibold">Welcome, {enriched.email ?? enriched.name ?? 'Member'}</h1>
+              <h1 className="text-xl font-semibold">
+                Welcome, {enriched.email ?? enriched.name ?? 'Member'}
+              </h1>
               <p className="text-sm text-white/60">This is your movement console.</p>
             </div>
           </header>
@@ -117,7 +150,12 @@ export default async function DashboardPage() {
           <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
             <div className="rounded-2xl border border-white/10 bg-black/30 p-5 md:col-span-2">
               <div className="mb-4 flex flex-wrap items-center gap-2">
-                {enriched.name && <Pill>👤 {enriched.name}{enriched.surname ? ` ${enriched.surname}` : ''}</Pill>}
+                {enriched.name && (
+                  <Pill>
+                    👤 {enriched.name}
+                    {enriched.surname ? ` ${enriched.surname}` : ''}
+                  </Pill>
+                )}
                 {rootLabel && <Pill>📍 {rootLabel}</Pill>}
                 {enriched.vision && <Pill>🌱 {enriched.vision}</Pill>}
                 {enriched.person_id && <Pill>🧬 person_id: {enriched.person_id}</Pill>}
@@ -126,10 +164,18 @@ export default async function DashboardPage() {
               <div className="mt-3">
                 <h2 className="text-sm font-semibold text-white/80">Your Focus & Gifts</h2>
                 <div className="mt-2 flex flex-wrap gap-2">
-                  {enriched.occupation.map((x: string, i: number) => <Pill key={`o${i}`}>🏛️ {x}</Pill>)}
-                  {enriched.skill.map((x: string, i: number) => <Pill key={`s${i}`}>🛠️ {x}</Pill>)}
-                  {enriched.passion.map((x: string, i: number) => <Pill key={`p${i}`}>✨ {x}</Pill>)}
-                  {enriched.compassion.map((x: string, i: number) => <Pill key={`c${i}`}>🤝 {x}</Pill>)}
+                  {enriched.occupation.map((x: string, i: number) => (
+                    <Pill key={`o${i}`}>🏛️ {x}</Pill>
+                  ))}
+                  {enriched.skill.map((x: string, i: number) => (
+                    <Pill key={`s${i}`}>🛠️ {x}</Pill>
+                  ))}
+                  {enriched.passion.map((x: string, i: number) => (
+                    <Pill key={`p${i}`}>✨ {x}</Pill>
+                  ))}
+                  {enriched.compassion.map((x: string, i: number) => (
+                    <Pill key={`c${i}`}>🤝 {x}</Pill>
+                  ))}
                 </div>
               </div>
             </div>
@@ -139,7 +185,13 @@ export default async function DashboardPage() {
               <div className="mt-3 space-y-2 text-sm">
                 <div className="flex items-center justify-between">
                   <span className="text-white/70">Passkey</span>
-                  <span className={`rounded-full px-2 py-0.5 text-xs ${enriched.passkey_enabled ? 'bg-emerald-500/20 text-emerald-300' : 'bg-amber-500/20 text-amber-300'}`}>
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-xs ${
+                      enriched.passkey_enabled
+                        ? 'bg-emerald-500/20 text-emerald-300'
+                        : 'bg-amber-500/20 text-amber-300'
+                    }`}
+                  >
                     {enriched.passkey_enabled ? 'Enabled' : 'Not set'}
                   </span>
                 </div>
@@ -148,7 +200,10 @@ export default async function DashboardPage() {
                   <span className="text-white/80">{enriched.passkey_cred_ids?.length ?? 0}</span>
                 </div>
                 <div className="pt-3">
-                  <a href="/security" className="inline-flex w-full items-center justify-center rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm hover:bg-white/10">
+                  <a
+                    href="/security"
+                    className="inline-flex w-full items-center justify-center rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm hover:bg-white/10"
+                  >
                     Open Security
                   </a>
                 </div>
@@ -159,28 +214,56 @@ export default async function DashboardPage() {
           <div className="mt-6 rounded-2xl border border-white/10 bg-black/30 p-5">
             <h2 className="text-sm font-semibold text-white/80">Mirror</h2>
             <p className="mt-2 text-sm text-white/70">
-              A short reflection about you will appear here as you write in your journal and complete onboarding.
+              A short reflection about you will appear here as you write in your journal and complete
+              onboarding.
             </p>
             <div className="mt-4 flex flex-wrap gap-3">
-              <a href="/journal" className="inline-flex items-center rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm hover:bg-white/10">Open Journal</a>
-              <a href="/proposals" className="inline-flex items-center rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm hover:bg-white/10">View Proposals</a>
-              <a href="/polls" className="inline-flex items-center rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm hover:bg-white/10">Vote in Polls</a>
+              <a
+                href="/journal"
+                className="inline-flex items-center rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm hover:bg-white/10"
+              >
+                Open Journal
+              </a>
+              <a
+                href="/proposals"
+                className="inline-flex items-center rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm hover:bg-white/10"
+              >
+                View Proposals
+              </a>
+              <a
+                href="/polls"
+                className="inline-flex items-center rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm hover:bg-white/10"
+              >
+                Vote in Polls
+              </a>
             </div>
           </div>
         </section>
       </main>
     );
   } catch (err: any) {
-    if (isRedirectError(err)) throw err;
+    // If it's a real redirect signal, let Next handle it.
+    if (isNextRedirect(err)) throw err;
+
+    // Render an inline error surface instead of blanking out.
     console.error('dashboard:render fatal error', err);
-    const msg = typeof err?.message === 'string' ? err.message : 'Unknown error. Check server logs.';
+    const msg =
+      typeof err?.message === 'string'
+        ? err.message
+        : 'Unknown error. Check server logs.';
     return (
       <main className="min-h-[100vh] bg-neutral-950 text-white">
         <section className="mx-auto max-w-3xl px-4 py-8">
           <h1 className="mb-4 text-xl font-semibold">Dashboard</h1>
-          <ErrorCard title="We hit a server issue while loading your console." details={msg} />
+          <ErrorCard
+            title="We hit a server issue while loading your console."
+            details={msg}
+          />
           <div className="mt-4">
-            <a href="/login?next=/dashboard" className="inline-flex items-center rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm hover:bg-white/10">
+            <a
+              href="/login?next=/dashboard"
+              className="inline-flex items-center rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm hover:bg-white/10"
+            >
               Re-authenticate
             </a>
           </div>
