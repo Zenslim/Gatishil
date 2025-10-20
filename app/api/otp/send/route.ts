@@ -53,6 +53,16 @@ export async function POST(req: Request) {
     AAKASH_SENDER_ID,
   } = process.env;
 
+  if (
+    (!SUPABASE_URL || (!SUPABASE_SERVICE_ROLE_KEY && !SUPABASE_SERVICE_ROLE)) &&
+    (!NEXT_PUBLIC_SUPABASE_URL || !NEXT_PUBLIC_SUPABASE_ANON_KEY)
+  ) {
+    return new Response(JSON.stringify({ error: 'Supabase not configured' }), {
+      status: 500,
+      headers: { 'content-type': 'application/json' },
+    });
+  }
+
   const siteUrl = (NEXT_PUBLIC_SITE_URL || '').replace(/\/$/, '');
   const supabaseUrl = NEXT_PUBLIC_SUPABASE_URL || SUPABASE_URL;
   const supabaseAnonKey = NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -106,6 +116,13 @@ export async function POST(req: Request) {
     }, 400);
   }
 
+  if (!AAKASH_SMS_API_KEY) {
+    return new Response(JSON.stringify({ error: 'SMS gateway not configured' }), {
+      status: 500,
+      headers: { 'content-type': 'application/json' },
+    });
+  }
+
   const { data: recent } = await supabaseAdmin
     .from('otps')
     .select('id, created_at, status')
@@ -139,13 +156,6 @@ export async function POST(req: Request) {
     const code = link?.properties?.phone_otp;
     if (!code || typeof code !== 'string') {
       throw new Error('Supabase did not issue an OTP code.');
-    }
-
-    if (!AAKASH_SMS_API_KEY /* || !AAKASH_SMS_BASE_URL if required */) {
-      return new Response(
-        JSON.stringify({ error: 'SMS gateway not configured' }),
-        { status: 500, headers: { 'content-type': 'application/json' } }
-      );
     }
 
     await sendSms(normalized, code, {

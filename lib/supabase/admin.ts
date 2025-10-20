@@ -7,11 +7,10 @@ function env(key: 'NEXT_PUBLIC_SUPABASE_URL' | 'SUPABASE_SERVICE_ROLE'): string 
   if (!v) throw new Error(`[supabase-admin] Missing ${key} in environment`);
   return v;
 }
-
-const url = env('NEXT_PUBLIC_SUPABASE_URL');
-const service = env('SUPABASE_SERVICE_ROLE');
-
+ 
 export function createAdminClient(): SupabaseClient {
+  const url = env('NEXT_PUBLIC_SUPABASE_URL');
+  const service = env('SUPABASE_SERVICE_ROLE');
   // admin client = server-only, no session persistence
   return createClient(url, service, { auth: { persistSession: false, autoRefreshToken: false } });
 }

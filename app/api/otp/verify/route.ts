@@ -2,22 +2,40 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { normalizeNepalMobile } from '@/lib/auth/phone';
 
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const SUPABASE_SERVICE_ROLE = process.env.SUPABASE_SERVICE_ROLE;
-
-if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE) {
-  throw new Error('Supabase environment variables are not configured');
-}
-
-const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE, {
-  auth: { persistSession: false },
-});
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
 function respond(data: any, status = 200) {
   return NextResponse.json(data, { status });
 }
 
 export async function POST(req: Request) {
+  const {
+    SUPABASE_URL,
+    SUPABASE_SERVICE_ROLE_KEY,
+    SUPABASE_SERVICE_ROLE,
+    NEXT_PUBLIC_SUPABASE_URL,
+    NEXT_PUBLIC_SUPABASE_ANON_KEY,
+  } = process.env;
+
+  if (
+    (!SUPABASE_URL || (!SUPABASE_SERVICE_ROLE_KEY && !SUPABASE_SERVICE_ROLE)) &&
+    (!NEXT_PUBLIC_SUPABASE_URL || !NEXT_PUBLIC_SUPABASE_ANON_KEY)
+  ) {
+    return new Response(JSON.stringify({ error: 'Supabase not configured' }), {
+      status: 500,
+      headers: { 'content-type': 'application/json' },
+    });
+  }
+
+  const supabaseUrl = SUPABASE_URL ?? NEXT_PUBLIC_SUPABASE_URL!;
+  const supabaseServiceKey =
+    SUPABASE_SERVICE_ROLE_KEY ?? SUPABASE_SERVICE_ROLE ?? NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+
+  const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
+    auth: { persistSession: false },
+  });
+
   const body = await req.json().catch(() => ({}));
   const code = typeof body.code === 'string' ? body.code.trim() : '';
   const phoneRaw = typeof body.phone === 'string' ? body.phone : '';

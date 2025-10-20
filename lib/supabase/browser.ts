@@ -58,4 +58,13 @@ export function getSupabaseBrowser(): SupabaseClient {
   return singleton;
 }
 
-export const supabase = getSupabaseBrowser();
+export const supabase: SupabaseClient = new Proxy({} as SupabaseClient, {
+  get(_target, prop, receiver) {
+    const instance = getSupabaseBrowser();
+    const value = Reflect.get(instance as object, prop, receiver);
+    if (typeof value === 'function') {
+      return value.bind(instance);
+    }
+    return value;
+  },
+});
