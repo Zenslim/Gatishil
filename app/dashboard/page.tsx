@@ -4,6 +4,10 @@ import Image from 'next/image';
 import React from 'react';
 import { getSupabaseServer } from '@/lib/supabase/server';
 
+// IMPORTANT: allow Next.js redirects to bubble through try/catch
+// (this util is stable across Next 13/14)
+import { isRedirectError } from 'next/dist/client/components/redirect';
+
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -29,27 +33,26 @@ function ErrorCard({ title, details }: { title: string; details?: string }) {
 }
 
 export default async function DashboardPage() {
+  // Handle auth/redirects OUTSIDE the try/catch so redirect() can throw normally.
+  const supabase = getSupabaseServer();
+
+  const {
+    data: { user },
+    error: userErr,
+  } = await supabase.auth.getUser();
+
+  if (userErr) {
+    console.error('dashboard:getUser error', userErr);
+    redirect('/login?next=/dashboard');
+  }
+
+  if (!user) {
+    redirect('/login?next=/dashboard');
+  }
+
   try {
-    // Build the server client lazily; if env is missing, this may throw here (not at import time).
-    const supabase = getSupabaseServer();
+    // ---- below here, only real data fetching/render can fail ----
 
-    // 1) Require server session (prevents flicker or client-only auth gaps)
-    const {
-      data: { user },
-      error: userErr,
-    } = await supabase.auth.getUser();
-
-    if (userErr) {
-      console.error('dashboard:getUser error', userErr);
-      // If auth layer itself failed, force login
-      redirect('/login?next=/dashboard');
-    }
-
-    if (!user) {
-      redirect('/login?next=/dashboard');
-    }
-
-    // 2) Load profile (public.profiles) and person link (public.user_person_links)
     const {
       data: profile,
       error: profileErr,
@@ -76,7 +79,6 @@ export default async function DashboardPage() {
       console.error('dashboard:user_person_links query error', linkErr);
     }
 
-    // 3) Enrich with authoritative auth email + preferred person_id source
     const enriched = {
       idx: profile?.idx ?? null,
       user_id: user.id,
@@ -90,7 +92,7 @@ export default async function DashboardPage() {
       skill: Array.isArray(profile?.skill) ? profile?.skill : [],
       passion: Array.isArray(profile?.passion) ? profile?.passion : [],
       compassion: Array.isArray(profile?.compassion) ? profile?.compassion : [],
-      email: user.email ?? null, // from auth.users
+      email: user.email ?? null,
       phone: profile?.phone ?? null,
       person_id: link?.person_id ?? profile?.person_id ?? null,
       passkey_enabled: Boolean(profile?.passkey_enabled),
@@ -130,9 +132,7 @@ export default async function DashboardPage() {
             </div>
           </header>
 
-          {/* Top row: Profile card + Security card */}
           <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
-            {/* Profile */}
             <div className="rounded-2xl border border-white/10 bg-black/30 p-5 md:col-span-2">
               <div className="mb-4 flex flex-wrap items-center gap-2">
                 {enriched.name && (
@@ -165,7 +165,6 @@ export default async function DashboardPage() {
               </div>
             </div>
 
-            {/* Security */}
             <div className="rounded-2xl border border-white/10 bg-black/30 p-5">
               <h2 className="text-sm font-semibold text-white/80">Security</h2>
               <div className="mt-3 space-y-2 text-sm">
@@ -199,7 +198,6 @@ export default async function DashboardPage() {
             </div>
           </div>
 
-          {/* Mirror summary placeholder (AI response area) */}
           <div className="mt-6 rounded-2xl border border-white/10 bg-black/30 p-5">
             <h2 className="text-sm font-semibold text-white/80">Mirror</h2>
             <p className="mt-2 text-sm text-white/70">
@@ -230,7 +228,11 @@ export default async function DashboardPage() {
       </main>
     );
   } catch (err: any) {
-    // Never render a blank page; surface a friendly error and log the cause.
+    if (isRedirectError(err)) {
+      // Let Next.js handle its own redirect exception
+      throw err;
+    }
+
     console.error('dashboard:render fatal error', err);
 
     const msg =
@@ -238,7 +240,6 @@ export default async function DashboardPage() {
         ? err.message
         : 'Unknown error. Check server logs.';
 
-    // If this is clearly a server misconfig (e.g., missing envs), hint next steps.
     const hint =
       /supabase|env|credential|SERVICE_ROLE|SUPABASE_URL/i.test(msg)
         ? '\n\nHint: Verify SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY exist in Vercel (Server), and that getSupabaseServer reads env at call-time only.'
