@@ -20,8 +20,7 @@ function getSafeAvatarUrl(raw: string | null) {
     if (AVATAR_EXACT_HOSTS.has(hostname)) return url.toString();
     const ok = AVATAR_HOST_SUFFIXES.some((suffix) => hostname === suffix || hostname.endsWith(`.${suffix}`));
     return ok ? url.toString() : null;
-  } catch (e) {
-    console.warn('dashboard:invalid avatar url', raw, e);
+  } catch {
     return null;
   }
 }
@@ -39,9 +38,7 @@ function ErrorCard({ title, details }: { title: string; details?: string }) {
     <div className="rounded-2xl border border-red-500/30 bg-red-500/10 p-5 text-sm text-red-200">
       <div className="font-semibold">{title}</div>
       {details ? <pre className="mt-2 whitespace-pre-wrap text-red-300/90">{details}</pre> : null}
-      <div className="mt-3 text-xs text-red-300/80">
-        If this persists, try reloading or signing in again. The server has logged the error.
-      </div>
+      <div className="mt-3 text-xs text-red-300/80">If this persists, try reloading or signing in again.</div>
     </div>
   );
 }
@@ -49,11 +46,7 @@ function ErrorCard({ title, details }: { title: string; details?: string }) {
 export default async function DashboardPage() {
   try {
     const supabase = getSupabaseServer();
-
-    const {
-      data: { user },
-      error: userErr,
-    } = await supabase.auth.getUser();
+    const { data: { user }, error: userErr } = await supabase.auth.getUser();
 
     if (userErr) {
       console.error('dashboard:getUser error', userErr);
@@ -61,16 +54,12 @@ export default async function DashboardPage() {
     }
     if (!user) redirect('/login?next=/dashboard');
 
-    const {
-      data: profile,
-      error: profileErr,
-    } = await supabase.from('profiles').select('*').eq('user_id', user.id).maybeSingle();
+    const { data: profile, error: profileErr } =
+      await supabase.from('profiles').select('*').eq('user_id', user.id).maybeSingle();
     if (profileErr) console.error('dashboard:profiles query error', profileErr);
 
-    const {
-      data: link,
-      error: linkErr,
-    } = await supabase.from('user_person_links').select('person_id').eq('user_id', user.id).maybeSingle();
+    const { data: link, error: linkErr } =
+      await supabase.from('user_person_links').select('person_id').eq('user_id', user.id).maybeSingle();
     if (linkErr) console.error('dashboard:user_person_links query error', linkErr);
 
     const enriched = {
@@ -106,7 +95,6 @@ export default async function DashboardPage() {
           <header className="mb-6 flex items-center gap-4">
             <div className="relative h-14 w-14 overflow-hidden rounded-full ring-1 ring-white/15">
               {avatarUrl ? (
-                // Use plain <img> to avoid next/image domain & optimization failures that can white-screen the RSC
                 <img
                   src={avatarUrl}
                   alt={enriched.name ?? 'Member'}
@@ -184,18 +172,13 @@ export default async function DashboardPage() {
     );
   } catch (err: any) {
     if (isRedirectError(err)) throw err;
-
     console.error('dashboard:render fatal error', err);
     const msg = typeof err?.message === 'string' ? err.message : 'Unknown error. Check server logs.';
-    const hint = /supabase|env|credential|SERVICE_ROLE|SUPABASE_URL/i.test(msg)
-      ? '\n\nHint: Verify SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY exist in Vercel (Server), and that getSupabaseServer reads env at call-time only.'
-      : '';
-
     return (
       <main className="min-h-[100vh] bg-neutral-950 text-white">
         <section className="mx-auto max-w-3xl px-4 py-8">
           <h1 className="mb-4 text-xl font-semibold">Dashboard</h1>
-          <ErrorCard title="We hit a server issue while loading your console." details={msg + hint} />
+          <ErrorCard title="We hit a server issue while loading your console." details={msg} />
           <div className="mt-4">
             <a href="/login?next=/dashboard" className="inline-flex items-center rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm hover:bg-white/10">
               Re-authenticate
