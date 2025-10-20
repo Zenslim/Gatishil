@@ -1,42 +1,61 @@
-// app/login/LoginClient.tsx
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@supabase/supabase-js';
-
-// Use the public anon key for client-side checks only (no privileged calls).
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL as string;
-const supabaseAnon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string;
-const supabase = createClient(supabaseUrl, supabaseAnon);
 
 export default function LoginClient({ nextPath }: { nextPath: string }) {
   const router = useRouter();
   const [checking, setChecking] = useState(true);
 
+  // Create the client lazily in the browser with safe auth settings:
+  // - autoRefreshToken: false  => do NOT auto-refresh a possibly stale/invalid token on load
+  // - detectSessionInUrl: false => do NOT parse URL for tokens (we’re not finishing an OAuth flow here)
+  const supabase = useMemo(() => {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL as string;
+    const supabaseAnon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string;
+    return createClient(supabaseUrl, supabaseAnon, {
+      auth: {
+        persistSession: true,
+        autoRefreshToken: false,
+        detectSessionInUrl: false,
+      },
+    });
+  }, []);
+
   useEffect(() => {
     let mounted = true;
     (async () => {
       try {
-        const { data } = await supabase.auth.getSession();
+        // Quick probe of current session; DO NOT trigger refresh automatically
+        const { data, error } = await supabase.auth.getSession();
+
+        // If Supabase complains about a bad refresh token, nuke local state and continue cleanly
+        if (error?.message && /invalid refresh token|refresh token not found/i.test(error.message)) {
+          await supabase.auth.signOut({ scope: 'local' }); // clears local storage/cookies for this client only
+        }
+
         if (!mounted) return;
+
         if (data?.session) {
           // Already signed in → go straight to next
           router.replace(nextPath || '/dashboard');
           return;
         }
-      } catch (e) {
-        // Ignore; show options
-        console.warn('login: session check failed', e);
+      } catch (e: any) {
+        // Defensive: if anything smells like a refresh error, clear local and proceed
+        if (typeof e?.message === 'string' && /invalid refresh token|refresh token not found/i.test(e.message)) {
+          try { await supabase.auth.signOut({ scope: 'local' }); } catch {}
+        }
+        // We intentionally ignore other errors here; user will see the login options
+        console.warn('login: session probe failed', e);
       } finally {
         if (mounted) setChecking(false);
       }
     })();
-    return () => {
-      mounted = false;
-    };
-  }, [router, nextPath]);
+    return () => { mounted = false; };
+  }, [router, nextPath, supabase]);
 
   if (checking) {
     return (
@@ -62,7 +81,7 @@ export default function LoginClient({ nextPath }: { nextPath: string }) {
         Continue with Phone (🇳🇵 +977 only)
       </Link>
       <p className="pt-2 text-center text-xs text-white/60">
-        Trouble signing in? <a href="/help" className="underline decoration-white/30 hover:decoration-white">Get help</a>
+        If you still see errors, clear site data for <code>gatishilnepal.org</code> and retry.
       </p>
     </div>
   );
