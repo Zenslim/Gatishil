@@ -1,128 +1,69 @@
-"use client";
+// app/login/LoginClient.tsx
+'use client';
 
-import * as React from "react";
-import { useRouter } from "next/navigation";
-import { getValidatedNext } from "@/lib/auth/next";
-import { verifyOtpAndSync } from "@/lib/auth/verifyOtpClient";
-import { getSupabaseBrowser } from "@/lib/supabaseClient";
+import React, { useEffect, useState } from 'react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { createClient } from '@supabase/supabase-js';
 
-export default function LoginClient() {
+// Use the public anon key for client-side checks only (no privileged calls).
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL as string;
+const supabaseAnon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string;
+const supabase = createClient(supabaseUrl, supabaseAnon);
+
+export default function LoginClient({ nextPath }: { nextPath: string }) {
   const router = useRouter();
-  const supabase = getSupabaseBrowser();
+  const [checking, setChecking] = useState(true);
 
-  const [email, setEmail] = React.useState("");
-  const [password, setPassword] = React.useState("");
-  const [otpCode, setOtpCode] = React.useState("");
-  const [loading, setLoading] = React.useState(false);
-  const [message, setMessage] = React.useState<string | null>(null);
-  const [error, setError] = React.useState<string | null>(null);
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const { data } = await supabase.auth.getSession();
+        if (!mounted) return;
+        if (data?.session) {
+          // Already signed in → go straight to next
+          router.replace(nextPath || '/dashboard');
+          return;
+        }
+      } catch (e) {
+        // Ignore; show options
+        console.warn('login: session check failed', e);
+      } finally {
+        if (mounted) setChecking(false);
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, [router, nextPath]);
 
-  const nextPath = getValidatedNext(undefined, "/dashboard");
-
-  async function onPasswordLogin(e: React.FormEvent) {
-    e.preventDefault();
-    setLoading(true); setError(null); setMessage(null);
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    setLoading(false);
-    if (error) { setError(error.message); return; }
-    const { data: { session } } = await supabase.auth.getSession();
-    if (session?.access_token) {
-      await fetch("/api/auth/sync", {
-        method: "POST",
-        credentials: "include",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          access_token: session.access_token,
-          refresh_token: session.refresh_token ?? null,
-        }),
-      });
-    }
-    router.push(nextPath);
-  }
-
-  async function onOtpLogin(e: React.FormEvent) {
-    e.preventDefault();
-    if (!otpCode.trim()) return;
-    setLoading(true); setError(null); setMessage(null);
-    try {
-      await verifyOtpAndSync({ email: email.trim(), code: otpCode.trim() });
-      router.push(nextPath);
-    } catch (err: any) {
-      setError(err?.message || "OTP verify failed.");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function onMagicLink(e: React.FormEvent) {
-    e.preventDefault();
-    setLoading(true); setError(null); setMessage(null);
-    const origin = typeof window !== "undefined" ? window.location.origin : process.env.NEXT_PUBLIC_SITE_URL || "";
-    const emailRedirectTo = `${origin}/auth/callback?next=${encodeURIComponent(nextPath)}`;
-
-    const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: { emailRedirectTo }
-    });
-    setLoading(false);
-    if (error) { setError(error.message); return; }
-    setMessage("Magic link sent. Please check your email.");
+  if (checking) {
+    return (
+      <div className="animate-pulse space-y-3">
+        <div className="h-10 w-full rounded bg-white/10" />
+        <div className="h-10 w-full rounded bg-white/10" />
+      </div>
+    );
   }
 
   return (
-    <form className="space-y-4" onSubmit={onPasswordLogin}>
-      <input
-        type="email"
-        placeholder="Email"
-        value={email}
-        onChange={(e)=>setEmail(e.target.value)}
-        className="w-full border px-3 py-2 rounded"
-        required
-      />
-      <input
-        type="password"
-        placeholder="Password"
-        value={password}
-        onChange={(e)=>setPassword(e.target.value)}
-        className="w-full border px-3 py-2 rounded"
-        required
-      />
-      <div className="flex gap-2">
-        <button
-          type="submit"
-          disabled={loading}
-          className="px-4 py-2 rounded bg-black text-white"
-        >
-          {loading ? "Signing in…" : "Login"}
-        </button>
-        <button
-          type="button"
-          onClick={onMagicLink}
-          disabled={loading}
-          className="px-4 py-2 rounded border"
-        >
-          Email me a magic link
-        </button>
-      </div>
-      <div className="space-y-2 border-t pt-4">
-        <label className="block text-sm font-medium">Have a one-time code?</label>
-        <input
-          value={otpCode}
-          onChange={(e) => setOtpCode(e.target.value)}
-          placeholder="Enter 6-digit code"
-          className="w-full border px-3 py-2 rounded"
-        />
-        <button
-          type="button"
-          onClick={onOtpLogin}
-          disabled={loading || !otpCode.trim()}
-          className="px-4 py-2 rounded bg-emerald-600 text-white"
-        >
-          {loading ? "Verifying…" : "Verify OTP"}
-        </button>
-      </div>
-      {message && <p className="text-green-600">{message}</p>}
-      {error && <p className="text-red-600">{error}</p>}
-    </form>
+    <div className="space-y-3">
+      <Link
+        href={`/join?src=login&method=email&next=${encodeURIComponent(nextPath || '/dashboard')}`}
+        className="block rounded-xl border border-white/15 bg-white/5 px-4 py-3 text-center text-sm hover:bg-white/10"
+      >
+        Continue with Email (Magic Link)
+      </Link>
+      <Link
+        href={`/join?src=login&method=phone&next=${encodeURIComponent(nextPath || '/dashboard')}`}
+        className="block rounded-xl border border-white/15 bg-white/5 px-4 py-3 text-center text-sm hover:bg-white/10"
+      >
+        Continue with Phone (🇳🇵 +977 only)
+      </Link>
+      <p className="pt-2 text-center text-xs text-white/60">
+        Trouble signing in? <a href="/help" className="underline decoration-white/30 hover:decoration-white">Get help</a>
+      </p>
+    </div>
   );
 }
