@@ -12,6 +12,35 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
+const AVATAR_HOST_SUFFIXES = ['supabase.co', 'googleusercontent.com'];
+const AVATAR_EXACT_HOSTS = new Set(['avatars.githubusercontent.com']);
+
+function getSafeAvatarUrl(raw: string | null) {
+  if (!raw) return null;
+
+  try {
+    const url = new URL(raw);
+    if (url.protocol !== 'https:') {
+      return null;
+    }
+
+    const hostname = url.hostname.toLowerCase();
+
+    if (AVATAR_EXACT_HOSTS.has(hostname)) {
+      return url.toString();
+    }
+
+    const isAllowedSuffix = AVATAR_HOST_SUFFIXES.some((suffix) => {
+      return hostname === suffix || hostname.endsWith(`.${suffix}`);
+    });
+
+    return isAllowedSuffix ? url.toString() : null;
+  } catch (error) {
+    console.warn('dashboard:invalid avatar url', raw, error);
+    return null;
+  }
+}
+
 function Pill({ children }: { children: React.ReactNode }) {
   return (
     <span className="inline-flex items-center rounded-full border border-white/15 bg-white/5 px-3 py-1 text-xs text-white/80">
@@ -106,19 +135,26 @@ export default async function DashboardPage() {
         ? (enriched.roots_json as any).label
         : null;
 
+    const avatarUrl = getSafeAvatarUrl(enriched.photo_url);
+
+    if (enriched.photo_url && !avatarUrl) {
+      console.warn('dashboard:unsupported avatar host', enriched.photo_url);
+    }
+
     return (
       <main className="min-h-[100vh] bg-neutral-950 text-white">
         <section className="mx-auto max-w-5xl px-4 py-8">
           <header className="mb-6 flex items-center gap-4">
             <div className="relative h-14 w-14 overflow-hidden rounded-full ring-1 ring-white/15">
-              {enriched.photo_url ? (
+              {avatarUrl ? (
                 <Image
-                  src={enriched.photo_url}
+                  src={avatarUrl}
                   alt={enriched.name ?? 'Member'}
                   fill
                   sizes="56px"
                   className="object-cover"
                   priority
+                  unoptimized
                 />
               ) : (
                 <div className="grid h-full w-full place-items-center bg-white/5 text-xl">🪶</div>
