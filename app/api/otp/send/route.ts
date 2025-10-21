@@ -12,9 +12,13 @@ const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY as strin
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "";
 
 // ─── Aakash (v4) endpoint ──────────────────────────────────────────────────────
+// Doc: https://bitbucket.org/aakashsms/api/src/v4/
+// POST https://sms.aakashsms.com/sms/v4/send-user
+// Header:  auth-token: <YOUR_TOKEN>
+// Body:    { "to": ["98XXXXXXXX"], "text": ["Hello world"] }
 const AAKASH_URL =
   process.env.AAKASH_SMS_BASE_URL || "https://sms.aakashsms.com/sms/v4/send-user";
-const AAKASH_AUTH_TOKEN = process.env.AAKASH_SMS_AUTH_TOKEN as string;
+const AAKASH_TOKEN = process.env.AAKASH_SMS_API_KEY as string; // ← your Vercel var name
 const AAKASH_DEBUG_RETURN_CODE =
   process.env.AAKASH_DEBUG_RETURN_CODE === "true" && process.env.NODE_ENV !== "production";
 
@@ -43,8 +47,8 @@ function toAakashLocal(msisdn: string): string | null {
 
 // Aakash v4 send (JSON) with auth-token header
 async function sendAakashSMS(e164: string, message: string) {
-  if (!AAKASH_AUTH_TOKEN) {
-    return { ok: false, status: 500, body: { error: "Missing AAKASH_SMS_AUTH_TOKEN" } };
+  if (!AAKASH_TOKEN) {
+    return { ok: false, status: 500, body: { error: "Missing AAKASH_SMS_API_KEY" } };
   }
   const local = toAakashLocal(e164);
   if (!local) {
@@ -58,14 +62,19 @@ async function sendAakashSMS(e164: string, message: string) {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "auth-token": AAKASH_AUTH_TOKEN,
+        // IMPORTANT: Aakash expects `auth-token` header (not Bearer)
+        "auth-token": AAKASH_TOKEN,
       },
       body: JSON.stringify(payload),
     });
 
     const text = await res.text();
     let body: any = null;
-    try { body = JSON.parse(text); } catch { body = text; }
+    try {
+      body = JSON.parse(text);
+    } catch {
+      body = text;
+    }
 
     return { ok: res.ok, status: res.status, body };
   } catch (e: any) {
@@ -105,22 +114,24 @@ export async function POST(req: Request) {
       );
     }
 
-    // Generate + store HASH ONLY (but satisfy NOT NULL 'code' with a placeholder)
+    // Generate + store HASH ONLY (but satisfy NOT NULL 'code' with a placeholder if needed)
     const code = rand6();
     const codeHash = sha256Hex(code);
     const expiresAt = new Date(now + ttlMinutes * 60 * 1000).toISOString();
 
-    const { error: insErr } = await admin.from("otps").insert({
+    const insertPayload: Record<string, any> = {
       phone,
-      // NOTE: your table has NOT NULL "code"; we DO NOT store plaintext codes.
-      // We place a harmless placeholder to satisfy NOT NULL until you relax the schema.
-      code: "REDACTED",
       code_hash: codeHash,
       created_at: new Date(now).toISOString(),
       expires_at: expiresAt,
       attempt_count: 0,
       metadata: {},
-    });
+    };
+
+    // If your schema requires NOT NULL "code", keep this placeholder:
+    insertPayload.code = "REDACTED";
+
+    const { error: insErr } = await admin.from("otps").insert(insertPayload);
     if (insErr) {
       return NextResponse.json(
         { ok: false, error: "DB_ERROR", message: insErr.message },
