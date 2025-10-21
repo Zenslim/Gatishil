@@ -81,7 +81,16 @@ function extractPhone(body: BodyLike): string | null {
     body.to ??
     body.identifier ??
     "";
-  return candidate || null;
+
+  if (typeof candidate === "number") {
+    return String(candidate);
+  }
+
+  if (typeof candidate === "string") {
+    return candidate;
+  }
+
+  return candidate ? String(candidate) : null;
 }
 
 async function sendAakashSms(
@@ -172,7 +181,14 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const channel: Channel = explicitChannel ?? (hasPhone ? "sms" : "email");
+  let channel: Channel;
+  if (explicitChannel === "sms") {
+    channel = "sms";
+  } else if (explicitChannel === "email") {
+    channel = !hasEmail && normalizedPhone ? "sms" : "email";
+  } else {
+    channel = normalizedPhone ? "sms" : "email";
+  }
 
   const siteUrl = (NEXT_PUBLIC_SITE_URL || req.nextUrl.origin || "").replace(
     /\/$/,
