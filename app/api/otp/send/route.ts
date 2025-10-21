@@ -1,7 +1,9 @@
-// app/api/otp/send/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { normalizeNepalMobile } from "@/lib/auth/phone";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 type Channel = "email" | "sms";
 type BodyLike = Partial<{
@@ -16,25 +18,28 @@ type BodyLike = Partial<{
   redirectTo: string;
 }>;
 
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-
 type JsonBody = Record<string, unknown>;
+
+const DEFAULT_AAKASH_SMS_BASE_URL = "https://sms.aakashsms.com/sms/v3/send";
+const OTP_MESSAGE = "Your Gatishil code is {code}. It expires in 5 minutes.";
 
 function ok(data: JsonBody = {}) {
   return NextResponse.json({ ok: true, ...data }, { status: 200 });
 }
+
 function fail(status: number, message: string, extra?: JsonBody) {
   return NextResponse.json({ ok: false, message, ...extra }, { status });
 }
+
 function bad(message: string, extra?: JsonBody) {
   return fail(400, message, extra);
 }
+
 function server(message: string, extra?: JsonBody) {
   return fail(500, message, extra);
 }
 
-/** Accept JSON, x-www-form-urlencoded, or multipart/form-data, or plain text querystring. */
+/** Accept JSON, x-www-form-urlencoded, multipart/form-data, or plain text querystring. */
 async function readBody(req: NextRequest): Promise<BodyLike> {
   const ctype = (req.headers.get("content-type") || "").toLowerCase();
   try {
@@ -80,41 +85,95 @@ function extractPhone(body: BodyLike): string | null {
   return candidate || null;
 }
 
+async function sendAakashSms(
+  phone: string,
+  code: string,
+  options: { apiKey: string; senderId: string; baseUrl?: string }
+) {
+  const { apiKey, senderId, baseUrl } = options;
+  const message = OTP_MESSAGE.replace("{code}", code);
+  const body = new URLSearchParams({
+    key: apiKey,
+    route: "sms",
+    sender: senderId,
+    phone,
+    text: message,
+  });
+
+  const res = await fetch(baseUrl || DEFAULT_AAKASH_SMS_BASE_URL, {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body,
+  });
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || data?.status === "error") {
+    const detail = typeof data?.message === "string" ? data.message : undefined;
+    const err = new Error(detail || "Aakash SMS failed");
+    (err as any).status = res.status;
+    throw err;
+  }
+
+  return message;
+}
+
 export async function POST(req: NextRequest) {
-  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+  const {
+    NEXT_PUBLIC_SITE_URL,
+    NEXT_PUBLIC_SUPABASE_URL,
+    NEXT_PUBLIC_SUPABASE_ANON_KEY,
+    SUPABASE_URL,
+    SUPABASE_ANON_KEY,
+    SUPABASE_SERVICE_ROLE_KEY,
+    SUPABASE_SERVICE_ROLE,
+    AAKASH_SMS_API_KEY,
+    AAKASH_SMS_BASE_URL,
+    AAKASH_SENDER_ID,
+  } = process.env;
+
+  const supabaseUrl = SUPABASE_URL || NEXT_PUBLIC_SUPABASE_URL || "";
+  const supabaseAnonKey =
+    NEXT_PUBLIC_SUPABASE_ANON_KEY || SUPABASE_ANON_KEY || "";
+  const supabaseServiceKey =
+    SUPABASE_SERVICE_ROLE_KEY || SUPABASE_SERVICE_ROLE || "";
+
+  if (!supabaseUrl || !supabaseAnonKey) {
     return server(
-      "Server misconfigured: missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY."
+      "Server misconfigured: missing NEXT_PUBLIC_SUPABASE_URL/SUPABASE_URL or anon key."
     );
   }
 
   const body = await readBody(req);
 
-  // Heuristics: if any phone-like field exists → sms; else if email → email; else use explicit channel; default email.
-  const explicitChannel = (body.channel as Channel | undefined)?.toLowerCase() as Channel | undefined;
+  const explicitChannel = (body.channel as Channel | undefined)?.toLowerCase() as
+    | Channel
+    | undefined;
   const hasPhone = !!extractPhone(body);
   const hasEmail = !!(body.email && body.email.trim());
   const channel: Channel =
-    explicitChannel ??
-    (hasPhone ? "sms" : hasEmail ? "email" : "email");
+    explicitChannel ?? (hasPhone ? "sms" : hasEmail ? "email" : "email");
 
-  const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-    auth: { autoRefreshToken: false, persistSession: false },
+  const siteUrl = (NEXT_PUBLIC_SITE_URL || req.nextUrl.origin || "").replace(
+    /\/$/,
+    ""
+  );
+
+  const supabasePublic = createClient(supabaseUrl, supabaseAnonKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
   });
 
   if (channel === "email") {
     const email = (body.email ?? "").trim().toLowerCase();
     if (!email) {
-      // Tell the client exactly what we received so you can align the payload quickly.
       return bad("Email is required for email OTP.", {
         receivedKeys: Object.keys(body || {}),
         hint: "Send JSON { channel:'email', email:'you@example.com' } or form fields 'channel=email&email=...'.",
       });
     }
 
-    const redirectTo =
-      body.redirectTo ?? `${req.nextUrl.origin}/onboard?src=join`;
+    const redirectTo = body.redirectTo || `${siteUrl}/onboard?src=join`;
 
-    const { error } = await supabase.auth.signInWithOtp({
+    const { error } = await supabasePublic.auth.signInWithOtp({
       email,
       options: {
         shouldCreateUser: true,
@@ -122,76 +181,142 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    if (error)
-      return server("Email OTP error.", {
+    if (error) {
+      const status = Number((error as any)?.status ?? (error as any)?.statusCode);
+      if (status && status >= 500) {
+        return server("Email OTP error.", { detail: error.message, status });
+      }
+      return bad(error.message || "Email OTP error.", {
         detail: error.message,
-        status: (error as any)?.status ?? (error as any)?.statusCode ?? null,
+        status: status || null,
       });
+    }
+
     return ok({ channel: "email", sent: true });
   }
 
   if (channel === "sms") {
     const rawPhone = extractPhone(body);
-    const phone = rawPhone ? normalizeNepalMobile(rawPhone) : null;
-    if (!phone) {
-      return bad(
-        "Invalid phone for Nepal SMS OTP.",
-        {
-          received: rawPhone ?? null,
-          expect:
-            "Use a 10-digit Nepal mobile starting with 96/97/98 (e.g., 9812345678) or prefix with +977.",
-          example: "+9779812345678",
-          acceptedFields: [
-            "phone",
-            "phoneNumber",
-            "mobile",
-            "msisdn",
-            "to",
-            "identifier",
-          ],
-        }
+    const normalized = normalizeNepalMobile(rawPhone || "");
+    if (!normalized) {
+      return bad("Invalid phone for Nepal SMS OTP.", {
+        received: rawPhone ?? null,
+        expect:
+          "Use a 10-digit Nepal mobile starting with 96/97/98 (e.g., 9812345678) or prefix with +977.",
+        example: "+9779812345678",
+        acceptedFields: [
+          "phone",
+          "phoneNumber",
+          "mobile",
+          "msisdn",
+          "to",
+          "identifier",
+        ],
+      });
+    }
+
+    if (!supabaseServiceKey) {
+      return server(
+        "Server misconfigured: missing SUPABASE_SERVICE_ROLE_KEY for SMS OTP."
       );
     }
 
-    const { error } = await supabase.auth.signInWithOtp({
-      phone,
-      options: { shouldCreateUser: true },
+    if (!AAKASH_SMS_API_KEY) {
+      return server("SMS gateway not configured.");
+    }
+
+    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
     });
 
-    if (error) {
-      const status = Number(
-        (error as any)?.status ?? (error as any)?.statusCode ?? 500
-      );
+    // Enforce 60-second resend cooldown
+    const { data: recent, error: recentError } = await supabaseAdmin
+      .from("otps")
+      .select("id, created_at")
+      .eq("phone", normalized)
+      .order("created_at", { ascending: false })
+      .limit(1);
+
+    if (recentError) {
+      return server("Could not check OTP history.", { detail: recentError.message });
+    }
+
+    if (recent && recent.length > 0) {
+      const latest = recent[0];
+      const created = new Date(latest.created_at).getTime();
+      if (Date.now() - created < 60_000) {
+        return fail(429, "Too many OTP requests. Please wait a minute.", {
+          phone: normalized,
+        });
+      }
+    }
+
+    try {
+      const { data: link, error } = await supabaseAdmin.auth.admin.generateLink({
+        type: "otp",
+        phone: normalized,
+        options: {
+          channel: "sms",
+          shouldCreateUser: true,
+        },
+      });
+
+      if (error) throw error;
+
+      const code = link?.properties?.phone_otp;
+      if (!code || typeof code !== "string") {
+        throw new Error("Supabase did not issue an OTP code.");
+      }
+
+      await sendAakashSms(normalized, code, {
+        apiKey: AAKASH_SMS_API_KEY,
+        senderId: AAKASH_SENDER_ID || "GATISHIL",
+        baseUrl: AAKASH_SMS_BASE_URL,
+      });
+
+      const expiresAt = new Date(Date.now() + 5 * 60_000).toISOString();
+      const { error: insertError } = await supabaseAdmin.from("otps").insert({
+        phone: normalized,
+        code,
+        expires_at: expiresAt,
+        status: "sent",
+      });
+
+      if (insertError) throw insertError;
+
+      return ok({
+        channel: "sms",
+        sent: true,
+        phone: normalized,
+        message: "OTP sent via SMS. It expires in 5 minutes.",
+      });
+    } catch (error: any) {
+      const status = Number(error?.status ?? error?.statusCode ?? error?.cause?.status);
+      const detail = typeof error?.message === "string" ? error.message : undefined;
 
       if (status === 429) {
         return fail(429, "Too many OTP requests. Please wait a minute.", {
-          detail: error.message,
-          phone,
+          phone: normalized,
+          detail,
+        });
+      }
+
+      if (status && status >= 500) {
+        return server("SMS OTP error.", {
+          phone: normalized,
+          detail,
           status,
         });
       }
 
-      if (status >= 400 && status < 500) {
-        return bad(error.message || "SMS OTP rejected.", {
-          detail: error.message,
-          phone,
-          status,
-        });
-      }
-
-      // 500 indicates provider/Supabase errors (disabled SMS, bad creds, quota, region, etc.)
-      return server("SMS OTP error.", {
-        detail: error.message,
-        phone,
-        status,
+      return bad(detail || "Could not send SMS OTP.", {
+        phone: normalized,
+        status: status || null,
       });
     }
-    return ok({ channel: "sms", sent: true, phone });
   }
 
   return bad("Unsupported channel. Use 'email' or 'sms'.", {
     receivedChannel: explicitChannel ?? null,
   });
 }
-
-export const dynamic = "force-dynamic";
