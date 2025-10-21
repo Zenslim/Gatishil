@@ -3,10 +3,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
 type Channel = "email" | "sms";
-type BodyShape = Partial<{
+type BodyLike = Partial<{
   channel: Channel;
   email: string;
   phone: string;
+  phoneNumber: string;
+  mobile: string;
+  msisdn: string;
+  to: string;
   redirectTo: string;
 }>;
 
@@ -23,46 +27,59 @@ function server(message: string, extra?: Record<string, unknown>) {
   return NextResponse.json({ error: message, ...extra }, { status: 500 });
 }
 
-// Accept JSON, URL-encoded form, or raw text "key=value&..."
-async function readBody(req: NextRequest): Promise<BodyShape> {
-  const ctype = req.headers.get("content-type")?.toLowerCase() ?? "";
+/** Accept JSON, x-www-form-urlencoded, or multipart/form-data, or plain text querystring. */
+async function readBody(req: NextRequest): Promise<BodyLike> {
+  const ctype = (req.headers.get("content-type") || "").toLowerCase();
   try {
     if (ctype.includes("application/json")) {
-      return (await req.json()) as BodyShape;
+      return (await req.json()) as BodyLike;
     }
     if (ctype.includes("application/x-www-form-urlencoded")) {
       const text = await req.text();
       const params = new URLSearchParams(text);
-      return {
-        channel: (params.get("channel") as Channel) ?? undefined,
-        email: params.get("email") ?? undefined,
-        phone: params.get("phone") ?? undefined,
-        redirectTo: params.get("redirectTo") ?? undefined,
-      };
+      return Object.fromEntries(params.entries()) as BodyLike;
     }
-    // Fallback: try JSON first, then parse as querystring-ish text
+    if (ctype.includes("multipart/form-data")) {
+      const form = await req.formData();
+      const out: Record<string, string> = {};
+      for (const [k, v] of form.entries()) {
+        if (typeof v === "string") out[k] = v;
+      }
+      return out as BodyLike;
+    }
+    // Fallbacks
     try {
-      const maybe = (await req.json()) as BodyShape;
-      return maybe;
+      return (await req.json()) as BodyLike;
     } catch {
       const text = await req.text();
       const params = new URLSearchParams(text);
-      const obj: BodyShape = {};
-      for (const [k, v] of params) (obj as any)[k] = v;
-      return obj;
+      return Object.fromEntries(params.entries()) as BodyLike;
     }
   } catch {
     return {};
   }
 }
 
-// Normalize Nepal mobile: allow 98/97/96 + 8 digits, or already +977...
+/** Normalize Nepal mobile: allow 98/97/96... (10 digits total) or already +9779XXXXXXXXX */
 function normalizeNepalPhone(input?: string | null) {
   if (!input) return null;
-  const s = input.replace(/\s|-/g, "").trim();
+  const s = input.replace(/[\s-]/g, "").trim();
   if (s.startsWith("+977")) return s;
+  // 10 digits starting with 9 (e.g., 9841234567)
   if (/^9\d{9}$/.test(s)) return `+977${s}`;
   return null;
+}
+
+/** Pull the first present phone-like field */
+function extractPhone(body: BodyLike): string | null {
+  const candidate =
+    body.phone ??
+    body.phoneNumber ??
+    body.mobile ??
+    body.msisdn ??
+    body.to ??
+    "";
+  return candidate || null;
 }
 
 export async function POST(req: NextRequest) {
@@ -73,12 +90,26 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await readBody(req);
-  const channel: Channel = (body.channel as Channel) || "email";
+
+  // Heuristics: if any phone-like field exists → sms; else if email → email; else use explicit channel; default email.
+  const explicitChannel = (body.channel as Channel | undefined)?.toLowerCase() as Channel | undefined;
+  const hasPhone = !!extractPhone(body);
+  const hasEmail = !!(body.email && body.email.trim());
+  const channel: Channel =
+    explicitChannel ??
+    (hasPhone ? "sms" : hasEmail ? "email" : "email");
+
   const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
   if (channel === "email") {
     const email = (body.email ?? "").trim().toLowerCase();
-    if (!email) return bad("Email is required for email OTP.", { field: "email" });
+    if (!email) {
+      // Tell the client exactly what we received so you can align the payload quickly.
+      return bad("Email is required for email OTP.", {
+        receivedKeys: Object.keys(body || {}),
+        hint: "Send JSON { channel:'email', email:'you@example.com' } or form fields 'channel=email&email=...'.",
+      });
+    }
 
     const redirectTo =
       body.redirectTo ?? `${req.nextUrl.origin}/onboard?src=join`;
@@ -96,11 +127,18 @@ export async function POST(req: NextRequest) {
   }
 
   if (channel === "sms") {
-    const phone = normalizeNepalPhone(body.phone);
+    const rawPhone = extractPhone(body);
+    const phone = normalizeNepalPhone(rawPhone);
     if (!phone) {
       return bad(
-        "Invalid phone for Nepal SMS OTP. Use 98XXXXXXXXXX/97XXXXXXXXXX/96XXXXXXXXXX or +9779XXXXXXXXX.",
-        { example: "+97798XXXXXXXX" }
+        "Invalid phone for Nepal SMS OTP.",
+        {
+          received: rawPhone ?? null,
+          expect:
+            "Use 10-digit Nepal mobile starting with 9 (e.g., 98xxxxxxxx) or +9779xxxxxxxx.",
+          example: "+9779812345678",
+          acceptedFields: ["phone", "phoneNumber", "mobile", "msisdn", "to"],
+        }
       );
     }
 
@@ -110,13 +148,18 @@ export async function POST(req: NextRequest) {
     });
 
     if (error) {
-      // Supabase will return provider-related causes (disabled SMS, bad creds, quota, etc.)
-      return server("SMS OTP error.", { detail: error.message, phone });
+      // 500 indicates provider/Supabase errors (disabled SMS, bad creds, quota, region, etc.)
+      return server("SMS OTP error.", {
+        detail: error.message,
+        phone,
+      });
     }
     return ok({ channel: "sms", sent: true, phone });
   }
 
-  return bad("Unsupported channel. Use 'email' or 'sms'.", { channel });
+  return bad("Unsupported channel. Use 'email' or 'sms'.", {
+    receivedChannel: explicitChannel ?? null,
+  });
 }
 
 export const dynamic = "force-dynamic";
