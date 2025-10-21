@@ -4,15 +4,6 @@ import { createClient } from "@supabase/supabase-js";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-/**
- * One route that sends OTP via:
- *  - Email (Supabase magic link/OTP)
- *  - SMS (Aakash v3 API: auth_token + to(10-digit NP) + text)
- *
- * Accepts JSON, x-www-form-urlencoded, or query params.
- * Phone fields accepted: phone, phoneNumber, mobile, msisdn, to, identifier
- */
-
 type Channel = "email" | "sms";
 type BodyLike = Partial<{
   channel: Channel;
@@ -31,7 +22,6 @@ type JsonBody = Record<string, unknown>;
 const AAKASH_BASE_URL = "https://sms.aakashsms.com/sms/v3/send";
 const OTP_MESSAGE = "Your Gatishil code is {code}. It expires in 5 minutes.";
 
-/* -------------------- helpers: responses -------------------- */
 function ok(data: JsonBody = {}) {
   return NextResponse.json({ ok: true, ...data }, { status: 200 });
 }
@@ -42,17 +32,12 @@ function server(message: string, extra: JsonBody = {}) {
   return NextResponse.json({ ok: false, error: message, ...extra }, { status: 500 });
 }
 
-/* -------------------- helpers: parsing -------------------- */
 async function readBody(req: NextRequest): Promise<BodyLike> {
   try {
-    // JSON first
     try {
       const j = (await req.json()) as unknown;
       if (j && typeof j === "object") return j as BodyLike;
-    } catch {
-      /* continue */
-    }
-    // Text → try JSON → else form-encoded
+    } catch {}
     try {
       const text = await req.text();
       if (text) {
@@ -64,20 +49,15 @@ async function readBody(req: NextRequest): Promise<BodyLike> {
           if ([...params.keys()].length > 0) return Object.fromEntries(params.entries()) as BodyLike;
         }
       }
-    } catch {
-      /* continue */
-    }
-    // Query params as last fallback
+    } catch {}
     const qp = req.nextUrl.searchParams;
     if (qp && [...qp.keys()].length > 0) return Object.fromEntries(qp.entries()) as BodyLike;
-
     return {};
   } catch {
     return {};
   }
 }
 
-/* -------------------- helpers: phone -------------------- */
 function extractPhone(body: BodyLike): string | null {
   const candidate =
     (body.phone as any) ??
@@ -87,13 +67,12 @@ function extractPhone(body: BodyLike): string | null {
     (body.to as any) ??
     (body.identifier as any) ??
     "";
-
   if (typeof candidate === "number") return String(candidate);
   if (typeof candidate === "string") return candidate;
   return candidate ? String(candidate) : null;
 }
 
-/** Normalize to +9779x… if valid Nepal mobile (96/97/98 + 8 digits) or already 977-prefixed */
+/** +9779x… if NP mobile (96/97/98 + 8 digits) or already 977-prefixed */
 function normalizeNepalMobileStrict(rawInput: string | null): string | null {
   if (!rawInput) return null;
   const raw = rawInput.replace(/\D/g, "");
@@ -102,51 +81,36 @@ function normalizeNepalMobileStrict(rawInput: string | null): string | null {
   return null;
 }
 
-/** For Aakash v3 "to": must be 10-digit 96/97/98… */
+/** Aakash wants 10-digit 96/97/98… */
 function toAakashToParam(normalizedPlus977: string): string {
   const digits = normalizedPlus977.replace(/\D/g, "");
-  if (/^9779(6|7|8)\d{8}$/.test(digits)) return digits.slice(3); // drop 977
+  if (/^9779(6|7|8)\d{8}$/.test(digits)) return digits.slice(3);
   if (/^9(6|7|8)\d{8}$/.test(digits)) return digits;
   return "";
 }
 
-/* -------------------- Aakash v3 sender -------------------- */
 async function sendAakashSms_v3(params: {
   authToken: string;
-  to10Digit: string; // "98xxxxxxxx" (or 96/97…)
+  to10Digit: string;
   text: string;
   baseUrl?: string;
 }) {
   const { authToken, to10Digit, text, baseUrl } = params;
-
-  const form = new URLSearchParams({
-    auth_token: authToken,
-    to: to10Digit,
-    text,
-  });
-
+  const form = new URLSearchParams({ auth_token: authToken, to: to10Digit, text });
   const res = await fetch(baseUrl || AAKASH_BASE_URL, {
     method: "POST",
     headers: { "content-type": "application/x-www-form-urlencoded" },
     body: form,
   });
-
   const raw = await res.text();
   let json: any = {};
-  try {
-    json = JSON.parse(raw);
-  } catch {
-    json = { raw };
-  }
-
-  // Aakash success (per v3): { error:false, message:"...", data:{ valid:[...], invalid:[...] } }
+  try { json = JSON.parse(raw); } catch { json = { raw }; }
   if (!res.ok || typeof json !== "object" || json.error === true) {
     throw new Error(`Aakash send failed (${res.status}): ${raw}`);
   }
-  return json;
+  return json; // { error:false, ... }
 }
 
-/* -------------------- main handler -------------------- */
 export async function POST(req: NextRequest) {
   const {
     NEXT_PUBLIC_SITE_URL,
@@ -192,11 +156,9 @@ export async function POST(req: NextRequest) {
 
   const siteUrl = (NEXT_PUBLIC_SITE_URL || req.nextUrl.origin || "").replace(/\/$/, "");
 
-  // -------- EMAIL OTP via Supabase --------
+  // EMAIL path
   if (channel === "email") {
-    if (!hasEmail) {
-      return bad("Either email or phone is required", { receivedKeys });
-    }
+    if (!hasEmail) return bad("Either email or phone is required", { receivedKeys });
 
     const supabasePublic = createClient(supabaseUrl, supabaseAnonKey, {
       auth: { persistSession: false, autoRefreshToken: false },
@@ -217,7 +179,7 @@ export async function POST(req: NextRequest) {
     return ok({ channel: "email", sent: true });
   }
 
-  // -------- SMS OTP via Aakash --------
+  // SMS path
   if (!hasPhone) {
     return bad("Nepal SMS only. Use a number starting with 96/97/98…", {
       received: rawPhone ?? null,
@@ -225,38 +187,46 @@ export async function POST(req: NextRequest) {
       example: "+9779812345678",
     });
   }
-
   if (!supabaseServiceKey) {
-    return server("Server misconfigured: missing SUPABASE_SERVICE_ROLE_KEY for SMS OTP.");
+    // Even if we can't throttle/persist, allow sending (non-fatal)
+    console.error("[otp] Missing SUPABASE_SERVICE_ROLE_KEY; proceeding without DB ops.");
   }
   if (!AAKASH_SMS_API_KEY) {
     return server("SMS gateway not configured (AAKASH_SMS_API_KEY).");
   }
 
-  const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
-
-  // Throttle: 60 seconds between requests per phone
-  const { data: recent } = await supabaseAdmin
-    .from("otps")
-    .select("id, created_at")
-    .eq("phone", normalizedPhone)
-    .order("created_at", { ascending: false })
-    .limit(1);
-
-  if (recent?.length) {
-    const last = new Date(recent[0].created_at).getTime();
-    if (Date.now() - last < 60_000) {
-      return bad("Please wait 60 seconds before requesting another code.", { channel: "sms" });
+  // Attempt throttle (best-effort)
+  let throttled = false;
+  const now = Date.now();
+  if (supabaseServiceKey) {
+    try {
+      const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
+        auth: { persistSession: false, autoRefreshToken: false },
+      });
+      const { data: recent } = await supabaseAdmin
+        .from("otps")
+        .select("id, created_at")
+        .eq("phone", normalizedPhone)
+        .order("created_at", { ascending: false })
+        .limit(1);
+      if (recent?.length) {
+        const last = new Date(recent[0].created_at).getTime();
+        if (now - last < 60_000) {
+          throttled = true;
+        }
+      }
+    } catch (e) {
+      console.error("[otp] throttle check failed:", e);
+      // continue; don't block
     }
   }
+  if (throttled) {
+    return bad("Please wait 60 seconds before requesting another code.", { channel: "sms" });
+  }
 
-  // Generate 6-digit OTP (replace with your secure generator if you have one)
   const code = String(Math.floor(100000 + Math.random() * 900000));
   const text = OTP_MESSAGE.replace("{code}", code);
 
-  // Convert +97798… → 98… for Aakash "to"
   const to10 = toAakashToParam(normalizedPhone);
   if (!to10) {
     return bad("Nepal SMS only. Use a number starting with 96/97/98…", {
@@ -273,17 +243,43 @@ export async function POST(req: NextRequest) {
       baseUrl: AAKASH_SMS_BASE_URL || undefined,
     });
 
-    // Persist after successful gateway accept
-    const { error: insErr } = await supabaseAdmin.from("otps").insert({
-      phone: normalizedPhone,
-      code,
-    });
-    if (insErr) {
-      return server("Failed to persist OTP.", { detail: insErr.message });
+    // Try to persist (non-fatal)
+    let persisted = true;
+    let persistDetail: string | null = null;
+    if (supabaseServiceKey) {
+      try {
+        const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
+          auth: { persistSession: false, autoRefreshToken: false },
+        });
+        const { error: insErr } = await supabaseAdmin.from("otps").insert({
+          phone: normalizedPhone,
+          code,
+        });
+        if (insErr) {
+          persisted = false;
+          persistDetail = insErr.message;
+          console.error("[otp] insert failed:", insErr);
+        }
+      } catch (e: any) {
+        persisted = false;
+        persistDetail = e?.message || String(e);
+        console.error("[otp] insert exception:", e);
+      }
+    } else {
+      persisted = false;
+      persistDetail = "Missing SUPABASE_SERVICE_ROLE_KEY";
     }
 
-    return ok({ channel: "sms", sent: true, gateway });
+    // Never 500 after gateway success
+    return ok({
+      channel: "sms",
+      sent: true,
+      gateway,
+      persist: persisted,
+      ...(persisted ? {} : { detail: persistDetail }),
+    });
   } catch (e: any) {
+    // Only gateway failure returns 500
     return server("SMS OTP error.", { detail: e?.message || String(e) });
   }
 }
