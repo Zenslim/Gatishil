@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import crypto from "crypto";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,102 +20,101 @@ type BodyLike = Partial<{
 
 type JsonBody = Record<string, unknown>;
 
-const DEFAULT_AAKASH_SMS_BASE_URL = "https://sms.aakashsms.com/sms/v3/send";
+const AAKASH_BASE_URL = "https://sms.aakashsms.com/sms/v3/send";
 const OTP_MESSAGE = "Your Gatishil code is {code}. It expires in 5 minutes.";
+const OTP_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
 function ok(data: JsonBody = {}) {
   return NextResponse.json({ ok: true, ...data }, { status: 200 });
 }
-
-function fail(status: number, message: string, extra?: JsonBody) {
-  return NextResponse.json({ ok: false, message, ...extra }, { status });
+function bad(message: string, extra: JsonBody = {}) {
+  return NextResponse.json({ ok: false, error: message, ...extra }, { status: 400 });
+}
+function server(message: string, extra: JsonBody = {}) {
+  return NextResponse.json({ ok: false, error: message, ...extra }, { status: 500 });
 }
 
-function bad(message: string, extra?: JsonBody) {
-  return fail(400, message, extra);
-}
-
-function server(message: string, extra?: JsonBody) {
-  return fail(500, message, extra);
-}
-
-/** Accept JSON, x-www-form-urlencoded, multipart/form-data, or plain text querystring. */
 async function readBody(req: NextRequest): Promise<BodyLike> {
-  const ctype = (req.headers.get("content-type") || "").toLowerCase();
   try {
-    if (ctype.includes("application/json")) {
-      return (await req.json()) as BodyLike;
-    }
-    if (ctype.includes("application/x-www-form-urlencoded")) {
-      const text = await req.text();
-      const params = new URLSearchParams(text);
-      return Object.fromEntries(params.entries()) as BodyLike;
-    }
-    if (ctype.includes("multipart/form-data")) {
-      const form = await req.formData();
-      const out: Record<string, string> = {};
-      for (const [k, v] of form.entries()) {
-        if (typeof v === "string") out[k] = v;
-      }
-      return out as BodyLike;
-    }
-    // Fallbacks
     try {
-      return (await req.json()) as BodyLike;
-    } catch {
+      const j = (await req.json()) as unknown;
+      if (j && typeof j === "object") return j as BodyLike;
+    } catch {}
+    try {
       const text = await req.text();
-      const params = new URLSearchParams(text);
-      return Object.fromEntries(params.entries()) as BodyLike;
-    }
+      if (text) {
+        try {
+          const maybeJson = JSON.parse(text);
+          if (maybeJson && typeof maybeJson === "object") return maybeJson as BodyLike;
+        } catch {
+          const params = new URLSearchParams(text);
+          if ([...params.keys()].length > 0) return Object.fromEntries(params.entries()) as BodyLike;
+        }
+      }
+    } catch {}
+    const qp = req.nextUrl.searchParams;
+    if (qp && [...qp.keys()].length > 0) return Object.fromEntries(qp.entries()) as BodyLike;
+    return {};
   } catch {
     return {};
   }
 }
 
-/** Pull the first present phone-like field */
 function extractPhone(body: BodyLike): string | null {
   const candidate =
-    body.phone ??
-    body.phoneNumber ??
-    body.mobile ??
-    body.msisdn ??
-    body.to ??
-    body.identifier ??
+    (body.phone as any) ??
+    (body.phoneNumber as any) ??
+    (body.mobile as any) ??
+    (body.msisdn as any) ??
+    (body.to as any) ??
+    (body.identifier as any) ??
     "";
-  return candidate || null;
+  if (typeof candidate === "number") return String(candidate);
+  if (typeof candidate === "string") return candidate;
+  return candidate ? String(candidate) : null;
 }
 
-async function sendAakashSms(
-  phone: string,
-  code: string,
-  options: { apiKey: string; senderId: string; baseUrl?: string }
-) {
-  const { apiKey, senderId, baseUrl } = options;
-  const message = OTP_MESSAGE.replace("{code}", code);
-  const gatewayPhone = phone.startsWith("+") ? phone.slice(1) : phone;
-  const body = new URLSearchParams({
-    key: apiKey,
-    route: "sms",
-    sender: senderId,
-    phone: gatewayPhone,
-    text: message,
-  });
+/** +9779x… if Nepal mobile (96/97/98 + 8 digits) or already 977-prefixed */
+function normalizeNepalMobileStrict(rawInput: string | null): string | null {
+  if (!rawInput) return null;
+  const raw = rawInput.replace(/\D/g, "");
+  if (/^9(6|7|8)\d{8}$/.test(raw)) return `+977${raw}`;
+  if (/^9779(6|7|8)\d{8}$/.test(raw)) return `+${raw}`;
+  return null;
+}
 
-  const res = await fetch(baseUrl || DEFAULT_AAKASH_SMS_BASE_URL, {
+/** Aakash wants 10-digit 96/97/98… */
+function toAakashToParam(normalizedPlus977: string): string {
+  const digits = normalizedPlus977.replace(/\D/g, "");
+  if (/^9779(6|7|8)\d{8}$/.test(digits)) return digits.slice(3);
+  if (/^9(6|7|8)\d{8}$/.test(digits)) return digits;
+  return "";
+}
+
+async function sendAakashSms_v3(params: {
+  authToken: string;
+  to10Digit: string;
+  text: string;
+  baseUrl?: string;
+}) {
+  const { authToken, to10Digit, text, baseUrl } = params;
+  const form = new URLSearchParams({ auth_token: authToken, to: to10Digit, text });
+  const res = await fetch(baseUrl || AAKASH_BASE_URL, {
     method: "POST",
     headers: { "content-type": "application/x-www-form-urlencoded" },
-    body,
+    body: form,
   });
-
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok || data?.status === "error") {
-    const detail = typeof data?.message === "string" ? data.message : undefined;
-    const err = new Error(detail || "Aakash SMS failed");
-    (err as any).status = res.status;
-    throw err;
+  const raw = await res.text();
+  let json: any = {};
+  try { json = JSON.parse(raw); } catch { json = { raw }; }
+  if (!res.ok || typeof json !== "object" || json.error === true) {
+    throw new Error(`Aakash send failed (${res.status}): ${raw}`);
   }
+  return json; // { error:false, ... }
+}
 
-  return message;
+function sha256Hex(s: string) {
+  return crypto.createHash("sha256").update(s, "utf8").digest("hex");
 }
 
 export async function POST(req: NextRequest) {
@@ -128,204 +128,140 @@ export async function POST(req: NextRequest) {
     SUPABASE_SERVICE_ROLE,
     AAKASH_SMS_API_KEY,
     AAKASH_SMS_BASE_URL,
-    AAKASH_SENDER_ID,
+    OTP_PEPPER, // optional extra hardening for code_hash
   } = process.env;
 
   const supabaseUrl = SUPABASE_URL || NEXT_PUBLIC_SUPABASE_URL || "";
-  const supabaseAnonKey =
-    NEXT_PUBLIC_SUPABASE_ANON_KEY || SUPABASE_ANON_KEY || "";
-  const supabaseServiceKey =
-    SUPABASE_SERVICE_ROLE_KEY || SUPABASE_SERVICE_ROLE || "";
+  const supabaseAnonKey = NEXT_PUBLIC_SUPABASE_ANON_KEY || SUPABASE_ANON_KEY || "";
+  const supabaseServiceKey = SUPABASE_SERVICE_ROLE_KEY || SUPABASE_SERVICE_ROLE || "";
 
   if (!supabaseUrl || !supabaseAnonKey) {
-    return server(
-      "Server misconfigured: missing NEXT_PUBLIC_SUPABASE_URL/SUPABASE_URL or anon key."
-    );
+    return server("Server misconfigured: missing NEXT_PUBLIC_SUPABASE_URL/SUPABASE_URL or anon key.");
   }
 
   const body = await readBody(req);
+  const receivedKeys = Object.keys(body || {});
+  const explicitChannel = (body.channel as Channel | undefined)?.toLowerCase() as Channel | undefined;
 
-  const explicitChannel = (body.channel as Channel | undefined)?.toLowerCase() as
-    | Channel
-    | undefined;
-  const { email } = body || {};
+  const emailRaw = typeof body.email === "string" ? body.email : "";
+  const email = emailRaw.trim().toLowerCase();
+  const hasEmail = email.length > 3;
+
   const rawPhone = extractPhone(body);
-  const emailValue = typeof email === "string" ? email.trim() : "";
-  const hasEmail = emailValue.length > 3;
-  const hasPhone = typeof rawPhone === "string" && rawPhone.trim().length >= 9;
+  const normalizedPhone = normalizeNepalMobileStrict(rawPhone);
+  const hasPhone = !!normalizedPhone;
 
   if (!hasEmail && !hasPhone) {
-    return bad("Either email or phone is required", {
-      receivedKeys: Object.keys(body || {}),
-    });
+    return bad("Either email or phone is required", { receivedKeys });
   }
 
-  let normalizedPhone: string | null = null;
-  if (hasPhone && rawPhone) {
-    const raw = rawPhone.replace(/\D/g, "");
-    if (/^98\d{8}$/.test(raw)) normalizedPhone = `+977${raw}`;
-    else if (raw.startsWith("977") && /^97798\d{8}$/.test(raw)) normalizedPhone = `+${raw}`;
-    else {
-      return bad("Nepal SMS only. Use a number starting with 98…", {
-        received: rawPhone,
-      });
-    }
-  }
+  // Decide channel with graceful fallback
+  let channel: Channel;
+  if (explicitChannel === "sms") channel = "sms";
+  else if (explicitChannel === "email") channel = hasEmail ? "email" : "sms";
+  else channel = hasPhone ? "sms" : "email";
 
-  const channel: Channel = explicitChannel ?? (hasPhone ? "sms" : "email");
+  const siteUrl = (NEXT_PUBLIC_SITE_URL || req.nextUrl.origin || "").replace(/\/$/, "");
 
-  const siteUrl = (NEXT_PUBLIC_SITE_URL || req.nextUrl.origin || "").replace(
-    /\/$/,
-    ""
-  );
-
-  const supabasePublic = createClient(supabaseUrl, supabaseAnonKey, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
-
+  // EMAIL path
   if (channel === "email") {
-    const email = emailValue.toLowerCase();
-    if (!email) {
-      return bad("Either email or phone is required", {
-        receivedKeys: Object.keys(body || {}),
-        hint: "Send JSON { channel:'email', email:'you@example.com' } or form fields 'channel=email&email=...'.",
-      });
-    }
+    if (!hasEmail) return bad("Either email or phone is required", { receivedKeys });
+
+    const supabasePublic = createClient(supabaseUrl, supabaseAnonKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
 
     const redirectTo = body.redirectTo || `${siteUrl}/onboard?src=join`;
-
     const { error } = await supabasePublic.auth.signInWithOtp({
       email,
-      options: {
-        shouldCreateUser: true,
-        emailRedirectTo: redirectTo,
-      },
+      options: { shouldCreateUser: true, emailRedirectTo: redirectTo },
     });
 
     if (error) {
       const status = Number((error as any)?.status ?? (error as any)?.statusCode);
-      if (status && status >= 500) {
-        return server("Email OTP error.", { detail: error.message, status });
-      }
-      return bad(error.message || "Email OTP error.", {
-        detail: error.message,
-        status: status || null,
-      });
+      if (status && status >= 500) return server("Email OTP error.", { detail: error.message, status });
+      return bad(error.message || "Email OTP error.", { detail: error.message, status: status || null });
     }
 
     return ok({ channel: "email", sent: true });
   }
 
-  if (channel === "sms") {
-    const normalized = normalizedPhone;
-    if (!normalized) {
-      return bad("Nepal SMS only. Use a number starting with 98…", {
-        received: rawPhone ?? null,
-      });
-    }
-
-    if (!supabaseServiceKey) {
-      return server(
-        "Server misconfigured: missing SUPABASE_SERVICE_ROLE_KEY for SMS OTP."
-      );
-    }
-
-    if (!AAKASH_SMS_API_KEY) {
-      return server("SMS gateway not configured.");
-    }
-
-    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
-      auth: { persistSession: false, autoRefreshToken: false },
+  // SMS path
+  if (!hasPhone) {
+    return bad("Nepal SMS only. Use a number starting with 96/97/98…", {
+      received: rawPhone ?? null,
+      receivedKeys,
+      example: "+9779812345678",
     });
-
-    // Enforce 60-second resend cooldown
-    const { data: recent, error: recentError } = await supabaseAdmin
-      .from("otps")
-      .select("id, created_at")
-      .eq("phone", normalized)
-      .order("created_at", { ascending: false })
-      .limit(1);
-
-    if (recentError) {
-      return server("Could not check OTP history.", { detail: recentError.message });
-    }
-
-    if (recent && recent.length > 0) {
-      const latest = recent[0];
-      const created = new Date(latest.created_at).getTime();
-      if (Date.now() - created < 60_000) {
-        return fail(429, "Too many OTP requests. Please wait a minute.", {
-          phone: normalized,
-        });
-      }
-    }
-
-    try {
-      const { data: link, error } = await supabaseAdmin.auth.admin.generateLink({
-        type: "otp",
-        phone: normalized,
-        options: {
-          channel: "sms",
-          shouldCreateUser: true,
-        },
-      });
-
-      if (error) throw error;
-
-      const code = link?.properties?.phone_otp;
-      if (!code || typeof code !== "string") {
-        throw new Error("Supabase did not issue an OTP code.");
-      }
-
-      await sendAakashSms(normalized, code, {
-        apiKey: AAKASH_SMS_API_KEY,
-        senderId: AAKASH_SENDER_ID || "GATISHIL",
-        baseUrl: AAKASH_SMS_BASE_URL,
-      });
-
-      const expiresAt = new Date(Date.now() + 5 * 60_000).toISOString();
-      const { error: insertError } = await supabaseAdmin.from("otps").insert({
-        phone: normalized,
-        code,
-        expires_at: expiresAt,
-        status: "sent",
-      });
-
-      if (insertError) throw insertError;
-
-      return ok({
-        channel: "sms",
-        sent: true,
-        phone: normalized,
-        message: "OTP sent via SMS. It expires in 5 minutes.",
-      });
-    } catch (error: any) {
-      const status = Number(error?.status ?? error?.statusCode ?? error?.cause?.status);
-      const detail = typeof error?.message === "string" ? error.message : undefined;
-
-      if (status === 429) {
-        return fail(429, "Too many OTP requests. Please wait a minute.", {
-          phone: normalized,
-          detail,
-        });
-      }
-
-      if (status && status >= 500) {
-        return server("SMS OTP error.", {
-          phone: normalized,
-          detail,
-          status,
-        });
-      }
-
-      return bad(detail || "Could not send SMS OTP.", {
-        phone: normalized,
-        status: status || null,
-      });
-    }
+  }
+  if (!AAKASH_SMS_API_KEY) {
+    return server("SMS gateway not configured (AAKASH_SMS_API_KEY).");
   }
 
-  return bad("Unsupported channel. Use 'email' or 'sms'.", {
-    receivedChannel: explicitChannel ?? null,
+  const to10 = toAakashToParam(normalizedPhone);
+  if (!to10) {
+    return bad("Nepal SMS only. Use a number starting with 96/97/98…", {
+      received: rawPhone ?? null,
+      example: "9812345678",
+    });
+  }
+
+  // Generate 6-digit OTP and its hash
+  const code = String(Math.floor(100000 + Math.random() * 900000));
+  const pepper = OTP_PEPPER || "";
+  const code_hash = sha256Hex(code + pepper);
+  const expires_at = new Date(Date.now() + OTP_TTL_MS).toISOString();
+
+  // Send first (so user always gets the SMS)
+  let gateway: any;
+  try {
+    gateway = await sendAakashSms_v3({
+      authToken: AAKASH_SMS_API_KEY,
+      to10Digit: to10,
+      text: OTP_MESSAGE.replace("{code}", code),
+      baseUrl: AAKASH_SMS_BASE_URL || undefined,
+    });
+  } catch (e: any) {
+    return server("SMS OTP error.", { detail: e?.message || String(e) });
+  }
+
+  // Persist best-effort (use service role if available)
+  let persisted = false;
+  let persistDetail: string | null = null;
+  if (supabaseServiceKey) {
+    try {
+      const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
+        auth: { persistSession: false, autoRefreshToken: false },
+      });
+
+      const payload: Record<string, any> = {
+        phone: normalizedPhone,
+        code_hash,
+        code,                 // keep raw for now; you can remove later if you only verify via hash
+        expires_at,
+        attempt_count: 0,
+        metadata: {},
+      };
+
+      const { error: insErr } = await supabaseAdmin.from("otps").insert(payload);
+      if (insErr) {
+        persistDetail = insErr.message;
+      } else {
+        persisted = true;
+      }
+    } catch (e: any) {
+      persistDetail = e?.message || String(e);
+    }
+  } else {
+    persistDetail = "Missing SUPABASE_SERVICE_ROLE_KEY";
+  }
+
+  // Never 500 after gateway success
+  return ok({
+    channel: "sms",
+    sent: true,
+    persist: persisted,
+    ...(persisted ? {} : { detail: persistDetail }),
+    gateway,
   });
 }
