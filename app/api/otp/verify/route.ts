@@ -69,13 +69,13 @@ function extractPhone(b: BodyLike): string | null {
   return c ? String(c) : null;
 }
 
-/** Canonicalize to E.164 for Nepal (+97798xxxxxxxx) if possible */
+/** Canonicalize to +97798xxxxxxxx if possible */
 function normalizeNepalE164(rawInput: string | null): string | null {
   if (!rawInput) return null;
   const raw = rawInput.replace(/\D/g, "");
-  if (/^9(6|7|8)\d{8}$/.test(raw)) return `+977${raw}`;         // 98xxxxxxxx → +97798xxxxxxxx
-  if (/^9779(6|7|8)\d{8}$/.test(raw)) return `+${raw}`;         // 97798xxxxxxxx → +97798xxxxxxxx
-  if (/^\+9779(6|7|8)\d{8}$/.test(rawInput)) return rawInput;   // already +97798xxxxxxxx
+  if (/^9(6|7|8)\d{8}$/.test(raw)) return `+977${raw}`;
+  if (/^9779(6|7|8)\d{8}$/.test(raw)) return `+${raw}`;
+  if (/^\+9779(6|7|8)\d{8}$/.test(rawInput)) return rawInput;
   return null;
 }
 
@@ -97,7 +97,7 @@ export async function POST(req: NextRequest) {
     SUPABASE_URL,
     SUPABASE_SERVICE_ROLE_KEY,
     SUPABASE_SERVICE_ROLE,
-    OTP_PEPPER,
+    OTP_PEPPER, // may be undefined in older deploys
   } = process.env;
 
   const supabaseUrl = SUPABASE_URL || NEXT_PUBLIC_SUPABASE_URL || "";
@@ -108,7 +108,7 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await readBody(req);
-  const codeInput = (body.code || "").trim();
+  const codeInput = String((body.code || "")).trim();
   const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
   const rawPhone = extractPhone(body);
   const e164 = normalizeNepalE164(rawPhone);
@@ -117,7 +117,7 @@ export async function POST(req: NextRequest) {
     return bad("Missing code or email.");
   }
 
-  // Email path: handled by Supabase; treat as success for flow parity
+  // Email path: handled by Supabase (magic link). Treat as success for parity.
   if (email && !e164) {
     return ok({ channel: "email", verified: true });
   }
@@ -133,7 +133,7 @@ export async function POST(req: NextRequest) {
       auth: { persistSession: false, autoRefreshToken: false },
     });
 
-    // Fetch latest OTP among any phone variants
+    // Get latest OTP among all variants
     const { data, error } = await admin
       .from("otps")
       .select("id, phone, code, code_hash, expires_at, attempt_count, verified_at, consumed_at, created_at")
@@ -141,16 +141,12 @@ export async function POST(req: NextRequest) {
       .order("created_at", { ascending: false })
       .limit(1);
 
-    if (error) {
-      return server("Lookup failed.", { detail: error.message, variants });
-    }
+    if (error) return server("Lookup failed.", { detail: error.message, variants });
 
     const rec = Array.isArray(data) && data.length ? (data[0] as any) : null;
-    if (!rec) {
-      return bad("No code found. Request a new one.", { variants });
-    }
+    if (!rec) return bad("No code found. Request a new one.", { variants });
 
-    // Check expiry
+    // Expiry check
     if (rec.expires_at && new Date(rec.expires_at).getTime() < Date.now()) {
       await admin.from("otps").update({ consumed_at: new Date().toISOString() }).eq("id", rec.id);
       return bad("Code expired. Request a new one.");
@@ -158,16 +154,20 @@ export async function POST(req: NextRequest) {
 
     // Attempt limit
     const attempts = Number(rec.attempt_count ?? 0);
-    if (attempts >= 5) {
-      return bad("Too many attempts. Request a new code.");
-    }
+    if (attempts >= 5) return bad("Too many attempts. Request a new code.");
 
-    // Prefer hash, fallback to plaintext for legacy rows
+    // Tolerant matching:
+    // 1) hash with pepper (current mode)
     const pepper = OTP_PEPPER || "";
-    const givenHash = sha256Hex(codeInput + pepper);
+    const hashWithPepper = sha256Hex(codeInput + pepper);
+    // 2) hash without pepper (old mode)
+    const hashNoPepper = sha256Hex(codeInput);
+    // 3) plaintext fallback
+    const plainMatch = rec.code && String(rec.code).trim() === codeInput;
+
     const match =
-      (rec.code_hash && rec.code_hash === givenHash) ||
-      (rec.code && String(rec.code).trim() === codeInput);
+      (rec.code_hash && (rec.code_hash === hashWithPepper || rec.code_hash === hashNoPepper)) ||
+      plainMatch;
 
     if (match) {
       await admin
