@@ -48,7 +48,7 @@ export async function POST(req: Request) {
   if (phoneRaw) {
     const normalized = normalizeNepalMobile(phoneRaw);
     if (!normalized) {
-      return respond({ ok: false, message: 'Phone OTP is Nepal-only. Enter +97798… or use email.' }, 400);
+      return respond({ ok: false, message: 'Phone OTP is Nepal-only. Enter 96/97/98… (or +9779…) or use email.' }, 400);
     }
 
     const { data, error } = await supabaseAdmin

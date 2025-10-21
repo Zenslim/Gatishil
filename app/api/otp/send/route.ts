@@ -1,6 +1,7 @@
 // app/api/otp/send/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { normalizeNepalMobile } from "@/lib/auth/phone";
 
 type Channel = "email" | "sms";
 type BodyLike = Partial<{
@@ -58,16 +59,6 @@ async function readBody(req: NextRequest): Promise<BodyLike> {
   } catch {
     return {};
   }
-}
-
-/** Normalize Nepal mobile: allow 98/97/96... (10 digits total) or already +9779XXXXXXXXX */
-function normalizeNepalPhone(input?: string | null) {
-  if (!input) return null;
-  const s = input.replace(/[\s-]/g, "").trim();
-  if (s.startsWith("+977")) return s;
-  // 10 digits starting with 9 (e.g., 9841234567)
-  if (/^9\d{9}$/.test(s)) return `+977${s}`;
-  return null;
 }
 
 /** Pull the first present phone-like field */
@@ -128,14 +119,14 @@ export async function POST(req: NextRequest) {
 
   if (channel === "sms") {
     const rawPhone = extractPhone(body);
-    const phone = normalizeNepalPhone(rawPhone);
+    const phone = rawPhone ? normalizeNepalMobile(rawPhone) : null;
     if (!phone) {
       return bad(
         "Invalid phone for Nepal SMS OTP.",
         {
           received: rawPhone ?? null,
           expect:
-            "Use 10-digit Nepal mobile starting with 9 (e.g., 98xxxxxxxx) or +9779xxxxxxxx.",
+            "Use a 10-digit Nepal mobile starting with 96/97/98 (e.g., 9812345678) or prefix with +977.",
           example: "+9779812345678",
           acceptedFields: ["phone", "phoneNumber", "mobile", "msisdn", "to"],
         }
