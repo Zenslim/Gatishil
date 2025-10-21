@@ -82,8 +82,8 @@ function normalizeNepalE164(rawInput: string | null): string | null {
 /** Build all DB-match variants: +97798…, 97798…, 98… */
 function allNepalVariants(e164: string): string[] {
   const digits = e164.replace(/\D/g, ""); // 97798xxxxxxxx
-  const noPlus = digits;                   // 97798xxxxxxxx
-  const ten = digits.slice(3);             // 98xxxxxxxx
+  const noPlus = digits; // 97798xxxxxxxx
+  const ten = digits.slice(3); // 98xxxxxxxx
   return [e164, noPlus, ten];
 }
 
@@ -136,7 +136,9 @@ export async function POST(req: NextRequest) {
     // Fetch latest OTP among any phone variants
     const { data, error } = await admin
       .from("otps")
-      .select("id, phone, code, code_hash, expires_at, attempt_count, verified_at, consumed_at, created_at")
+      .select(
+        "id, phone, code, code_hash, expires_at, attempt_count, verified_at, consumed_at, created_at"
+      )
       .in("phone", variants)
       .order("created_at", { ascending: false })
       .limit(1);
@@ -145,14 +147,17 @@ export async function POST(req: NextRequest) {
       return server("Lookup failed.", { detail: error.message, variants });
     }
 
-    const rec = Array.isArray(data) and data.length ? (data[0] as any) : null;
+    const rec = Array.isArray(data) && data.length ? (data[0] as any) : null;
     if (!rec) {
       return bad("No code found. Request a new one.", { variants });
     }
 
     // Check expiry
-    if (rec.expires_at and new Date(rec.expires_at).getTime() < Date.now()) {
-      await admin.from("otps").update({ consumed_at: new Date().toISOString() }).eq("id", rec.id);
+    if (rec.expires_at && new Date(rec.expires_at).getTime() < Date.now()) {
+      await admin
+        .from("otps")
+        .update({ consumed_at: new Date().toISOString() })
+        .eq("id", rec.id);
       return bad("Code expired. Request a new one.");
     }
 
@@ -166,10 +171,11 @@ export async function POST(req: NextRequest) {
     const pepper = OTP_PEPPER || "";
     const hashWithPepper = sha256Hex(codeInput + pepper);
     const hashNoPepper = sha256Hex(codeInput);
-    const plainMatch = rec.code && String(rec.code).trim() === codeInput;
+    const plainMatch = !!rec.code && String(rec.code).trim() === codeInput;
 
     const match =
-      (rec.code_hash && (rec.code_hash === hashWithPepper || rec.code_hash === hashNoPepper)) ||
+      (!!rec.code_hash &&
+        (rec.code_hash === hashWithPepper || rec.code_hash === hashNoPepper)) ||
       plainMatch;
 
     if (match) {
@@ -192,6 +198,8 @@ export async function POST(req: NextRequest) {
       return bad("Incorrect code.");
     }
   } catch (e: any) {
-    return server("Could not verify code right now.", { detail: e?.message || String(e) });
+    return server("Could not verify code right now.", {
+      detail: e?.message || String(e),
+    });
   }
 }
