@@ -1,27 +1,72 @@
-// app/api/otp/send/route.ts
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { supabaseAdmin } from "@/lib/server/supabaseAdmin";
-import { sha256Hex } from "@/lib/server/hash";
+import crypto from "crypto";
 
-// ── Aakash SMS (replace with your real HTTP call) ───────────────────────────────
-async function sendAakashSMS(toE164: string, message: string) {
-  // TODO: Implement actual HTTP call using AAKASH_SMS_API_KEY and your sender ID.
-  // This stub simulates success.
-  return { ok: true };
-}
+// ───────────────── env helpers ─────────────────
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+const SUPABASE_ANON = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!; // for email branch (unchanged)
 
-const NEPAL_E164 = /^\+977\d{9,10}$/;
-function rand6() { return Math.floor(100000 + Math.random() * 900000).toString(); }
+// Aakash settings (set these in Vercel)
+const AAKASH_BASE_URL = process.env.AAKASH_SMS_BASE_URL!; // e.g. "https://sms.aakash.com.np/api/v1/sms/send"
+const AAKASH_API_KEY = process.env.AAKASH_SMS_API_KEY!;   // your key
+const AAKASH_SENDER_ID = process.env.AAKASH_SMS_SENDER_ID || ""; // if your account requires it
+const AAKASH_DEBUG_RETURN_CODE = process.env.AAKASH_DEBUG_RETURN_CODE === "true"; // return code in response (non-prod only)
 
+// ───────────────── clients ─────────────────
+const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+  auth: { autoRefreshToken: false, persistSession: false },
+});
 function supabaseAnon() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL as string;
-  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string;
-  if (!url) throw new Error("Missing NEXT_PUBLIC_SUPABASE_URL");
-  if (!anon) throw new Error("Missing NEXT_PUBLIC_SUPABASE_ANON_KEY");
-  return createClient(url, anon, { auth: { persistSession: false } });
+  return createClient(SUPABASE_URL, SUPABASE_ANON, { auth: { persistSession: false } });
 }
 
+// ───────────────── utils ─────────────────
+const NEPAL_E164 = /^\+977\d{9,10}$/;
+const ttlMinutes = 5;
+const resendSeconds = 30;
+
+function rand6() {
+  return Math.floor(100000 + Math.random() * 900000).toString();
+}
+function sha256Hex(s: string) {
+  return crypto.createHash("sha256").update(s).digest("hex");
+}
+
+// Real Aakash HTTP call. Adjust payload/headers to your provider’s spec.
+async function sendAakashSMS(toE164: string, message: string): Promise<{ ok: boolean; status?: number; body?: any; text?: string; }> {
+  if (!AAKASH_BASE_URL || !AAKASH_API_KEY) {
+    return { ok: false, body: { error: "Missing AAKASH env" } };
+  }
+
+  try {
+    const res = await fetch(AAKASH_BASE_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        // Many Nepal gateways use Bearer; if yours needs a different header (e.g. "X-API-Key"), change this:
+        Authorization: `Bearer ${AAKASH_API_KEY}`,
+      },
+      body: JSON.stringify({
+        to: [toE164],            // some APIs accept a single string; others an array—adjust if needed
+        message,
+        senderId: AAKASH_SENDER_ID || undefined,
+      }),
+    });
+
+    const text = await res.text();
+    let body: any = null;
+    try { body = JSON.parse(text); } catch { /* plain text */ }
+
+    // If your provider returns a specific success field, check it here.
+    if (res.ok) return { ok: true, status: res.status, body, text };
+    return { ok: false, status: res.status, body, text };
+  } catch (e: any) {
+    return { ok: false, body: { error: e?.message || "fetch_failed" } };
+  }
+}
+
+// ───────────────── handler ─────────────────
 export async function POST(req: Request) {
   const body = await req.json().catch(() => ({}));
   const { phone, email, redirectTo } = body || {};
@@ -35,35 +80,78 @@ export async function POST(req: Request) {
       );
     }
 
-    const code = rand6();
-    const codeHash = sha256Hex(code);
-    const ttlMinutes = 5;
-    const resendSeconds = 30;
-
-    const { error: upErr } = await supabaseAdmin
+    // Enforce resend window
+    const { data: existing } = await admin
       .from("phone_otps")
-      .upsert({
-        e164_phone: phone,
-        code_hash: codeHash,
-        expires_at: new Date(Date.now() + ttlMinutes * 60 * 1000).toISOString(),
-        attempts_left: 5,
-        resend_after: new Date(Date.now() + resendSeconds * 1000).toISOString(),
-      }, { onConflict: "e164_phone" });
+      .select("resend_after")
+      .eq("e164_phone", phone)
+      .maybeSingle();
 
-    if (upErr) {
-      return NextResponse.json({ ok: false, error: "DB_ERROR", message: upErr.message }, { status: 500 });
+    const now = Date.now();
+    if (existing?.resend_after && new Date(existing.resend_after).getTime() > now) {
+      const wait = Math.ceil((new Date(existing.resend_after).getTime() - now) / 1000);
+      return NextResponse.json(
+        { ok: false, error: "RESEND_TOO_SOON", message: `Try again in ${wait}s` },
+        { status: 429 }
+      );
     }
 
+    // Generate + store hash
+    const code = rand6();
+    const codeHash = sha256Hex(code);
+
+    const { error: upErr } = await admin
+      .from("phone_otps")
+      .upsert(
+        {
+          e164_phone: phone,
+          code_hash: codeHash,
+          expires_at: new Date(now + ttlMinutes * 60 * 1000).toISOString(),
+          attempts_left: 5,
+          resend_after: new Date(now + resendSeconds * 1000).toISOString(),
+        },
+        { onConflict: "e164_phone" }
+      );
+    if (upErr) {
+      return NextResponse.json(
+        { ok: false, error: "DB_ERROR", message: upErr.message },
+        { status: 500 }
+      );
+    }
+
+    // Send via Aakash
     const text = `Your Gatishil code is ${code}. It expires in ${ttlMinutes} minutes.`;
     const sent = await sendAakashSMS(phone, text);
     if (!sent.ok) {
-      return NextResponse.json({ ok: false, error: "SMS_SEND_FAILED" }, { status: 502 });
+      // Roll back resend_after so user can retry sooner if provider failed
+      await admin
+        .from("phone_otps")
+        .update({ resend_after: new Date(now).toISOString() })
+        .eq("e164_phone", phone);
+
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "SMS_SEND_FAILED",
+          message: "Aakash send failed",
+          provider: { status: sent.status, body: sent.body || sent.text },
+        },
+        { status: 502 }
+      );
     }
 
-    return NextResponse.json({ ok: true, mode: "phone_otp_sent", resend_after_seconds: resendSeconds }, { status: 200 });
+    // In non-production debugging, you may want to see the code.
+    const debugPayload = (AAKASH_DEBUG_RETURN_CODE && process.env.NODE_ENV !== "production")
+      ? { debug_code: code }
+      : {};
+
+    return NextResponse.json(
+      { ok: true, mode: "phone_otp_sent", resend_after_seconds: resendSeconds, ...debugPayload },
+      { status: 200 }
+    );
   }
 
-  // ── EMAIL: keep Supabase OTP EXACTLY (unchanged logic) ────────────────────────
+  // ── EMAIL: keep Supabase OTP EXACTLY as before ────────────────────────────────
   if (typeof email === "string" && email.includes("@")) {
     const sb = supabaseAnon();
     const emailRedirectTo =
@@ -86,5 +174,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true, mode: "email_otp_sent" }, { status: 200 });
   }
 
-  return NextResponse.json({ ok: false, error: "BAD_REQUEST", message: "Provide { phone } or { email }." }, { status: 400 });
+  return NextResponse.json(
+    { ok: false, error: "BAD_REQUEST", message: "Provide { phone } or { email }." },
+    { status: 400 }
+  );
 }
