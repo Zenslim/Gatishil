@@ -92,11 +92,12 @@ async function sendAakashSms(
 ) {
   const { apiKey, senderId, baseUrl } = options;
   const message = OTP_MESSAGE.replace("{code}", code);
+  const gatewayPhone = phone.startsWith("+") ? phone.slice(1) : phone;
   const body = new URLSearchParams({
     key: apiKey,
     route: "sms",
     sender: senderId,
-    phone,
+    phone: gatewayPhone,
     text: message,
   });
 
