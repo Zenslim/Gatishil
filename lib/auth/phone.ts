@@ -25,6 +25,10 @@ export function normalizeNepalMobile(input: string): string | null {
     normalized = normalized.slice(1);
   }
 
+  if (normalized) {
+    normalized = normalized.replace(/^0+/, '');
+  }
+
   if (normalized.startsWith('977')) {
     normalized = normalized.slice(3);
   }
