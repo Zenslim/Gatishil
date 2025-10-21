@@ -5,39 +5,20 @@ import crypto from "crypto";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// ── env & clients
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL as string;
-const SUPABASE_ANON = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string;
-const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY as string;
-const SERVER_PHONE_PASSWORD_SEED = process.env.SERVER_PHONE_PASSWORD_SEED as string;
-
-if (!SUPABASE_URL || !SUPABASE_ANON || !SUPABASE_SERVICE_ROLE_KEY) {
-  throw new Error("Missing Supabase env vars");
-}
-if (!SERVER_PHONE_PASSWORD_SEED) {
-  throw new Error("Missing SERVER_PHONE_PASSWORD_SEED");
-}
-
-function supabaseAnon() {
-  return createClient(SUPABASE_URL, SUPABASE_ANON, { auth: { persistSession: false } });
-}
-function supabaseAdmin() {
-  return createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
-    auth: { autoRefreshToken: false, persistSession: false },
-  });
-}
-
 const NEPAL_E164 = /^\+977\d{9,10}$/;
 const sha256Hex = (s: string) => crypto.createHash("sha256").update(s).digest("hex");
 
 export async function POST(req: Request) {
   try {
-    const body = await req.json().catch(() => ({}));
+    const body = await req.json().catch(() => ({} as any));
     const { phone, code, email, token, type } = body || {};
 
-    // ─────────────────────────────────────────────────────────
-    // PHONE VERIFY (custom): check our hash, then mint session
-    // ─────────────────────────────────────────────────────────
+    // Helper to read env safely at runtime (no build-time throws)
+    const env = (k: string) => process.env[k] || "";
+
+    // ─────────────────────────────────────────────
+    // PHONE VERIFY (custom → mint Supabase session)
+    // ─────────────────────────────────────────────
     if (typeof phone === "string" && typeof code === "string") {
       const e164 = phone.trim();
       const codeStr = code.trim();
@@ -55,18 +36,38 @@ export async function POST(req: Request) {
         );
       }
 
-      const admin = supabaseAdmin();
+      // Read env at runtime
+      const URL = env("NEXT_PUBLIC_SUPABASE_URL");
+      const ANON = env("NEXT_PUBLIC_SUPABASE_ANON_KEY");
+      const SERVICE = env("SUPABASE_SERVICE_ROLE_KEY");
+      const SEED = env("SERVER_PHONE_PASSWORD_SEED");
 
-      // 1) Fetch OTP row from our table
+      // Guard missing envs at request-time (not build-time)
+      if (!URL || !ANON || !SERVICE) {
+        return NextResponse.json(
+          { ok: false, error: "SERVER_MISCONFIG", message: "Supabase env vars are missing" },
+          { status: 500 }
+        );
+      }
+      if (!SEED) {
+        return NextResponse.json(
+          { ok: false, error: "SERVER_PHONE_PASSWORD_SEED_MISSING", message: "Set SERVER_PHONE_PASSWORD_SEED" },
+          { status: 500 }
+        );
+      }
+
+      // Create clients now (runtime)
+      const admin = createClient(URL, SERVICE, { auth: { autoRefreshToken: false, persistSession: false } });
+      const anon = createClient(URL, ANON, { auth: { persistSession: false } });
+
+      // 1) Fetch OTP row (hash, ttl, attempts)
       const { data: otp, error: otpErr } = await admin
         .from("phone_otps")
         .select("code_hash, expires_at, attempts_left")
         .eq("e164_phone", e164)
         .single();
 
-      if (otpErr || !otp) {
-        return NextResponse.json({ ok: false, error: "NO_OTP" }, { status: 400 });
-      }
+      if (otpErr || !otp) return NextResponse.json({ ok: false, error: "NO_OTP" }, { status: 400 });
       if (new Date(otp.expires_at).getTime() < Date.now()) {
         return NextResponse.json({ ok: false, error: "OTP_EXPIRED" }, { status: 401 });
       }
@@ -74,24 +75,18 @@ export async function POST(req: Request) {
         return NextResponse.json({ ok: false, error: "TOO_MANY_ATTEMPTS" }, { status: 429 });
       }
 
-      // 2) Compare hash
+      // 2) Verify code by hash
       const match = sha256Hex(codeStr) === otp.code_hash;
-
-      // decrement attempts (best-effort)
       await admin
         .from("phone_otps")
         .update({ attempts_left: Math.max(0, (otp.attempts_left || 0) - 1) })
         .eq("e164_phone", e164);
+      if (!match) return NextResponse.json({ ok: false, error: "BAD_CODE" }, { status: 401 });
 
-      if (!match) {
-        return NextResponse.json({ ok: false, error: "BAD_CODE" }, { status: 401 });
-      }
+      // 3) Ensure user exists, confirm phone, set server-derived password
+      const password = sha256Hex(`${SEED}:${e164}`).slice(0, 32);
 
-      // 3) Ensure a Supabase user exists & mark phone confirmed; set a server-derived password
-      const password = sha256Hex(`${SERVER_PHONE_PASSWORD_SEED}:${e164}`).slice(0, 32);
       let userId: string | null = null;
-
-      // Try create; if exists, update
       const created = await admin.auth.admin.createUser({
         phone: e164,
         phone_confirm: true,
@@ -112,14 +107,12 @@ export async function POST(req: Request) {
           });
         }
       }
-
       if (!userId) {
         return NextResponse.json({ ok: false, error: "USER_NOT_FOUND_OR_CREATED" }, { status: 500 });
       }
 
-      // 4) Mint a session server-side via phone+password, return tokens
-      const sb = supabaseAnon();
-      const sign = await sb.auth.signInWithPassword({ phone: e164, password });
+      // 4) Mint a session via phone+password and return tokens
+      const sign = await anon.auth.signInWithPassword({ phone: e164, password });
       if (sign.error || !sign.data?.session) {
         return NextResponse.json(
           { ok: false, error: "SIGNIN_FAILED", message: sign.error?.message },
@@ -144,12 +137,14 @@ export async function POST(req: Request) {
       );
     }
 
-    // ─────────────────────────────────────────────────────────
-    // EMAIL VERIFY (unchanged Supabase path — optional here)
-    // If you already verify email elsewhere, you can remove this.
-    // ─────────────────────────────────────────────────────────
+    // ─────────────────────────────────────────────
+    // EMAIL VERIFY (unchanged; keep if you use it)
+    // ─────────────────────────────────────────────
     if (typeof email === "string" && typeof token === "string") {
-      const sb = supabaseAnon();
+      const URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+      const ANON = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+      const sb = createClient(URL, ANON, { auth: { persistSession: false } });
+
       const { data, error } = await sb.auth.verifyOtp({
         email: email.trim(),
         token: token.trim(),
