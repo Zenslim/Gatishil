@@ -1,4 +1,4 @@
-export const NEPAL_MOBILE = /^\+9779\d{9}$/;
+export const NEPAL_MOBILE = /^\+9779[678]\d{8}$/;
 
 export function normalizeOtpPhone(value: string) {
   const trimmed = value.trim();
@@ -25,15 +25,19 @@ export function normalizeNepalMobile(input: string): string | null {
     normalized = normalized.slice(1);
   }
 
+  if (normalized) {
+    normalized = normalized.replace(/^0+/, '');
+  }
+
   if (normalized.startsWith('977')) {
     normalized = normalized.slice(3);
   }
 
-  if (normalized.startsWith('0')) {
+  if (normalized) {
     normalized = normalized.replace(/^0+/, '');
   }
 
-  if (normalized.length !== 10 || !normalized.startsWith('98')) {
+  if (!/^9[678]\d{8}$/.test(normalized)) {
     return null;
   }
 
