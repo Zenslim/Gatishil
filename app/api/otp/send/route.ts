@@ -22,7 +22,7 @@ type JsonBody = Record<string, unknown>;
 
 const AAKASH_BASE_URL = "https://sms.aakashsms.com/sms/v3/send";
 const OTP_MESSAGE = "Your Gatishil code is {code}. It expires in 5 minutes.";
-const OTP_TTL_MS = 5 * 60 * 1000; // 5 minutes
+const OTP_TTL_MS = 5 * 60 * 1000; // 5 minutes (DB should also set default)
 
 function ok(data: JsonBody = {}) {
   return NextResponse.json({ ok: true, ...data }, { status: 200 });
@@ -61,13 +61,13 @@ async function readBody(req: NextRequest): Promise<BodyLike> {
 }
 
 function extractPhone(body: BodyLike): string | null {
-  const candidate =
-    (body.phone as any) ??
-    (body.phoneNumber as any) ??
-    (body.mobile as any) ??
-    (body.msisdn as any) ??
-    (body.to as any) ??
-    (body.identifier as any) ??
+  const candidate: any =
+    body.phone ??
+    body.phoneNumber ??
+    body.mobile ??
+    body.msisdn ??
+    body.to ??
+    body.identifier ??
     "";
   if (typeof candidate === "number") return String(candidate);
   if (typeof candidate === "string") return candidate;
@@ -128,7 +128,7 @@ export async function POST(req: NextRequest) {
     SUPABASE_SERVICE_ROLE,
     AAKASH_SMS_API_KEY,
     AAKASH_SMS_BASE_URL,
-    OTP_PEPPER, // optional extra hardening for code_hash
+    OTP_PEPPER, // optional
   } = process.env;
 
   const supabaseUrl = SUPABASE_URL || NEXT_PUBLIC_SUPABASE_URL || "";
@@ -155,7 +155,7 @@ export async function POST(req: NextRequest) {
     return bad("Either email or phone is required", { receivedKeys });
   }
 
-  // Decide channel with graceful fallback
+  // Decide channel
   let channel: Channel;
   if (explicitChannel === "sms") channel = "sms";
   else if (explicitChannel === "email") channel = hasEmail ? "email" : "sms";
@@ -206,13 +206,13 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  // Generate 6-digit OTP and its hash
+  // Generate OTP + hash
   const code = String(Math.floor(100000 + Math.random() * 900000));
   const pepper = OTP_PEPPER || "";
   const code_hash = sha256Hex(code + pepper);
-  const expires_at = new Date(Date.now() + OTP_TTL_MS).toISOString();
+  // let expires_at be set by DB default to avoid clock skew
 
-  // Send first (so user always gets the SMS)
+  // Send SMS first
   let gateway: any;
   try {
     gateway = await sendAakashSms_v3({
@@ -225,7 +225,7 @@ export async function POST(req: NextRequest) {
     return server("SMS OTP error.", { detail: e?.message || String(e) });
   }
 
-  // Persist best-effort (use service role if available)
+  // Persist (best-effort)
   let persisted = false;
   let persistDetail: string | null = null;
   if (supabaseServiceKey) {
@@ -237,8 +237,7 @@ export async function POST(req: NextRequest) {
       const payload: Record<string, any> = {
         phone: normalizedPhone,
         code_hash,
-        code,                 // keep raw for now; you can remove later if you only verify via hash
-        expires_at,
+        code,
         attempt_count: 0,
         metadata: {},
       };
@@ -256,7 +255,6 @@ export async function POST(req: NextRequest) {
     persistDetail = "Missing SUPABASE_SERVICE_ROLE_KEY";
   }
 
-  // Never 500 after gateway success
   return ok({
     channel: "sms",
     sent: true,

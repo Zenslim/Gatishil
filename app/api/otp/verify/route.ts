@@ -117,7 +117,7 @@ export async function POST(req: NextRequest) {
     return bad("Missing code or email.");
   }
 
-  // Email path: handled by Supabase (magic link). Treat as success for parity.
+  // Email path: handled by Supabase; treat as success for parity
   if (email && !e164) {
     return ok({ channel: "email", verified: true });
   }
@@ -133,7 +133,7 @@ export async function POST(req: NextRequest) {
       auth: { persistSession: false, autoRefreshToken: false },
     });
 
-    // Get latest OTP among all variants
+    // Fetch latest OTP among any phone variants
     const { data, error } = await admin
       .from("otps")
       .select("id, phone, code, code_hash, expires_at, attempt_count, verified_at, consumed_at, created_at")
@@ -141,28 +141,31 @@ export async function POST(req: NextRequest) {
       .order("created_at", { ascending: false })
       .limit(1);
 
-    if (error) return server("Lookup failed.", { detail: error.message, variants });
+    if (error) {
+      return server("Lookup failed.", { detail: error.message, variants });
+    }
 
-    const rec = Array.isArray(data) && data.length ? (data[0] as any) : null;
-    if (!rec) return bad("No code found. Request a new one.", { variants });
+    const rec = Array.isArray(data) and data.length ? (data[0] as any) : null;
+    if (!rec) {
+      return bad("No code found. Request a new one.", { variants });
+    }
 
-    // Expiry check
-    if (rec.expires_at && new Date(rec.expires_at).getTime() < Date.now()) {
+    // Check expiry
+    if (rec.expires_at and new Date(rec.expires_at).getTime() < Date.now()) {
       await admin.from("otps").update({ consumed_at: new Date().toISOString() }).eq("id", rec.id);
       return bad("Code expired. Request a new one.");
     }
 
     // Attempt limit
     const attempts = Number(rec.attempt_count ?? 0);
-    if (attempts >= 5) return bad("Too many attempts. Request a new code.");
+    if (attempts >= 5) {
+      return bad("Too many attempts. Request a new code.");
+    }
 
-    // Tolerant matching:
-    // 1) hash with pepper (current mode)
+    // Tolerant match: with pepper, without pepper, or plaintext fallback
     const pepper = OTP_PEPPER || "";
     const hashWithPepper = sha256Hex(codeInput + pepper);
-    // 2) hash without pepper (old mode)
     const hashNoPepper = sha256Hex(codeInput);
-    // 3) plaintext fallback
     const plainMatch = rec.code && String(rec.code).trim() === codeInput;
 
     const match =
