@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import crypto from "crypto";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,6 +22,7 @@ type JsonBody = Record<string, unknown>;
 
 const AAKASH_BASE_URL = "https://sms.aakashsms.com/sms/v3/send";
 const OTP_MESSAGE = "Your Gatishil code is {code}. It expires in 5 minutes.";
+const OTP_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
 function ok(data: JsonBody = {}) {
   return NextResponse.json({ ok: true, ...data }, { status: 200 });
@@ -72,7 +74,7 @@ function extractPhone(body: BodyLike): string | null {
   return candidate ? String(candidate) : null;
 }
 
-/** +9779x… if NP mobile (96/97/98 + 8 digits) or already 977-prefixed */
+/** +9779x… if Nepal mobile (96/97/98 + 8 digits) or already 977-prefixed */
 function normalizeNepalMobileStrict(rawInput: string | null): string | null {
   if (!rawInput) return null;
   const raw = rawInput.replace(/\D/g, "");
@@ -111,6 +113,10 @@ async function sendAakashSms_v3(params: {
   return json; // { error:false, ... }
 }
 
+function sha256Hex(s: string) {
+  return crypto.createHash("sha256").update(s, "utf8").digest("hex");
+}
+
 export async function POST(req: NextRequest) {
   const {
     NEXT_PUBLIC_SITE_URL,
@@ -122,6 +128,7 @@ export async function POST(req: NextRequest) {
     SUPABASE_SERVICE_ROLE,
     AAKASH_SMS_API_KEY,
     AAKASH_SMS_BASE_URL,
+    OTP_PEPPER, // optional extra hardening for code_hash
   } = process.env;
 
   const supabaseUrl = SUPABASE_URL || NEXT_PUBLIC_SUPABASE_URL || "";
@@ -187,45 +194,9 @@ export async function POST(req: NextRequest) {
       example: "+9779812345678",
     });
   }
-  if (!supabaseServiceKey) {
-    // Even if we can't throttle/persist, allow sending (non-fatal)
-    console.error("[otp] Missing SUPABASE_SERVICE_ROLE_KEY; proceeding without DB ops.");
-  }
   if (!AAKASH_SMS_API_KEY) {
     return server("SMS gateway not configured (AAKASH_SMS_API_KEY).");
   }
-
-  // Attempt throttle (best-effort)
-  let throttled = false;
-  const now = Date.now();
-  if (supabaseServiceKey) {
-    try {
-      const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
-        auth: { persistSession: false, autoRefreshToken: false },
-      });
-      const { data: recent } = await supabaseAdmin
-        .from("otps")
-        .select("id, created_at")
-        .eq("phone", normalizedPhone)
-        .order("created_at", { ascending: false })
-        .limit(1);
-      if (recent?.length) {
-        const last = new Date(recent[0].created_at).getTime();
-        if (now - last < 60_000) {
-          throttled = true;
-        }
-      }
-    } catch (e) {
-      console.error("[otp] throttle check failed:", e);
-      // continue; don't block
-    }
-  }
-  if (throttled) {
-    return bad("Please wait 60 seconds before requesting another code.", { channel: "sms" });
-  }
-
-  const code = String(Math.floor(100000 + Math.random() * 900000));
-  const text = OTP_MESSAGE.replace("{code}", code);
 
   const to10 = toAakashToParam(normalizedPhone);
   if (!to10) {
@@ -235,51 +206,62 @@ export async function POST(req: NextRequest) {
     });
   }
 
+  // Generate 6-digit OTP and its hash
+  const code = String(Math.floor(100000 + Math.random() * 900000));
+  const pepper = OTP_PEPPER || "";
+  const code_hash = sha256Hex(code + pepper);
+  const expires_at = new Date(Date.now() + OTP_TTL_MS).toISOString();
+
+  // Send first (so user always gets the SMS)
+  let gateway: any;
   try {
-    const gateway = await sendAakashSms_v3({
+    gateway = await sendAakashSms_v3({
       authToken: AAKASH_SMS_API_KEY,
       to10Digit: to10,
-      text,
+      text: OTP_MESSAGE.replace("{code}", code),
       baseUrl: AAKASH_SMS_BASE_URL || undefined,
     });
-
-    // Try to persist (non-fatal)
-    let persisted = true;
-    let persistDetail: string | null = null;
-    if (supabaseServiceKey) {
-      try {
-        const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
-          auth: { persistSession: false, autoRefreshToken: false },
-        });
-        const { error: insErr } = await supabaseAdmin.from("otps").insert({
-          phone: normalizedPhone,
-          code,
-        });
-        if (insErr) {
-          persisted = false;
-          persistDetail = insErr.message;
-          console.error("[otp] insert failed:", insErr);
-        }
-      } catch (e: any) {
-        persisted = false;
-        persistDetail = e?.message || String(e);
-        console.error("[otp] insert exception:", e);
-      }
-    } else {
-      persisted = false;
-      persistDetail = "Missing SUPABASE_SERVICE_ROLE_KEY";
-    }
-
-    // Never 500 after gateway success
-    return ok({
-      channel: "sms",
-      sent: true,
-      gateway,
-      persist: persisted,
-      ...(persisted ? {} : { detail: persistDetail }),
-    });
   } catch (e: any) {
-    // Only gateway failure returns 500
     return server("SMS OTP error.", { detail: e?.message || String(e) });
   }
+
+  // Persist best-effort (use service role if available)
+  let persisted = false;
+  let persistDetail: string | null = null;
+  if (supabaseServiceKey) {
+    try {
+      const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
+        auth: { persistSession: false, autoRefreshToken: false },
+      });
+
+      const payload: Record<string, any> = {
+        phone: normalizedPhone,
+        code_hash,
+        code,                 // keep raw for now; you can remove later if you only verify via hash
+        expires_at,
+        attempt_count: 0,
+        metadata: {},
+      };
+
+      const { error: insErr } = await supabaseAdmin.from("otps").insert(payload);
+      if (insErr) {
+        persistDetail = insErr.message;
+      } else {
+        persisted = true;
+      }
+    } catch (e: any) {
+      persistDetail = e?.message || String(e);
+    }
+  } else {
+    persistDetail = "Missing SUPABASE_SERVICE_ROLE_KEY";
+  }
+
+  // Never 500 after gateway success
+  return ok({
+    channel: "sms",
+    sent: true,
+    persist: persisted,
+    ...(persisted ? {} : { detail: persistDetail }),
+    gateway,
+  });
 }
