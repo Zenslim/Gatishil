@@ -1,42 +1,41 @@
-// Minimal client for OTP flows.
-// - SMS: hits your custom API (/api/otp/send, /api/otp/verify)
-// - Email: leaves verification to Supabase (email link)
-export async function sendSmsOtp(phone: string) {
+// lib/otpClient.ts
+// Unified helpers consistent with Custom SoT for PHONE and native Supabase for EMAIL.
+
+export async function sendPhoneOtp(phone: string) {
   const res = await fetch("/api/otp/send", {
     method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ channel: "sms", phone }),
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ phone }),
   });
-  const data = await res.json().catch(() => ({} as any));
-  if (!res.ok || data?.ok === false) {
-    throw new Error(data?.error || "Could not send SMS OTP.");
+  const j = await res.json().catch(() => ({}));
+  if (!res.ok || !j?.ok) {
+    throw new Error(j?.message || j?.error || "Could not send phone code");
   }
-  return data; // { ok:true, sent:true, ... }
+  return j; // { ok:true, mode:"phone_otp_sent", resend_after_seconds, [debug_code] }
 }
 
-export async function verifySmsOtp(phone: string, code: string) {
-  // IMPORTANT: do NOT call supabase.auth.verifyOtp() for SMS.
+export async function verifyPhoneOtp(phone: string, code: string) {
   const res = await fetch("/api/otp/verify", {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ phone, code }),
   });
-  const data = await res.json().catch(() => ({} as any));
-  if (!res.ok || data?.ok === false) {
-    throw new Error(data?.message || "Could not verify code.");
+  const j = await res.json().catch(() => ({}));
+  if (!res.ok || !j?.ok) {
+    throw new Error(j?.message || j?.error || "Invalid or expired code");
   }
-  return data; // { ok:true, verified:true, ... }
+  return j; // contains tokens + next
 }
 
 export async function sendEmailOtp(email: string, redirectTo?: string) {
   const res = await fetch("/api/otp/send", {
     method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ channel: "email", email, redirectTo }),
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, redirectTo }),
   });
-  const data = await res.json().catch(() => ({} as any));
-  if (!res.ok || data?.ok === false) {
-    throw new Error(data?.error || "Could not send email OTP.");
+  const j = await res.json().catch(() => ({}));
+  if (!res.ok || !j?.ok) {
+    throw new Error(j?.message || j?.error || "Could not send email code");
   }
-  return data;
+  return j; // { ok:true, mode:"email_otp_sent" }
 }

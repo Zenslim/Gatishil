@@ -1,76 +1,28 @@
-import { waitForSession } from '@/lib/auth/waitForSession';
-import { getSupabaseBrowser } from '@/lib/supabaseClient';
+// lib/auth/verifyOtpClient.ts
+// PHONE uses our API (Custom SoT), EMAIL uses Supabase via API.
+// On success (phone), set session with returned tokens.
 
-type VerifyArgs = {
-  phone?: string;
-  email?: string;
-  code: string;
-};
+import { createClient } from "@supabase/supabase-js";
 
-function readError(data: any, fallback: string) {
-  if (!data) return fallback;
-  if (typeof data.error === 'string' && data.error) return data.error;
-  if (typeof data.message === 'string' && data.message) return data.message;
-  return fallback;
-}
-
-export async function verifyOtpAndSync(args: VerifyArgs) {
-  const phone = typeof args.phone === 'string' ? args.phone.trim() : undefined;
-  const email = typeof args.email === 'string' ? args.email.trim() : undefined;
-  const identifier = phone || email;
-  if (!identifier) {
-    throw new Error('Missing email or phone.');
-  }
-  if (!args.code || args.code.length !== 6) {
-    throw new Error('Enter a valid 6-digit code.');
-  }
-
-  const res = await fetch('/api/otp/verify', {
-    method: 'POST',
-    credentials: 'include',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({
-      phone: phone ?? null,
-      email: email ?? null,
-      code: args.code,
-    }),
+export async function verifyOtpAndSync(input: { phone?: string; code?: string; email?: string; token?: string; type?: string }) {
+  const res = await fetch("/api/otp/verify", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
   });
-
-  const payload = await res.json().catch(() => ({}));
-  if (!res.ok || payload?.ok !== true) {
-    throw new Error(readError(payload, `OTP verify failed (${res.status})`));
+  const j = await res.json().catch(() => ({}));
+  if (!res.ok || !j?.ok) {
+    const msg = j?.message || j?.error || "Verification failed";
+    throw new Error(msg);
   }
 
-  const supabase = getSupabaseBrowser();
-
-  if (phone) {
-    const { error } = await supabase.auth.verifyOtp({
-      type: 'sms',
-      phone,
-      token: args.code,
-    });
-    if (error) throw error;
-  } else if (email) {
-    const { error } = await supabase.auth.verifyOtp({
-      type: 'email',
-      email,
-      token: args.code,
-    });
-    if (error) throw error;
+  // For phone verification, API returns tokens. For email, your existing flow may set session elsewhere.
+  if (input.phone && j.access_token && j.refresh_token) {
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL as string;
+    const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string;
+    const supabase = createClient(url, anon);
+    await supabase.auth.setSession({ access_token: j.access_token, refresh_token: j.refresh_token });
   }
 
-  const session = await waitForSession(supabase, 20, 250);
-  if (!session) throw new Error('Session not ready. Please try again.');
-
-  const sync = await fetch('/api/auth/sync', {
-    method: 'POST',
-    credentials: 'include',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(session),
-  });
-
-  if (!sync.ok) {
-    const data = await sync.json().catch(() => ({}));
-    throw new Error(readError(data, `Auth sync failed (${sync.status})`));
-  }
+  return j;
 }
