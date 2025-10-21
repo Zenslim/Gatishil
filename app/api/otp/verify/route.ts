@@ -54,6 +54,7 @@ async function readBody(req: NextRequest): Promise<BodyLike> {
   }
 }
 
+/** Extract any phone-like field as string */
 function extractPhone(b: BodyLike): string | null {
   const c: any =
     b.phone ??
@@ -68,13 +69,22 @@ function extractPhone(b: BodyLike): string | null {
   return c ? String(c) : null;
 }
 
-/** +9779x… if Nepal mobile (96/97/98 + 8 digits) or already 977-prefixed */
-function normalizeNepalMobileStrict(rawInput: string | null): string | null {
+/** Canonicalize to E.164 for Nepal (+97798xxxxxxxx) if possible */
+function normalizeNepalE164(rawInput: string | null): string | null {
   if (!rawInput) return null;
   const raw = rawInput.replace(/\D/g, "");
-  if (/^9(6|7|8)\d{8}$/.test(raw)) return `+977${raw}`;
-  if (/^9779(6|7|8)\d{8}$/.test(raw)) return `+${raw}`;
+  if (/^9(6|7|8)\d{8}$/.test(raw)) return `+977${raw}`;         // 98xxxxxxxx → +97798xxxxxxxx
+  if (/^9779(6|7|8)\d{8}$/.test(raw)) return `+${raw}`;         // 97798xxxxxxxx → +97798xxxxxxxx
+  if (/^\+9779(6|7|8)\d{8}$/.test(rawInput)) return rawInput;   // already +97798xxxxxxxx
   return null;
+}
+
+/** Build all DB-match variants: +97798…, 97798…, 98… */
+function allNepalVariants(e164: string): string[] {
+  const digits = e164.replace(/\D/g, ""); // 97798xxxxxxxx
+  const noPlus = digits;                   // 97798xxxxxxxx
+  const ten = digits.slice(3);             // 98xxxxxxxx
+  return [e164, noPlus, ten];
 }
 
 function sha256Hex(s: string) {
@@ -85,8 +95,6 @@ export async function POST(req: NextRequest) {
   const {
     NEXT_PUBLIC_SUPABASE_URL,
     SUPABASE_URL,
-    NEXT_PUBLIC_SUPABASE_ANON_KEY,
-    SUPABASE_ANON_KEY,
     SUPABASE_SERVICE_ROLE_KEY,
     SUPABASE_SERVICE_ROLE,
     OTP_PEPPER,
@@ -103,56 +111,58 @@ export async function POST(req: NextRequest) {
   const codeInput = (body.code || "").trim();
   const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
   const rawPhone = extractPhone(body);
-  const phone = normalizeNepalMobileStrict(rawPhone);
+  const e164 = normalizeNepalE164(rawPhone);
 
   if (!codeInput && !email) {
     return bad("Missing code or email.");
   }
 
-  // Email path: Supabase handles email verification; acknowledge success for flow parity
-  if (email && !phone) {
+  // Email path: handled by Supabase; treat as success for flow parity
+  if (email && !e164) {
     return ok({ channel: "email", verified: true });
   }
 
-  if (!phone) {
+  if (!e164) {
     return bad("Phone OTP is Nepal-only. Use 96/97/98… or +9779…");
   }
+
+  const variants = allNepalVariants(e164); // [+97798…, 97798…, 98…]
 
   try {
     const admin = createClient(supabaseUrl, serviceRole, {
       auth: { persistSession: false, autoRefreshToken: false },
     });
 
-    // latest OTP for phone
+    // Fetch latest OTP among any phone variants
     const { data, error } = await admin
       .from("otps")
-      .select("id, code, code_hash, expires_at, attempt_count, verified_at, consumed_at, created_at")
-      .eq("phone", phone)
+      .select("id, phone, code, code_hash, expires_at, attempt_count, verified_at, consumed_at, created_at")
+      .in("phone", variants)
       .order("created_at", { ascending: false })
       .limit(1);
 
     if (error) {
-      return server("Lookup failed.", { detail: error.message });
+      return server("Lookup failed.", { detail: error.message, variants });
     }
 
     const rec = Array.isArray(data) && data.length ? (data[0] as any) : null;
     if (!rec) {
-      return bad("No code found. Request a new one.");
+      return bad("No code found. Request a new one.", { variants });
     }
 
-    // expired?
+    // Check expiry
     if (rec.expires_at && new Date(rec.expires_at).getTime() < Date.now()) {
       await admin.from("otps").update({ consumed_at: new Date().toISOString() }).eq("id", rec.id);
       return bad("Code expired. Request a new one.");
     }
 
-    // attempt limit
+    // Attempt limit
     const attempts = Number(rec.attempt_count ?? 0);
     if (attempts >= 5) {
       return bad("Too many attempts. Request a new code.");
     }
 
-    // verify: hashed preferred, plaintext fallback
+    // Prefer hash, fallback to plaintext for legacy rows
     const pepper = OTP_PEPPER || "";
     const givenHash = sha256Hex(codeInput + pepper);
     const match =
@@ -169,7 +179,7 @@ export async function POST(req: NextRequest) {
         })
         .eq("id", rec.id);
 
-      return ok({ channel: "sms", verified: true });
+      return ok({ channel: "sms", verified: true, phone_variant: rec.phone });
     } else {
       await admin
         .from("otps")
