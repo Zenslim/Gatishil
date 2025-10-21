@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { normalizeNepalMobile } from "@/lib/auth/phone";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -82,7 +81,16 @@ function extractPhone(body: BodyLike): string | null {
     body.to ??
     body.identifier ??
     "";
-  return candidate || null;
+
+  if (typeof candidate === "number") {
+    return String(candidate);
+  }
+
+  if (typeof candidate === "string") {
+    return candidate;
+  }
+
+  return candidate ? String(candidate) : null;
 }
 
 async function sendAakashSms(
@@ -149,10 +157,38 @@ export async function POST(req: NextRequest) {
   const explicitChannel = (body.channel as Channel | undefined)?.toLowerCase() as
     | Channel
     | undefined;
-  const hasPhone = !!extractPhone(body);
-  const hasEmail = !!(body.email && body.email.trim());
-  const channel: Channel =
-    explicitChannel ?? (hasPhone ? "sms" : hasEmail ? "email" : "email");
+  const { email } = body || {};
+  const rawPhone = extractPhone(body);
+  const emailValue = typeof email === "string" ? email.trim() : "";
+  const hasEmail = emailValue.length > 3;
+  const hasPhone = typeof rawPhone === "string" && rawPhone.trim().length >= 9;
+
+  if (!hasEmail && !hasPhone) {
+    return bad("Either email or phone is required", {
+      receivedKeys: Object.keys(body || {}),
+    });
+  }
+
+  let normalizedPhone: string | null = null;
+  if (hasPhone && rawPhone) {
+    const raw = rawPhone.replace(/\D/g, "");
+    if (/^98\d{8}$/.test(raw)) normalizedPhone = `+977${raw}`;
+    else if (raw.startsWith("977") && /^97798\d{8}$/.test(raw)) normalizedPhone = `+${raw}`;
+    else {
+      return bad("Nepal SMS only. Use a number starting with 98…", {
+        received: rawPhone,
+      });
+    }
+  }
+
+  let channel: Channel;
+  if (explicitChannel === "sms") {
+    channel = "sms";
+  } else if (explicitChannel === "email") {
+    channel = !hasEmail && normalizedPhone ? "sms" : "email";
+  } else {
+    channel = normalizedPhone ? "sms" : "email";
+  }
 
   const siteUrl = (NEXT_PUBLIC_SITE_URL || req.nextUrl.origin || "").replace(
     /\/$/,
@@ -164,9 +200,9 @@ export async function POST(req: NextRequest) {
   });
 
   if (channel === "email") {
-    const email = (body.email ?? "").trim().toLowerCase();
+    const email = emailValue.toLowerCase();
     if (!email) {
-      return bad("Email is required for email OTP.", {
+      return bad("Either email or phone is required", {
         receivedKeys: Object.keys(body || {}),
         hint: "Send JSON { channel:'email', email:'you@example.com' } or form fields 'channel=email&email=...'.",
       });
@@ -197,22 +233,10 @@ export async function POST(req: NextRequest) {
   }
 
   if (channel === "sms") {
-    const rawPhone = extractPhone(body);
-    const normalized = normalizeNepalMobile(rawPhone || "");
+    const normalized = normalizedPhone;
     if (!normalized) {
-      return bad("Invalid phone for Nepal SMS OTP.", {
+      return bad("Nepal SMS only. Use a number starting with 98…", {
         received: rawPhone ?? null,
-        expect:
-          "Use a 10-digit Nepal mobile starting with 96/97/98 (e.g., 9812345678) or prefix with +977.",
-        example: "+9779812345678",
-        acceptedFields: [
-          "phone",
-          "phoneNumber",
-          "mobile",
-          "msisdn",
-          "to",
-          "identifier",
-        ],
       });
     }
 
