@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import crypto from "crypto";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -13,48 +12,62 @@ type BodyLike = Partial<{
   to: string;
   identifier: string;
   email: string;
-  code: string;
+  code: string; // ignored for SMS intake
 }>;
 
-type JsonBody = Record<string, unknown>;
-
-function ok(data: JsonBody = {}) {
-  return NextResponse.json({ ok: true, ...data }, { status: 200 });
+function json(data: any, status = 200) {
+  return NextResponse.json(data, { status });
 }
-function bad(message: string, extra: JsonBody = {}) {
-  return NextResponse.json({ ok: false, message, ...extra }, { status: 400 });
+function bad(message: string, extra: any = {}) {
+  return json({ ok: false, message, ...extra }, 400);
 }
-function server(message: string, extra: JsonBody = {}) {
-  return NextResponse.json({ ok: false, message, ...extra }, { status: 503 });
+function server(message: string, extra: any = {}) {
+  return json({ ok: false, message, ...extra }, 503);
 }
 
 async function readBody(req: NextRequest): Promise<BodyLike> {
+  // Robust body reader: JSON → text(JSON/URLSearchParams) → querystring
   try {
     try {
       const j = (await req.json()) as unknown;
       if (j && typeof j === "object") return j as BodyLike;
     } catch {}
     try {
-      const text = await req.text();
-      if (text) {
+      const t = await req.text();
+      if (t) {
         try {
-          const maybe = JSON.parse(text);
+          const maybe = JSON.parse(t);
           if (maybe && typeof maybe === "object") return maybe as BodyLike;
         } catch {
-          const params = new URLSearchParams(text);
-          if ([...params.keys()].length > 0) return Object.fromEntries(params.entries()) as BodyLike;
+          const p = new URLSearchParams(t);
+          if ([...p.keys()].length) return Object.fromEntries(p.entries()) as BodyLike;
         }
       }
     } catch {}
     const qp = req.nextUrl.searchParams;
-    if (qp && [...qp.keys()].length > 0) return Object.fromEntries(qp.entries()) as BodyLike;
+    if ([...qp.keys()].length) return Object.fromEntries(qp.entries()) as BodyLike;
     return {};
   } catch {
     return {};
   }
 }
 
-/** Extract any phone-like field as string */
+/** Canonical Nepal E.164 (+97798xxxxxxxx). Returns null if invalid/unrecognized. */
+function toNepalE164(anyInput: string | null): string | null {
+  if (!anyInput) return null;
+  const digits = anyInput.replace(/\D/g, "");
+  // 10-digit Nepal mobile → +97798xxxxxxxx (accept 96/97/98)
+  if (/^9(6|7|8)\d{8}$/.test(digits)) return `+977${digits}`;
+  // 977-prefixed → +97798xxxxxxxx
+  if (/^9779(6|7|8)\d{8}$/.test(digits)) return `+${digits}`;
+  // already canonical
+  if (/^\+9779(6|7|8)\d{8}$/.test(anyInput)) return anyInput;
+  // be generous: if starts with 9 and ≥10 digits, take last 10
+  if (/^9\d{9,}$/.test(digits)) return `+977${digits.slice(-10)}`;
+  return null;
+}
+
+/** Pull the first present phone-like field, or null */
 function extractPhone(b: BodyLike): string | null {
   const c: any =
     b.phone ??
@@ -69,137 +82,73 @@ function extractPhone(b: BodyLike): string | null {
   return c ? String(c) : null;
 }
 
-/** Canonicalize to +97798xxxxxxxx if possible */
-function normalizeNepalE164(rawInput: string | null): string | null {
-  if (!rawInput) return null;
-  const raw = rawInput.replace(/\D/g, "");
-  if (/^9(6|7|8)\d{8}$/.test(raw)) return `+977${raw}`;
-  if (/^9779(6|7|8)\d{8}$/.test(raw)) return `+${raw}`;
-  if (/^\+9779(6|7|8)\d{8}$/.test(rawInput)) return rawInput;
-  return null;
-}
-
-/** Build all DB-match variants: +97798…, 97798…, 98… */
-function allNepalVariants(e164: string): string[] {
-  const digits = e164.replace(/\D/g, ""); // 97798xxxxxxxx
-  const noPlus = digits; // 97798xxxxxxxx
-  const ten = digits.slice(3); // 98xxxxxxxx
-  return [e164, noPlus, ten];
-}
-
-function sha256Hex(s: string) {
-  return crypto.createHash("sha256").update(s, "utf8").digest("hex");
-}
-
 export async function POST(req: NextRequest) {
   const {
     NEXT_PUBLIC_SUPABASE_URL,
     SUPABASE_URL,
     SUPABASE_SERVICE_ROLE_KEY,
     SUPABASE_SERVICE_ROLE,
-    OTP_PEPPER, // may be undefined in older deploys
   } = process.env;
 
+  // We use service role because this is a server action that writes to a protected table.
   const supabaseUrl = SUPABASE_URL || NEXT_PUBLIC_SUPABASE_URL || "";
-  const serviceRole = SUPABASE_SERVICE_ROLE_KEY || SUPABASE_SERVICE_ROLE || "";
+  const serviceKey = SUPABASE_SERVICE_ROLE_KEY || SUPABASE_SERVICE_ROLE || "";
 
-  if (!supabaseUrl || !serviceRole) {
-    return server("Server misconfigured for verification.");
+  if (!supabaseUrl || !serviceKey) {
+    return server("Server misconfigured for intake (missing Supabase URL or service role key).");
   }
 
   const body = await readBody(req);
-  const codeInput = String((body.code || "")).trim();
+
+  // If an email-only flow hits this endpoint, accept it as a no-op success for parity.
   const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
+
+  // Primary: phone intake (NO OTP). We just save/refresh the number.
   const rawPhone = extractPhone(body);
-  const e164 = normalizeNepalE164(rawPhone);
+  const e164 = toNepalE164(rawPhone);
 
-  if (!codeInput && !email) {
-    return bad("Missing code or email.");
-  }
-
-  // Email path: handled by Supabase; treat as success for parity
-  if (email && !e164) {
-    return ok({ channel: "email", verified: true });
+  // If no phone but an email is present, treat as email verified success (parity with UI expectations).
+  if (!e164 && email) {
+    return json({ ok: true, mode: "intake", channel: "email", verified: true });
   }
 
   if (!e164) {
-    return bad("Phone OTP is Nepal-only. Use 96/97/98… or +9779…");
+    return bad("Nepal phone is required. Enter 10-digit 98xxxxxxxx (or 96/97) or +97798xxxxxxxx.", {
+      received: rawPhone ?? null,
+    });
   }
 
-  const variants = allNepalVariants(e164); // [+97798…, 97798…, 98…]
-
   try {
-    const admin = createClient(supabaseUrl, serviceRole, {
+    const admin = createClient(supabaseUrl, serviceKey, {
       auth: { persistSession: false, autoRefreshToken: false },
     });
 
-    // Fetch latest OTP among any phone variants
+    // Upsert into dedicated intake table (must exist): public.phone_intakes
+    // Columns expected: phone text (unique), created_at timestamptz default now(), last_seen_at timestamptz default now()
     const { data, error } = await admin
-      .from("otps")
-      .select(
-        "id, phone, code, code_hash, expires_at, attempt_count, verified_at, consumed_at, created_at"
+      .from("phone_intakes")
+      .upsert(
+        { phone: e164, last_seen_at: new Date().toISOString() },
+        { onConflict: "phone" }
       )
-      .in("phone", variants)
-      .order("created_at", { ascending: false })
-      .limit(1);
+      .select("phone, created_at, last_seen_at")
+      .single();
 
     if (error) {
-      return server("Lookup failed.", { detail: error.message, variants });
+      // Most common causes: table/policies missing.
+      return server("Could not record phone.", { detail: error.message });
     }
 
-    const rec = Array.isArray(data) && data.length ? (data[0] as any) : null;
-    if (!rec) {
-      return bad("No code found. Request a new one.", { variants });
-    }
-
-    // Check expiry
-    if (rec.expires_at && new Date(rec.expires_at).getTime() < Date.now()) {
-      await admin
-        .from("otps")
-        .update({ consumed_at: new Date().toISOString() })
-        .eq("id", rec.id);
-      return bad("Code expired. Request a new one.");
-    }
-
-    // Attempt limit
-    const attempts = Number(rec.attempt_count ?? 0);
-    if (attempts >= 5) {
-      return bad("Too many attempts. Request a new code.");
-    }
-
-    // Tolerant match: with pepper, without pepper, or plaintext fallback
-    const pepper = OTP_PEPPER || "";
-    const hashWithPepper = sha256Hex(codeInput + pepper);
-    const hashNoPepper = sha256Hex(codeInput);
-    const plainMatch = !!rec.code && String(rec.code).trim() === codeInput;
-
-    const match =
-      (!!rec.code_hash &&
-        (rec.code_hash === hashWithPepper || rec.code_hash === hashNoPepper)) ||
-      plainMatch;
-
-    if (match) {
-      await admin
-        .from("otps")
-        .update({
-          verified_at: new Date().toISOString(),
-          consumed_at: new Date().toISOString(),
-          attempt_count: attempts + 1,
-        })
-        .eq("id", rec.id);
-
-      return ok({ channel: "sms", verified: true, phone_variant: rec.phone });
-    } else {
-      await admin
-        .from("otps")
-        .update({ attempt_count: attempts + 1 })
-        .eq("id", rec.id);
-
-      return bad("Incorrect code.");
-    }
-  } catch (e: any) {
-    return server("Could not verify code right now.", {
-      detail: e?.message || String(e),
+    return json({
+      ok: true,
+      mode: "intake",
+      channel: "sms",
+      accepted: true,
+      phone: data?.phone ?? e164,
+      created_at: data?.created_at ?? null,
+      last_seen_at: data?.last_seen_at ?? null,
     });
+  } catch (e: any) {
+    return server("Intake failed.", { detail: e?.message || String(e) });
   }
 }
