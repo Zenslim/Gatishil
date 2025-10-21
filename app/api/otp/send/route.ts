@@ -1,4 +1,3 @@
-// app/api/otp/send/route.ts
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import crypto from "crypto";
@@ -12,13 +11,10 @@ const SUPABASE_ANON = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY as string;
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "";
 
-// ─── Aakash (v4) env ───────────────────────────────────────────────────────────
-// POST https://sms.aakashsms.com/sms/v4/send-user
-// Header:  auth-token: <YOUR_TOKEN>
-// Body:    { "to": ["98XXXXXXXX"], "text": ["Hello world"] }
+// ─── Aakash (v4) endpoint ──────────────────────────────────────────────────────
 const AAKASH_URL =
   process.env.AAKASH_SMS_BASE_URL || "https://sms.aakashsms.com/sms/v4/send-user";
-const AAKASH_AUTH_TOKEN = process.env.AAKASH_SMS_AUTH_TOKEN as string; // set in Vercel
+const AAKASH_AUTH_TOKEN = process.env.AAKASH_SMS_AUTH_TOKEN as string;
 const AAKASH_DEBUG_RETURN_CODE =
   process.env.AAKASH_DEBUG_RETURN_CODE === "true" && process.env.NODE_ENV !== "production";
 
@@ -42,9 +38,7 @@ const rand6 = () => Math.floor(100000 + Math.random() * 900000).toString();
 function toAakashLocal(msisdn: string): string | null {
   if (!NEPAL_E164.test(msisdn)) return null;
   const local = msisdn.replace(/^\+977/, "");
-  // Aakash expects local 98xxxxxxxx (10 digits)
-  if (!/^98\d{8}$/.test(local)) return null;
-  return local;
+  return /^98\d{8}$/.test(local) ? local : null;
 }
 
 // Aakash v4 send (JSON) with auth-token header
@@ -57,10 +51,7 @@ async function sendAakashSMS(e164: string, message: string) {
     return { ok: false, status: 400, body: { error: "Invalid Nepal number format for Aakash" } };
   }
 
-  const payload = {
-    to: [local],     // array of local numbers without +977
-    text: [message], // array of text strings
-  };
+  const payload = { to: [local], text: [message] };
 
   try {
     const res = await fetch(AAKASH_URL, {
@@ -74,11 +65,7 @@ async function sendAakashSMS(e164: string, message: string) {
 
     const text = await res.text();
     let body: any = null;
-    try {
-      body = JSON.parse(text);
-    } catch {
-      body = text;
-    }
+    try { body = JSON.parse(text); } catch { body = text; }
 
     return { ok: res.ok, status: res.status, body };
   } catch (e: any) {
@@ -111,22 +98,23 @@ export async function POST(req: Request) {
 
     const now = Date.now();
     if (recent?.created_at && now - new Date(recent.created_at).getTime() < resendSeconds * 1000) {
-      const wait = Math.ceil(
-        resendSeconds - (now - new Date(recent.created_at).getTime()) / 1000
-      );
+      const wait = Math.ceil(resendSeconds - (now - new Date(recent.created_at).getTime()) / 1000);
       return NextResponse.json(
         { ok: false, error: "RESEND_TOO_SOON", message: `Try again in ${wait}s` },
         { status: 429 }
       );
     }
 
-    // Generate + store HASH ONLY
+    // Generate + store HASH ONLY (but satisfy NOT NULL 'code' with a placeholder)
     const code = rand6();
     const codeHash = sha256Hex(code);
     const expiresAt = new Date(now + ttlMinutes * 60 * 1000).toISOString();
 
     const { error: insErr } = await admin.from("otps").insert({
       phone,
+      // NOTE: your table has NOT NULL "code"; we DO NOT store plaintext codes.
+      // We place a harmless placeholder to satisfy NOT NULL until you relax the schema.
+      code: "REDACTED",
       code_hash: codeHash,
       created_at: new Date(now).toISOString(),
       expires_at: expiresAt,
