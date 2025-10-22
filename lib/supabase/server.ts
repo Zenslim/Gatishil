@@ -1,47 +1,45 @@
-// lib/supabase/server.ts
 import { cookies } from 'next/headers';
+import { NextResponse } from 'next/server';
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
 
-/**
- * Single source of truth for server-side Supabase in App Router.
- * - Reads AND writes auth cookies via Next's cookie store.
- * - Works on Node runtime (as used by /app/login and /app/dashboard).
- */
-export function getSupabaseServer() {
-  const cookieStore = cookies();
+export function getSupabaseServer(resp?: NextResponse) {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+  if (!url || !anon) throw new Error('Missing Supabase env');
 
-  return createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        get(name: string) {
-          return cookieStore.get(name)?.value;
-        },
-        set(name: string, value: string, options: CookieOptions) {
-          // Normalize for production (secure, lax, path=/) to keep session visible to /login and /dashboard.
-          cookieStore.set({
-            name,
-            value,
-            ...options,
-            path: options?.path ?? '/',
-            sameSite: (options?.sameSite as CookieOptions['sameSite']) ?? 'lax',
-            secure: options?.secure ?? true,
-          });
-        },
-        remove(name: string, options: CookieOptions) {
-          cookieStore.set({
-            name,
-            value: '',
-            ...options,
-            path: options?.path ?? '/',
-            sameSite: (options?.sameSite as CookieOptions['sameSite']) ?? 'lax',
-            secure: options?.secure ?? true,
-            maxAge: 0,
-            expires: new Date(0),
-          });
-        },
+  // If bound to a Response, write via resp.cookies; else use request-scoped cookies()
+  const writer = resp ? resp.cookies : cookies();
+
+  return createServerClient(url, anon, {
+    cookies: {
+      get(name: string) {
+        const store = cookies();
+        return store.get(name)?.value;
       },
-    }
-  );
+      set(name: string, value: string, options: CookieOptions) {
+        writer.set({
+          name,
+          value,
+          ...options,
+          path: options?.path ?? '/',
+          httpOnly: options?.httpOnly ?? true,
+          sameSite: (options?.sameSite as CookieOptions['sameSite']) ?? 'lax',
+          secure: options?.secure ?? true,
+        });
+      },
+      remove(name: string, options: CookieOptions) {
+        writer.set({
+          name,
+          value: '',
+          ...options,
+          path: options?.path ?? '/',
+          httpOnly: options?.httpOnly ?? true,
+          sameSite: (options?.sameSite as CookieOptions['sameSite']) ?? 'lax',
+          secure: options?.secure ?? true,
+          maxAge: 0,
+          expires: new Date(0),
+        });
+      },
+    },
+  });
 }

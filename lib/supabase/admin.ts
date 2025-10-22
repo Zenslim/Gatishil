@@ -1,16 +1,8 @@
-// lib/supabase/admin.ts
-import 'server-only'; // prevents accidental client import
-import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { createClient } from '@supabase/supabase-js';
 
-function env(key: 'NEXT_PUBLIC_SUPABASE_URL' | 'SUPABASE_SERVICE_ROLE'): string {
-  const v = process.env[key];
-  if (!v) throw new Error(`[supabase-admin] Missing ${key} in environment`);
-  return v;
-}
- 
-export function createAdminClient(): SupabaseClient {
-  const url = env('NEXT_PUBLIC_SUPABASE_URL');
-  const service = env('SUPABASE_SERVICE_ROLE');
-  // admin client = server-only, no session persistence
-  return createClient(url, service, { auth: { persistSession: false, autoRefreshToken: false } });
+export function getSupabaseAdmin() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+  const service = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+  if (!url || !service) throw new Error('Missing Supabase admin env');
+  return createClient(url, service, { auth: { autoRefreshToken: false, persistSession: false } });
 }
