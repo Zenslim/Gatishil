@@ -28,6 +28,7 @@ export async function POST(req: Request) {
   const method = body?.method;
   const user = (body?.user || '').trim().toLowerCase();
   const pin = (body?.pin || '').trim();
+  const next = (body?.next && typeof body.next === 'string') ? body.next : '/dashboard';
   if (!method || !user || !pin) return new NextResponse('Missing fields', { status: 400 });
 
   try {
@@ -51,7 +52,7 @@ export async function POST(req: Request) {
       emailForSession = found.email ?? null;
     }
 
-    // Load PIN factor (must be Argon2id)
+    // Load PIN factor
     const { data: factor, error: factorErr } = await supa
       .from('trusted_factors')
       .select('pin_hash,failed_attempts,locked_until')
@@ -84,14 +85,16 @@ export async function POST(req: Request) {
       .eq('auth_user_id', authUserId)
       .eq('factor_type', 'pin');
 
-    // Mint session via server-side OTP exchange
-    const resp = NextResponse.json({ ok: true });
+    // Mint session via server-side OTP exchange and immediately redirect (server-side)
+    const redirectTo = new URL(next, req.url);
+    const resp = NextResponse.redirect(redirectTo, 303);
     const bound = getSupabaseServer(resp);
 
     if (method === 'email') {
-      const gl = await admin.auth.admin.generateLink({ type: 'magiclink', email: emailForSession! });
+      if (!emailForSession) return new NextResponse('No email on user', { status: 400 });
+      const gl = await admin.auth.admin.generateLink({ type: 'magiclink', email: emailForSession });
       if (!gl?.data?.email_otp) return new NextResponse('Session mint failed', { status: 500 });
-      const verify = await bound.auth.verifyOtp({ type: 'email', email: emailForSession!, token: gl.data.email_otp });
+      const verify = await bound.auth.verifyOtp({ type: 'email', email: emailForSession, token: gl.data.email_otp });
       if (verify.error) return new NextResponse('Verify failed', { status: 500 });
     } else {
       const phone = normalizeNepPhone(user);
