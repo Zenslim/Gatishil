@@ -7,17 +7,6 @@ import { getFriendlySupabaseEmailError } from '@/lib/auth/emailErrorHints';
 
 type Tab = 'phone' | 'email';
 
-async function postJSON(url: string, body: any) {
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-  let data: any = null;
-  try { data = await res.json(); } catch {}
-  return { ok: res.ok, status: res.status, data };
-}
-
 const NEPAL_E164 = /^\+9779[78]\d{8}$/;
 const isEmail = (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
 
@@ -72,12 +61,11 @@ function JoinClientBody() {
     }
     setPhoneSending(true);
     try {
-      const { ok, status, data } = await postJSON('/api/otp/phone/send', { phone: msisdn });
-      if (status === 429) {
-        setError(`Please wait ${data?.wait ?? 30}s before requesting another code.`);
-        return;
-      }
-      if (!ok || data?.ok !== true) throw new Error(data?.message || data?.error || 'Could not send SMS OTP.');
+      const { error } = await supabase.auth.signInWithOtp({
+        phone: msisdn,
+        options: { channel: 'sms' },
+      });
+      if (error) throw new Error(error.message || 'Could not send SMS OTP.');
       setPhoneSentTo(msisdn);
       setPhoneCode('');
       setMessage('We sent a 6-digit code (expires in 5 minutes).');
@@ -95,17 +83,15 @@ function JoinClientBody() {
     resetAlerts();
     setPhoneVerifying(true);
     try {
-      const { ok, data } = await postJSON('/api/otp/phone/verify', {
+      const { data, error } = await supabase.auth.verifyOtp({
         phone: phoneSentTo,
-        code: phoneCode,
+        token: phoneCode,
+        type: 'sms',
       });
-      if (!ok || data?.ok !== true) throw new Error(data?.message || data?.error || 'Invalid or expired code.');
-      const access_token = data?.session?.access_token as string | undefined;
-      const refresh_token = data?.session?.refresh_token as string | undefined;
-      if (!access_token || !refresh_token) {
+      if (error) throw new Error(error.message || 'Invalid or expired code.');
+      if (!data?.session) {
         throw new Error('Could not establish session. Please try again.');
       }
-      await supabase.auth.setSession({ access_token, refresh_token });
       router.replace('/dashboard');
       router.refresh();
     } catch (e: any) {
@@ -150,7 +136,7 @@ function JoinClientBody() {
 
       const { error } = await supabase.auth.signInWithOtp({
         email: addr,
-        options: { shouldCreateUser: true, emailRedirectTo },
+        options: { emailRedirectTo },
       });
       if (error) {
         const friendly = getFriendlySupabaseEmailError(error);

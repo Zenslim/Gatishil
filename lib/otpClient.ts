@@ -6,37 +6,30 @@
 import { getFriendlySupabaseEmailError } from '@/lib/auth/emailErrorHints';
 import { supabase } from '@/lib/supabaseClient';
 
-const PHONE_SEND_ENDPOINT = '/api/otp/phone/send';
-const PHONE_VERIFY_ENDPOINT = '/api/otp/phone/verify';
-
-async function parseJson(res: Response) {
-  try { return await res.json(); } catch { return {}; }
-}
-
 export async function sendPhoneOtp(phone: string) {
-  const res = await fetch(PHONE_SEND_ENDPOINT, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ phone }),
+  const { error } = await supabase.auth.signInWithOtp({
+    phone,
+    options: { channel: 'sms' },
   });
-  const j = await parseJson(res);
-  if (!res.ok || j?.ok !== true) {
-    throw new Error(j?.message || j?.error || 'Could not send phone code');
+  if (error) {
+    throw new Error(error.message || 'Could not send phone code');
   }
-  return j;
+  return { ok: true };
 }
 
 export async function verifyPhoneOtp(phone: string, code: string) {
-  const res = await fetch(PHONE_VERIFY_ENDPOINT, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ phone, code }),
+  const { data, error } = await supabase.auth.verifyOtp({
+    phone,
+    token: code,
+    type: 'sms',
   });
-  const j = await parseJson(res);
-  if (!res.ok || j?.ok !== true) {
-    throw new Error(j?.message || j?.error || 'Invalid or expired code');
+  if (error) {
+    throw new Error(error.message || 'Invalid or expired code');
   }
-  return j;
+  if (!data?.session) {
+    throw new Error('No session returned. Please try again.');
+  }
+  return data;
 }
 
 export async function sendEmailOtp(email: string, redirectOrigin?: string) {
@@ -48,7 +41,7 @@ export async function sendEmailOtp(email: string, redirectOrigin?: string) {
   const emailRedirectTo = `${origin}/onboard?src=join`;
   const { error } = await supabase.auth.signInWithOtp({
     email,
-    options: { shouldCreateUser: true, emailRedirectTo },
+    options: { emailRedirectTo },
   });
   if (error) {
     const friendly = getFriendlySupabaseEmailError(error);

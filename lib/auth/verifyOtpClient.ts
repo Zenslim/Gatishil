@@ -7,34 +7,24 @@ import { supabase } from '@/lib/supabaseClient';
 
 type VerifyInput = { phone?: string; code?: string; email?: string; token?: string };
 
-const PHONE_VERIFY_ENDPOINT = '/api/otp/phone/verify';
-
-async function parseJson(res: Response) {
-  try {
-    return await res.json();
-  } catch {
-    return {};
-  }
-}
-
 export async function verifyOtpAndSync(input: VerifyInput) {
   if (input.phone) {
-    const res = await fetch(PHONE_VERIFY_ENDPOINT, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ phone: input.phone, code: input.code }),
+    const token = input.token ?? input.code;
+    if (!token) {
+      throw new Error('Phone OTP code required.');
+    }
+    const { data, error } = await supabase.auth.verifyOtp({
+      phone: input.phone,
+      token,
+      type: 'sms',
     });
-    const j = await parseJson(res);
-    if (!res.ok || j?.ok !== true) {
-      throw new Error(j?.message || j?.error || 'Verification failed');
+    if (error) {
+      throw new Error(error.message || 'Verification failed');
     }
-    const access_token = j?.session?.access_token as string | undefined;
-    const refresh_token = j?.session?.refresh_token as string | undefined;
-    if (!access_token || !refresh_token) {
-      throw new Error('Could not establish session from phone OTP.');
+    if (!data?.session) {
+      throw new Error('No session returned. Please try again.');
     }
-    await supabase.auth.setSession({ access_token, refresh_token });
-    return j;
+    return { ok: true, provider: 'phone', session: data.session };
   }
 
   if (input.email) {
