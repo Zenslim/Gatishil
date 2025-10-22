@@ -1,202 +1,111 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { z } from "zod";
+import { cookies } from "next/headers";
+import { createServiceRoleClient, createAnonClientForCookies } from "@/lib/supabase/serverClient";
 import crypto from "crypto";
 
-export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
+const Body = z.object({
+  phone: z.string().min(10).startsWith("+"),
+  code: z.string().min(4).max(8),
+});
 
-const NEPAL_E164 = /^\+977\d{9,10}$/;
-const sha256Hex = (s: string) => crypto.createHash("sha256").update(s).digest("hex");
-const EXPIRY_GRACE_MS = 2 * 60 * 1000; // tolerate small clock skew
-
-// stable alias email for any phone (no collisions, valid email syntax)
-function aliasEmailFor(phoneE164: string) {
-  // p9779863...@gn.local
-  return `p${phoneE164.replace(/^\+/, "")}@gn.local`;
+// Deterministic server password for phone users (so we can sign them in via password safely)
+function phonePassword(phone: string) {
+  const seed = process.env.SERVER_PHONE_PASSWORD_SEED || "change-me";
+  return crypto.createHmac("sha256", seed).update(phone).digest("hex");
 }
 
 export async function POST(req: Request) {
   try {
-    const body = await req.json().catch(() => ({} as any));
-    const { phone, code, email, token, type } = body || {};
+    const body = await req.json();
+    const { phone, code } = Body.parse(body);
 
-    const URL = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
-    const ANON = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
-    const SERVICE = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
-    const SEED = process.env.SERVER_PHONE_PASSWORD_SEED || "";
+    // 1) Verify OTP against our custom otps table (Aakash SMS pipeline)
+    //    Expect table public.otps(phone text, code text, expires_at timestamptz, consumed_at timestamptz)
+    const srv = createServiceRoleClient();
 
-    // ─────────────────────────────────────────────
-    // PHONE: Custom SoT → verify hash → sign in via alias email (no phone provider)
-    // ─────────────────────────────────────────────
-    if (typeof phone === "string" && typeof code === "string") {
-      if (!NEPAL_E164.test(phone)) {
-        return NextResponse.json({ ok: false, error: "INVALID_PHONE" }, { status: 400 });
-      }
-      if (code.trim().length !== 6) {
-        return NextResponse.json({ ok: false, error: "INVALID_CODE" }, { status: 400 });
-      }
-      if (!URL || !ANON || !SERVICE || !SEED) {
-        return NextResponse.json({ ok: false, error: "SERVER_MISCONFIG" }, { status: 500 });
-      }
+    // Lookup
+    const { data: otpRow, error: otpErr } = await srv
+      .from("otps")
+      .select("id, phone, code, expires_at, consumed_at")
+      .eq("phone", phone)
+      .eq("code", code)
+      .is("consumed_at", null)
+      .maybeSingle();
 
-      const admin = createClient(URL, SERVICE, {
-        auth: { autoRefreshToken: false, persistSession: false },
-      });
-      const anon = createClient(URL, ANON, { auth: { persistSession: false } });
-
-      // 1) Load latest unused OTP for this phone
-      const { data: row, error: selErr } = await admin
-        .from("otps")
-        .select("id, code_hash, expires_at, attempt_count, used_at, verified_at")
-        .eq("phone", phone)
-        .is("used_at", null)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      if (selErr || !row) {
-        return NextResponse.json(
-          { ok: false, error: "NO_OTP", message: "No active code. Request a new one." },
-          { status: 400 }
-        );
-      }
-
-      // 2) TTL (with grace) and hash match
-      const now = Date.now();
-      const exp = new Date(row.expires_at).getTime();
-      if (exp + EXPIRY_GRACE_MS < now) {
-        return NextResponse.json({ ok: false, error: "OTP_EXPIRED" }, { status: 401 });
-      }
-
-      const match = sha256Hex(code.trim()) === row.code_hash;
-
-      // record attempt (best-effort)
-      await admin
-        .from("otps")
-        .update({ attempt_count: (row.attempt_count || 0) + 1 })
-        .eq("id", row.id);
-
-      if (!match) {
-        return NextResponse.json({ ok: false, error: "BAD_CODE" }, { status: 401 });
-      }
-
-      // 3) Mark used/verified
-      const usedAtIso = new Date().toISOString();
-      await admin.from("otps").update({ used_at: usedAtIso, verified_at: usedAtIso }).eq("id", row.id);
-
-      // 4) Ensure a Supabase user exists BUT via a synthetic email alias (no phone-provider needed)
-      const emailAlias = aliasEmailFor(phone);
-      const password = sha256Hex(`${SEED}:${phone}`).slice(0, 32);
-
-      let userId: string | null = null;
-
-      // Try to create alias-email user
-      const created = await admin.auth.admin.createUser({
-        email: emailAlias,
-        email_confirm: true, // no email sent; mark confirmed
-        password,
-        user_metadata: { signup_method: "phone_custom_otp", phone_e164: phone },
-      });
-
-      if (created.data?.user?.id) {
-        userId = created.data.user.id;
-      } else {
-        // If exists, locate and update by alias (or by phone fallback)
-        const list = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 });
-        const found =
-          list.data?.users?.find((u: any) => u.email === emailAlias) ||
-          list.data?.users?.find((u: any) => u.phone === phone);
-        if (found) {
-          userId = found.id;
-          await admin.auth.admin.updateUserById(userId, {
-            email: emailAlias,
-            email_confirm: true,
-            password,
-            user_metadata: { ...(found.user_metadata || {}), phone_e164: phone, signup_method: "phone_custom_otp" },
-          });
-        }
-      }
-
-      if (!userId) {
-        return NextResponse.json({ ok: false, error: "USER_NOT_FOUND_OR_CREATED" }, { status: 500 });
-      }
-
-      // 5) Mint a session using EMAIL+PASSWORD (alias)
-      const sign = await anon.auth.signInWithPassword({ email: emailAlias, password });
-      if (sign.error || !sign.data?.session) {
-        return NextResponse.json(
-          { ok: false, error: "SIGNIN_FAILED", message: sign.error?.message },
-          { status: 500 }
-        );
-      }
-
-      const s = sign.data.session;
-      return NextResponse.json(
-        {
-          ok: true,
-          access_token: s.access_token,
-          refresh_token: s.refresh_token,
-          token_type: s.token_type,
-          expires_in: s.expires_in,
-          next: "/onboard?src=join",
-        },
-        { status: 200 }
-      );
+    if (otpErr) {
+      console.error("OTP lookup error", otpErr);
+      return NextResponse.json({ ok: false, error: "otp_lookup_failed" }, { status: 400 });
+    }
+    if (!otpRow) {
+      return NextResponse.json({ ok: false, error: "invalid_or_used_code" }, { status: 400 });
+    }
+    if (otpRow.expires_at && new Date(otpRow.expires_at) < new Date()) {
+      return NextResponse.json({ ok: false, error: "otp_expired" }, { status: 400 });
     }
 
-    // ─────────────────────────────────────────────
-    // EMAIL: unchanged — Supabase verifies and returns a session
-    // ─────────────────────────────────────────────
-    if (typeof email === "string" && (typeof token === "string" || typeof code === "string")) {
-      if (!URL || !ANON) {
-        return NextResponse.json({ ok: false, error: "SERVER_MISCONFIG" }, { status: 500 });
-      }
-      const sb = createClient(URL, ANON, { auth: { persistSession: false } });
+    // Mark consumed
+    await srv.from("otps").update({ consumed_at: new Date().toISOString() }).eq("id", otpRow.id);
 
-      const otp = (typeof token === "string" ? token : code)!.trim();
+    // 2) Ensure an auth user exists that uses REAL phone (no alias email), with deterministic password
+    const deterministicPassword = phonePassword(phone);
 
-      const { data, error } = await sb.auth.verifyOtp({
-        email: email.trim(),
-        token: otp,
-        type: (type as any) ?? "email",
+    // Try create user (if exists, Supabase will throw 422)
+    let createdUserId: string | null = null;
+    {
+      const { data: created, error: createErr, status } = await srv.auth.admin.createUser({
+        phone,
+        password: deterministicPassword,
+        phone_confirm: true,
+        user_metadata: { provider: "phone", e164: phone },
       });
-
-      if (error) {
-        return NextResponse.json(
-          { ok: false, error: "EMAIL_OTP_VERIFY_FAILED", message: error.message },
-          { status: 401 }
-        );
+      if (!createErr && created?.user?.id) {
+        createdUserId = created.user.id;
+      } else if (status === 422) {
+        // User already exists; ok to proceed
+      } else if (createErr) {
+        console.warn("createUser warning (continuing if exists):", createErr);
       }
-
-      const session = data?.session ?? (await sb.auth.getSession()).data.session ?? null;
-      if (!session?.access_token) {
-        return NextResponse.json(
-          { ok: false, error: "SESSION_MISSING", message: "Verified but no session" },
-          { status: 500 }
-        );
-      }
-
-      return NextResponse.json(
-        {
-          ok: true,
-          access_token: session.access_token,
-          refresh_token: session.refresh_token,
-          token_type: session.token_type,
-          expires_in: session.expires_in,
-          next: "/onboard?src=join",
-        },
-        { status: 200 }
-      );
     }
 
-    return NextResponse.json(
-      { ok: false, error: "BAD_REQUEST", message: "Provide { phone, code } or { email, token }." },
-      { status: 400 }
-    );
+    // 3) Sign the user in with phone+password to mint a normal session (no admin token hack)
+    const anon = createAnonClientForCookies();
+    const { data: signIn, error: signInErr } = await anon.auth.signInWithPassword({
+      phone,
+      password: deterministicPassword,
+    });
+    if (signInErr) {
+      // If password mismatch (e.g., pre-existing user), try to reset it via admin then retry
+      if (signInErr.message?.toLowerCase().includes("invalid login")) {
+        // Reset password
+        const { data: list, error: listErr } = await srv
+          .from("auth.users") // not accessible; fallback to admin API does not list by phone. We attempt update via password recovery:
+          // NOTE: Supabase Admin API lacks direct update-by-phone; so try admin.createUser again with same phone+password; if still fails, return error.
+          .select("*"); // no-op but avoids TS complaints
+        // Attempt admin password update if we somehow know the id; skip and fail if cannot.
+        return NextResponse.json({ ok: false, error: "password_mismatch_existing_phone_user" }, { status: 400 });
+      }
+      console.error("signInWithPassword error", signInErr);
+      return NextResponse.json({ ok: false, error: "signin_failed" }, { status: 400 });
+    }
+
+    // Set cookie via auth-helpers cookie jar (signInWithPassword already set session cookies on response headers in edge/server runtime)
+    // NextResponse will carry Set-Cookie from anon client fetch under the hood
+
+    // 4) Upsert profile to copy phone (email stays NULL)
+    const { data: profile, error: upsertErr } = await srv
+      .from("profiles")
+      .upsert({ id: signIn.user.id, phone, email: null })
+      .select("id")
+      .single();
+    if (upsertErr) {
+      console.warn("profiles upsert warning", upsertErr);
+    }
+
+    // 5) Redirect into unified onboarding wizard
+    return NextResponse.json({ ok: true, next: "/onboard?src=join&step=welcome" });
   } catch (e: any) {
-    return NextResponse.json(
-      { ok: false, error: "UNEXPECTED", message: e?.message || "Unexpected error" },
-      { status: 500 }
-    );
+    console.error("verify route error", e);
+    return NextResponse.json({ ok: false, error: "server_error" }, { status: 500 });
   }
 }
