@@ -9,12 +9,6 @@ const NEPAL_E164 = /^\+977\d{9,10}$/;
 const sha256Hex = (s: string) => crypto.createHash("sha256").update(s).digest("hex");
 const EXPIRY_GRACE_MS = 2 * 60 * 1000; // tolerate small clock skew
 
-// stable alias email for any phone (no collisions, valid email syntax)
-function aliasEmailFor(phoneE164: string) {
-  // p9779863...@gn.local
-  return `p${phoneE164.replace(/^\+/, "")}@gn.local`;
-}
-
 export async function POST(req: Request) {
   try {
     const body = await req.json().catch(() => ({} as any));
@@ -26,7 +20,7 @@ export async function POST(req: Request) {
     const SEED = process.env.SERVER_PHONE_PASSWORD_SEED || "";
 
     // ─────────────────────────────────────────────
-    // PHONE: Custom SoT → verify hash → sign in via alias email (no phone provider)
+    // PHONE: Custom SoT → verify hash → ensure Supabase phone user → sign in with password
     // ─────────────────────────────────────────────
     if (typeof phone === "string" && typeof code === "string") {
       if (!NEPAL_E164.test(phone)) {
@@ -84,16 +78,15 @@ export async function POST(req: Request) {
       const usedAtIso = new Date().toISOString();
       await admin.from("otps").update({ used_at: usedAtIso, verified_at: usedAtIso }).eq("id", row.id);
 
-      // 4) Ensure a Supabase user exists BUT via a synthetic email alias (no phone-provider needed)
-      const emailAlias = aliasEmailFor(phone);
+      // 4) Ensure a Supabase user exists with the verified phone number
       const password = sha256Hex(`${SEED}:${phone}`).slice(0, 32);
 
       let userId: string | null = null;
 
-      // Try to create alias-email user
+      // Try to create / confirm phone user
       const created = await admin.auth.admin.createUser({
-        email: emailAlias,
-        email_confirm: true, // no email sent; mark confirmed
+        phone,
+        phone_confirm: true,
         password,
         user_metadata: { signup_method: "phone_custom_otp", phone_e164: phone },
       });
@@ -101,16 +94,20 @@ export async function POST(req: Request) {
       if (created.data?.user?.id) {
         userId = created.data.user.id;
       } else {
-        // If exists, locate and update by alias (or by phone fallback)
+        // If exists, locate and update by phone
         const list = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 });
+        const normalizedPhone = phone.replace(/^\+/, "");
+        const legacyAlias = `p${normalizedPhone}@gn.local`;
         const found =
-          list.data?.users?.find((u: any) => u.email === emailAlias) ||
-          list.data?.users?.find((u: any) => u.phone === phone);
+          list.data?.users?.find((u: any) => u.phone === phone) ||
+          list.data?.users?.find((u: any) => u.email === legacyAlias) ||
+          null;
         if (found) {
           userId = found.id;
           await admin.auth.admin.updateUserById(userId, {
-            email: emailAlias,
-            email_confirm: true,
+            email: null,
+            phone,
+            phone_confirm: true,
             password,
             user_metadata: { ...(found.user_metadata || {}), phone_e164: phone, signup_method: "phone_custom_otp" },
           });
@@ -121,8 +118,8 @@ export async function POST(req: Request) {
         return NextResponse.json({ ok: false, error: "USER_NOT_FOUND_OR_CREATED" }, { status: 500 });
       }
 
-      // 5) Mint a session using EMAIL+PASSWORD (alias)
-      const sign = await anon.auth.signInWithPassword({ email: emailAlias, password });
+      // 5) Mint a session using PHONE+PASSWORD
+      const sign = await anon.auth.signInWithPassword({ phone, password });
       if (sign.error || !sign.data?.session) {
         return NextResponse.json(
           { ok: false, error: "SIGNIN_FAILED", message: sign.error?.message },
@@ -138,7 +135,7 @@ export async function POST(req: Request) {
           refresh_token: s.refresh_token,
           token_type: s.token_type,
           expires_in: s.expires_in,
-          next: "/onboard?src=otp",
+          next: "/onboard?src=join",
         },
         { status: 200 }
       );
@@ -147,15 +144,17 @@ export async function POST(req: Request) {
     // ─────────────────────────────────────────────
     // EMAIL: unchanged — Supabase verifies and returns a session
     // ─────────────────────────────────────────────
-    if (typeof email === "string" && typeof token === "string") {
+    if (typeof email === "string" && (typeof token === "string" || typeof code === "string")) {
       if (!URL || !ANON) {
         return NextResponse.json({ ok: false, error: "SERVER_MISCONFIG" }, { status: 500 });
       }
       const sb = createClient(URL, ANON, { auth: { persistSession: false } });
 
+      const otp = (typeof token === "string" ? token : code)!.trim();
+
       const { data, error } = await sb.auth.verifyOtp({
         email: email.trim(),
-        token: token.trim(),
+        token: otp,
         type: (type as any) ?? "email",
       });
 
@@ -181,7 +180,7 @@ export async function POST(req: Request) {
           refresh_token: session.refresh_token,
           token_type: session.token_type,
           expires_in: session.expires_in,
-          next: "/onboard?src=otp",
+          next: "/onboard?src=join",
         },
         { status: 200 }
       );

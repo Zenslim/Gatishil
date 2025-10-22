@@ -1,14 +1,26 @@
 // lib/auth/verifyOtpClient.ts
-// PHONE uses our API (Custom SoT), EMAIL uses Supabase via API.
-// On success (phone), set session with returned tokens.
+// Both phone and email OTP verification routes return Supabase tokens.
+// The helper sets the browser session and hands the response back to the caller.
 
-import { createClient } from "@supabase/supabase-js";
+import { getSupabaseBrowser } from "@/lib/supabaseClient";
 
-export async function verifyOtpAndSync(input: { phone?: string; code?: string; email?: string; token?: string; type?: string }) {
+type VerifyInput = { phone?: string; code?: string; email?: string; token?: string; type?: string };
+
+export async function verifyOtpAndSync(input: VerifyInput) {
+  const payload: Record<string, unknown> = { ...input };
+
+  if (payload.email && payload.code && !payload.token) {
+    payload.token = payload.code;
+    delete payload.code;
+    if (!payload.type) {
+      payload.type = "email";
+    }
+  }
+
   const res = await fetch("/api/otp/verify", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(input),
+    body: JSON.stringify(payload),
   });
   const j = await res.json().catch(() => ({}));
   if (!res.ok || !j?.ok) {
@@ -16,12 +28,12 @@ export async function verifyOtpAndSync(input: { phone?: string; code?: string; e
     throw new Error(msg);
   }
 
-  // For phone verification, API returns tokens. For email, your existing flow may set session elsewhere.
-  if (input.phone && j.access_token && j.refresh_token) {
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL as string;
-    const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string;
-    const supabase = createClient(url, anon);
-    await supabase.auth.setSession({ access_token: j.access_token, refresh_token: j.refresh_token });
+  if (j.access_token) {
+    const supabase = getSupabaseBrowser();
+    await supabase.auth.setSession({
+      access_token: j.access_token,
+      refresh_token: j.refresh_token ?? null,
+    });
   }
 
   return j;
