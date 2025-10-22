@@ -99,8 +99,9 @@ function JoinClientBody() {
     resetAlerts();
     setPhoneVerifying(true);
     try {
-      await verifyOtpAndSync({ phone: phoneSentTo, code: phoneCode });
-      router.replace('/onboard?src=join');
+      const result = await verifyOtpAndSync({ phone: phoneSentTo, code: phoneCode });
+      const next = typeof result?.next === 'string' ? result.next : '/onboard?src=join';
+      router.replace(next);
     } catch (err: any) {
       setError(err?.message || 'Invalid or expired code.');
     } finally {
@@ -145,8 +146,9 @@ function JoinClientBody() {
     resetAlerts();
     setEmailVerifying(true);
     try {
-      await verifyOtpAndSync({ email: emailSentTo, code: emailCode });
-      router.replace('/onboard?src=otp');
+      const result = await verifyOtpAndSync({ email: emailSentTo, code: emailCode });
+      const next = typeof result?.next === 'string' ? result.next : '/onboard?src=join';
+      router.replace(next);
     } catch (err: any) {
       setError(err?.message || 'Invalid or expired code.');
     } finally {
