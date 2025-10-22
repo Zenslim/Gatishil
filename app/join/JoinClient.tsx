@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
+import { getFriendlySupabaseEmailError } from '@/lib/auth/emailErrorHints';
 
 type Tab = 'phone' | 'email';
 
@@ -151,14 +152,26 @@ function JoinClientBody() {
         email: addr,
         options: { shouldCreateUser: true, emailRedirectTo },
       });
-      if (error) throw new Error(error.message || 'Could not send email OTP.');
+      if (error) {
+        const friendly = getFriendlySupabaseEmailError(error);
+        if (friendly) {
+          console.error('[join/email] Supabase signInWithOtp failed:', error);
+          throw new Error(friendly);
+        }
+        throw new Error(error.message || 'Could not send email OTP.');
+      }
       setEmailSentTo(addr);
       setEmailCode('');
       setMessage('We sent a 6-digit code (expires in 5 minutes).');
       setEmailResendAt(Date.now() + 30_000); // UI throttle to 30s, even if email allows faster
       setTimeout(() => emailCodeRef.current?.focus(), 50);
     } catch (e: any) {
-      setError(e?.message || 'Could not send email OTP.');
+      const friendly = getFriendlySupabaseEmailError(e);
+      if (friendly && friendly !== e?.message) {
+        setError(friendly);
+      } else {
+        setError(e?.message || 'Could not send email OTP.');
+      }
     } finally {
       setEmailSending(false);
     }
@@ -249,7 +262,7 @@ function JoinClientBody() {
                 autoComplete="tel"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
-                placeholder="+97798XXXXXXXX"
+                placeholder="98XXXXXXXX"
                 className={inputClass}
                 aria-label="Phone number"
               />

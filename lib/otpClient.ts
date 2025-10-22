@@ -3,6 +3,7 @@
 // lib/otpClient.ts
 // Channel-specific helpers mirroring the Join experience.
 
+import { getFriendlySupabaseEmailError } from '@/lib/auth/emailErrorHints';
 import { supabase } from '@/lib/supabaseClient';
 
 const PHONE_SEND_ENDPOINT = '/api/otp/phone/send';
@@ -50,6 +51,11 @@ export async function sendEmailOtp(email: string, redirectOrigin?: string) {
     options: { shouldCreateUser: true, emailRedirectTo },
   });
   if (error) {
+    const friendly = getFriendlySupabaseEmailError(error);
+    if (friendly) {
+      console.error('[otpClient/sendEmailOtp] Supabase signInWithOtp failed:', error);
+      throw new Error(friendly);
+    }
     throw new Error(error.message || 'Could not send email code');
   }
   return { ok: true, emailRedirectTo };
