@@ -8,7 +8,7 @@ This control tower distills every moving part of Gatishil Nepal’s authenticati
 | File | Purpose | Key exports / functions | Invoked from | Redirect behavior |
 | --- | --- | --- | --- | --- |
 | `app/join/page.tsx` | Server entry that mounts the client-only join experience. | Default page component. | App Router for `/join`. | Defers to client logic for redirects. |
-| `app/join/JoinClient.tsx` | Implements dual email/phone OTP flows, message UI, and redirect-on-session logic. | `JoinClient`, `sendPhoneOtp`, `verifyPhoneOtp`, `sendEmailOtp`, `verifyEmailOtp`. | Rendered by `/join`; calls `/api/otp/*` and Supabase browser client. | Redirects signed-in users to `/onboard?src=join`; both phone and email verify replace the shared onboarding URL. |
+| `app/join/JoinClient.tsx` | Implements dual email/phone OTP flows, message UI, and redirect-on-session logic. | `JoinClient`, `sendPhoneOtp`, `verifyPhoneOtp`, `sendEmailOtp`, `verifyEmailOtp`. | Rendered by `/join`; phone talks to `/api/otp/phone/*` while email uses the Supabase browser client directly. | Redirects signed-in users to `/onboard?src=join`; phone verify replaces `/dashboard`, email verify replaces `/onboard?src=join`. |
 | `app/verify/page.tsx` | Legacy `/verify` landing now acting as a kill-switch redirect. | Client component. | `/verify`. | Immediately redirects to `/join`. |
 | `app/onboard/page.tsx` | Suspense shell around the onboarding flow. | Default page component with dynamic rendering. | `/onboard`. | None; onboarding flow drives navigation. |
 | `components/OnboardingFlow.tsx` | Orchestrates multi-step onboarding, Supabase code exchange, and final Trust step. | `OnboardingFlow`. | Used by `/onboard`. | Exchanges `code` params for sessions; pushes between steps and finally `/dashboard`. |
@@ -26,8 +26,10 @@ This control tower distills every moving part of Gatishil Nepal’s authenticati
 ### API Routes
 | File | Purpose | Key exports / functions | Called by | Redirect / Side effects |
 | --- | --- | --- | --- | --- |
-| `app/api/otp/send/route.ts` | Sends OTPs (email via Supabase, phone via Aakash) and logs to `public.otps`. | `POST` handler plus helper send/save functions. | `/join` client (phone/email tabs). | Responds with `{ ok, message }`; enforces 60s cooldown and 5‑minute TTL. |
-| `app/api/otp/verify/route.ts` | Validates phone codes against `public.otps`, tracks attempts, and returns Supabase tokens. | `POST` handler. | `/join` verify flow; `verifyOtpAndSync`. | Returns `{ ok, access_token, refresh_token, next }`; phone branch normalises Supabase user to `{ email: null, phone }` then uses the admin tokens endpoint to mint the session. |
+| `app/api/otp/phone/send/route.ts` | Sends Nepal (+97797/98) SMS OTP via Aakash and logs hash-only entries to `public.otps`. | `POST` handler. | `/join` phone tab. | Returns `{ ok, message }`, enforces 30 s resend + 5 min TTL. |
+| `app/api/otp/phone/verify/route.ts` | Verifies hashed phone OTPs, marks them used, and signs the alias email into Supabase. | `POST` handler. | `/join` phone verify flow. | Returns `{ ok, provider: 'phone', session }` with Supabase access/refresh tokens. |
+| `app/api/otp/email/send/route.ts` | Legacy facade kept for backwards compatibility. | `POST` handler. | Any legacy callers. | Always returns 410 with `{ ok: false, error: 'EMAIL_ROUTE_CLIENT_ONLY' }`. |
+| `app/api/otp/email/verify/route.ts` | Legacy facade mirroring the send route stance. | `POST` handler. | Any legacy callers. | Always returns 410 with `{ ok: false, error: 'EMAIL_ROUTE_CLIENT_ONLY' }`. |
 | `app/api/auth/sync/route.ts` | Writes Supabase access/refresh tokens into secure cookies (plus legacy JSON). | `OPTIONS`, `POST`. | Login flows, TrustStep, Supabase browser sync. | No redirect; response `{ ok: true }` with Set-Cookie. |
 
 ### Shared Libraries & Utilities
@@ -37,7 +39,7 @@ This control tower distills every moving part of Gatishil Nepal’s authenticati
 | `lib/supabase/browser.ts` | Creates singleton browser client and mirrors tokens into cookies. | `getSupabaseBrowser`, `supabase`. | Login & onboarding UIs. | Syncs via `/api/auth/sync` on sign-in/refresh. |
 | `lib/supabase/server.ts` | SSR Supabase client respecting modern & legacy cookies. | `getSupabaseServer`. | `/dashboard`. | Reads `sb-*` cookies, falls back to legacy JSON. |
 | `lib/supabaseServer.ts` | Older server helper with writeable cookies. | `getServerSupabase`. | `/login`. | Supports legacy cookie decoding. |
-| `lib/auth/verifyOtpClient.ts` | Browser helper that checks `/api/otp/verify`, then seeds the Supabase browser client and syncs cookies. | `verifyOtpAndSync`. | `/join`, `/login`. | Calls `/api/otp/verify`, sets session via `getSupabaseBrowser`, triggers `/api/auth/sync`. |
+| `lib/auth/verifyOtpClient.ts` | Legacy browser helper for the old unified `/api/otp/verify` endpoint. | `verifyOtpAndSync`. | *(unused after OTP lane split)*. | Retained for reference; new flows call Supabase directly for email and `/api/otp/phone/verify` for SMS. |
 | `lib/auth/waitForSession.ts` | Polls Supabase until a session appears. | `waitForSession`. | `verifyOtpAndSync`, `/join` email flow. | Returns tokens for cookie sync. |
 | `lib/auth/next.ts` | Sanitizes `next` redirect values. | `getValidatedNext`. | `/login` client. | Blocks external redirects. |
 | `lib/auth/validate.ts` | Shared identifier helpers (legacy). | `isPhone`, `isEmail`, `maskIdentifier`. | *(deprecated)*. | Left for potential reuse; not referenced in current flow. |
@@ -66,10 +68,10 @@ This control tower distills every moving part of Gatishil Nepal’s authenticati
 
 | User action | Has session? | Identifier status (+977 / email) | Code valid? | Attempts remaining | PIN / device trust | Cookies synced? |
 | --- | --- | --- | --- | --- | --- | --- |
-| Send phone OTP (`/join`) | Existing session triggers instant move to `/onboard?src=join`. | Normalised to `+97798…` or rejection message. | n/a | n/a | n/a | Persists to `public.otps`, enforces 60 s cooldown and 5 min TTL. |
-| Verify phone OTP (`/join`) | Requires matching record in `public.otps`. | Phone only. | Match → `/onboard?src=join`; mismatch → attempt++ with error toast. | Locks after 5 attempts per OTP. | n/a | `verifyOtpAndSync` calls Supabase `verifyOtp` then `/api/auth/sync`. |
-| Send email OTP (`/join`) | Existing session rerouted before action. | Email only. | n/a | n/a | n/a | API invokes `supabase.auth.signInWithOtp`, UI starts 60 s resend timer. |
-| Verify email OTP (`/join`) | `verifyOtpAndSync` handles Supabase verification + cookie sync. | Email only. | Valid code → replace `/onboard?src=join`; invalid → error toast. | Supabase handles attempts internally. | n/a | Always posts tokens to `/api/auth/sync`. |
+| Send phone OTP (`/join`) | Existing session triggers instant move to `/onboard?src=join`. | Normalised to `+97797/98…` or rejection message. | n/a | n/a | n/a | Persists to `public.otps`, enforces 30 s cooldown and 5 min TTL. |
+| Verify phone OTP (`/join`) | Requires matching record in `public.otps`. | Phone only. | Match → `/dashboard`; mismatch → error toast, OTP remains unused. | Locks after 5 minutes (TTL) or once consumed. | n/a | API response includes Supabase tokens; Join client sets session then refreshes router. |
+| Send email OTP (`/join`) | Existing session rerouted before action. | Email only. | n/a | n/a | n/a | Browser calls `supabase.auth.signInWithOtp`; UI mirrors 30 s resend timer. |
+| Verify email OTP (`/join`) | Supabase browser client validates OTP and seeds session. | Email only. | Valid code → replace `/onboard?src=join`; invalid → error toast. | Supabase handles attempts internally. | n/a | `supabase.auth.verifyOtp` resolves locally; cookie sync handled by browser client listener. |
 | Name & face “Continue” | Requires Supabase session to upload; absence throws “No session”. | n/a | n/a | n/a | n/a | Successful save leaves user on `/onboard?step=roots`. |
 | Roots “Continue” | Needs Supabase session for profile update. | Chooses Nepal/Abroad meta. | n/a | n/a | n/a | Remains on `/onboard`, pushes to `step=atmadisha` on save. |
 | Ātma Diśā finish | Session required to persist profile traits. | n/a | n/a | n/a | n/a | Calls `onDone` to enter Trust step; no redirect. |
@@ -106,16 +108,18 @@ sequenceDiagram
     participant SB as Supabase Auth
     participant ST as LocalStorage / Cookies
 
-    B->>API: POST /api/otp/send { phone/email }
-    API->>SB: signInWithOtp / service insert
-    SB-->>API: OTP issued (email or SMS)
-    API-->>B: { ok, message }
+    B->>API: POST /api/otp/phone/send { phone }
+    API->>SB: Service role insert into `public.otps`
+    API-->>B: { ok, message, ttlMinutes }
 
-    B->>API: POST /api/otp/verify { phone/email, code/token }
-    API->>API: Check `public.otps` row + attempts
-    API-->>B: { ok, access_token, refresh_token, next }
+    B->>SB: auth.signInWithOtp({ email })
+    SB-->>B: OTP dispatched via Supabase infrastructure
+
+    B->>API: POST /api/otp/phone/verify { phone, code }
+    API->>API: Check `public.otps` hash + TTL
+    API-->>B: { ok, provider: phone, session }
     B->>SB: auth.setSession({ access_token, refresh_token })
-    SB-->>B: session stored
+    SB-->>B: session stored & listeners trigger cookie sync
     B->>API: POST /api/auth/sync { access_token, refresh_token }
     API->>ST: Set-Cookie sb-access-token / sb-refresh-token
     API-->>B: { ok: true }
@@ -135,10 +139,12 @@ sequenceDiagram
 ### Data Contract Table
 | Name | Shape | Set by | Consumed by | Notes |
 | --- | --- | --- | --- | --- |
-| `/api/otp/send` request | `{ phone?: string, email?: string, identifier?: string }` | Join client | OTP send route | Rejects non-`+977` phones; email goes straight to Supabase OTP. |
-| `/api/otp/send` response | `{ ok: boolean, channel?: 'sms'|'email', message: string }` | OTP send route | Join client UI | Sets success/error toast; no redirects. |
-| `/api/otp/verify` request | `{ phone?: string, code?: string, email?: string, token?: string, type?: string }` | Join verify flow, OTP login helper | OTP verify route | Phone path needs `{ phone, code }`; email path can pass `{ email, token }` or `{ email, code }`. |
-| `/api/otp/verify` response | `{ ok: true, access_token, refresh_token?, next }` | OTP verify route | Join client, `verifyOtpAndSync` | Phone branch normalises Supabase user to `{ email: null, phone }` and generates tokens via the admin endpoint. |
+| `/api/otp/phone/send` request | `{ phone: string }` | Join client (phone tab) | Phone send route | Rejects anything outside `+97797/98…`; enforces 30 s throttle. |
+| `/api/otp/phone/send` response | `{ ok: boolean, message?: string, ttlMinutes?: number, wait?: number }` | Phone send route | Join client UI | Drives resend timer + toast copy. |
+| `/api/otp/phone/verify` request | `{ phone: string, code: string }` | Join client (phone verify) | Phone verify route | Requires six-digit code that matches latest unused hash. |
+| `/api/otp/phone/verify` response | `{ ok: true, provider: 'phone', session: { access_token, refresh_token, expires_in, token_type } }` | Phone verify route | Join client | Tokens feed `supabase.auth.setSession` before redirect. |
+| `/api/otp/email/send` | `{ ok: false, error: 'EMAIL_ROUTE_CLIENT_ONLY' }` | Email send facade | Legacy callers | Always 410 instructing clients to use Supabase browser SDK. |
+| `/api/otp/email/verify` | `{ ok: false, error: 'EMAIL_ROUTE_CLIENT_ONLY' }` | Email verify facade | Legacy callers | Always 410 instructing clients to use Supabase browser SDK. |
 | `/api/auth/sync` request | `{ access_token: string, refresh_token?: string|null }` | Login flows, TrustStep, browser sync | Auth sync route | Fails if `access_token` missing; sets modern + legacy cookies. |
 | Supabase browser storage | `localStorage['gatishil.auth.token']` | Supabase client | Supabase auth refresh logic | Mirrors session for SPA persistence. |
 | Local PIN | `localStorage['gn.local.secret']`, `['gn.local.salt']` | TrustStep | `hasLocalPin`, `unlockWithPin` | AES-GCM encrypted secret derived from PIN. |
@@ -149,7 +155,7 @@ sequenceDiagram
 | Risk | Impact | Evidence | Mitigation |
 | --- | --- | --- | --- |
 | Legacy alias phone accounts | Historical phone sign-ins stored pseudo `@gn.local` emails. | Prior implementation minted Supabase users via alias emails. | Current verifier nulls the email, sets the phone, and refreshes metadata; schedule one-time cleanup for members who never re-verify. |
-| Email OTP path skips cookie sync | User reaches `/onboard` but server pages lack tokens. | Email verify redirects without calling `/api/auth/sync`.【F:app/join/JoinClient.tsx†L224-L239】 | Invoke `verifyOtpAndSync` or manual cookie sync before redirect. |
+| Email OTP path skips cookie sync | User reaches `/onboard` but server pages lack tokens. | Email verify previously bypassed cookie sync. | New client flow uses `supabase.auth.verifyOtp` and browser sync listener to POST `/api/auth/sync`.【F:app/join/JoinClient.tsx†L129-L180】【F:lib/supabase/browser.ts†L7-L44】 |
 | Onboarding open to anonymous users | Unauthenticated visitors can hit `/onboard` and trigger storage errors. | Middleware treats `/onboard` as public.【F:middleware.ts†L13-L22】 | Add guard to redirect to `/join` when no Supabase session. |
 | TrustStep fails without Supabase session | Cookie sync throws “No active session”, stranding users. | TrustStep fetches session before sync.【F:components/onboard/TrustStep.jsx†L8-L56】 | Surface retry, or ensure session establishment earlier. |
 | Local PIN only client-side | No server validation; stolen device bypass possible. | PIN stored solely in localStorage.【F:lib/localPin.ts†L22-L49】 | Consider server challenge or WebAuthn enforcement. |
@@ -158,4 +164,4 @@ sequenceDiagram
 
 ## How to debug safely
 
-When a login attempt fails, start at `/join`: confirm `/api/otp/send` responses and ensure the correct table receives the OTP. Follow the flow through `/api/otp/verify` (checking that tokens return and cookies sync), then step into `/onboard` to verify profile writes, TrustStep PIN storage, and `/api/auth/sync` calls; finish by inspecting middleware + `/dashboard` server logs. This map lets you trace each hop without guessing which module redirects next or which storage layer (Supabase, cookies, local PIN) might be stale.
+When a login attempt fails, start at `/join`: confirm `/api/otp/phone/send` responses and ensure the correct table receives the OTP. Follow the phone lane through `/api/otp/phone/verify` (checking that tokens return and cookies sync) while validating that email requests reach Supabase directly, then step into `/onboard` to verify profile writes, TrustStep PIN storage, and `/api/auth/sync` calls; finish by inspecting middleware + `/dashboard` server logs. This map lets you trace each hop without guessing which module redirects next or which storage layer (Supabase, cookies, local PIN) might be stale.

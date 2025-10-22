@@ -1,41 +1,67 @@
+'use client';
+
 // lib/otpClient.ts
-// Unified helpers consistent with Custom SoT for PHONE and native Supabase for EMAIL.
+// Channel-specific helpers mirroring the Join experience.
+
+import { supabase } from '@/lib/supabaseClient';
+
+const PHONE_SEND_ENDPOINT = '/api/otp/phone/send';
+const PHONE_VERIFY_ENDPOINT = '/api/otp/phone/verify';
+
+async function parseJson(res: Response) {
+  try { return await res.json(); } catch { return {}; }
+}
 
 export async function sendPhoneOtp(phone: string) {
-  const res = await fetch("/api/otp/send", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
+  const res = await fetch(PHONE_SEND_ENDPOINT, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ phone }),
   });
-  const j = await res.json().catch(() => ({}));
-  if (!res.ok || !j?.ok) {
-    throw new Error(j?.message || j?.error || "Could not send phone code");
+  const j = await parseJson(res);
+  if (!res.ok || j?.ok !== true) {
+    throw new Error(j?.message || j?.error || 'Could not send phone code');
   }
-  return j; // { ok:true, mode:"phone_otp_sent", resend_after_seconds, [debug_code] }
+  return j;
 }
 
 export async function verifyPhoneOtp(phone: string, code: string) {
-  const res = await fetch("/api/otp/verify", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
+  const res = await fetch(PHONE_VERIFY_ENDPOINT, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ phone, code }),
   });
-  const j = await res.json().catch(() => ({}));
-  if (!res.ok || !j?.ok) {
-    throw new Error(j?.message || j?.error || "Invalid or expired code");
+  const j = await parseJson(res);
+  if (!res.ok || j?.ok !== true) {
+    throw new Error(j?.message || j?.error || 'Invalid or expired code');
   }
-  return j; // contains tokens + next
+  return j;
 }
 
-export async function sendEmailOtp(email: string, redirectTo?: string) {
-  const res = await fetch("/api/otp/send", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, redirectTo }),
+export async function sendEmailOtp(email: string, redirectOrigin?: string) {
+  const origin =
+    redirectOrigin ||
+    (typeof window !== 'undefined' && window.location?.origin
+      ? window.location.origin
+      : 'https://www.gatishilnepal.org');
+  const emailRedirectTo = `${origin}/onboard?src=join`;
+  const { error } = await supabase.auth.signInWithOtp({
+    email,
+    options: { shouldCreateUser: true, emailRedirectTo },
   });
-  const j = await res.json().catch(() => ({}));
-  if (!res.ok || !j?.ok) {
-    throw new Error(j?.message || j?.error || "Could not send email code");
+  if (error) {
+    throw new Error(error.message || 'Could not send email code');
   }
-  return j; // { ok:true, mode:"email_otp_sent" }
+  return { ok: true, emailRedirectTo };
+}
+
+export async function verifyEmailOtp(email: string, token: string) {
+  const { data, error } = await supabase.auth.verifyOtp({ email, token, type: 'email' });
+  if (error) {
+    throw new Error(error.message || 'Invalid or expired code');
+  }
+  if (!data?.session) {
+    throw new Error('No session returned. Please try again.');
+  }
+  return data;
 }
