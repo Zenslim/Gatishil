@@ -3,7 +3,7 @@ import { cookies } from "next/headers";
 import { createClient as createBasicClient, SupabaseClient } from "@supabase/supabase-js";
 import crypto from "crypto";
 
-/** ---- helpers ---- **/
+/* ---------- Supabase helpers ---------- */
 function srv(): SupabaseClient {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -14,89 +14,103 @@ function anon(): SupabaseClient {
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
   return createBasicClient(url, key, { auth: { persistSession: false } });
 }
+
+/* ---------- Validation helpers ---------- */
 function isDigits(s: string) { return /^[0-9]+$/.test(s); }
 function isCode(s: string) { return typeof s === "string" && s.length >= 4 && s.length <= 8 && isDigits(s); }
-function isE164ish(s: string) { return typeof s === "string" && /^\+?[0-9]{10,15}$/.test(s.replace(/\s+/g,"")); }
+function isE164ish(s: string) { return typeof s === "string" && /^\+?[0-9]{9,15}$/.test(s.replace(/\s+/g,"")); }
 
-function normalizeCandidates(rawPhone: string) {
-  // Be generous: try common variants seen in Aakash + user input
-  const p = (rawPhone || "").trim().replace(/\s+/g, "");
-  const noPlus = p.replace(/^\+/, "");
-  const noPlusNo977 = noPlus.replace(/^977/, "");      // "+97798..." -> "98..."
-  const localLeading0 = noPlusNo977.replace(/^9/, "0"); // "98..." -> "0 8..." (common local)
-  const unique = Array.from(new Set([p, noPlus, noPlusNo977, localLeading0]));
-  return unique.filter(Boolean);
+/* ---------- Phone normalization ---------- */
+/** Keep only digits. Prefer last 10 GSM digits for Nepal matching. */
+function normalizeToLocal10Digits(input: string): string {
+  const digits = (input || "").replace(/\D+/g, "");
+  // Common cases: +97798XXXXXXXX -> 98XXXXXXXXXX; 97798… -> 98…; 0XXXXXXXXX -> XXXXXXXXX
+  let d = digits;
+  if (d.startsWith("977")) d = d.slice(3);      // drop country code if present
+  if (d.length === 11 && d.startsWith("0")) d = d.slice(1); // drop leading 0 local form
+  // If still longer than 10, keep the last 10 (SIM identifiers are 10 for Nepali mobiles)
+  if (d.length > 10) d = d.slice(-10);
+  return d;
+}
+function toE164(phone: string): string {
+  const d = (phone || "").replace(/\D+/g, "");
+  if (d.startsWith("977")) return `+${d}`;
+  if (d.length === 10) return `+977${d}`;
+  if (d.length === 11 && d.startsWith("0")) return `+977${d.slice(1)}`;
+  // Fallback: assume already has country code but missing '+'
+  return d.startsWith("9") && d.length > 10 ? `+${d}` : `+${d}`;
 }
 
+/* ---------- Password derivation (deterministic) ---------- */
 function phonePassword(phoneE164: string) {
   const seed = process.env.SERVER_PHONE_PASSWORD_SEED || "change-me";
   return crypto.createHmac("sha256", seed).update(phoneE164).digest("hex");
 }
 
-/** ---- route ---- **/
+/* ---------- Route ---------- */
 export async function POST(req: Request) {
+  // Optional debug: add ?debug=1 to the URL to get more verbose error messages during testing
+  const url = new URL(req.url);
+  const debug = url.searchParams.get("debug") === "1";
+
   try {
     const body = await req.json().catch(() => ({}));
-    const rawPhone = String(body?.phone ?? "");
+    const rawPhone = String(body?.phone ?? "").trim();
     const code = String(body?.code ?? "").trim();
 
+    // Basic format guards
     if (!isE164ish(rawPhone)) {
-      return NextResponse.json({ ok: false, error: "bad_phone_format" }, { status: 400 });
+      return NextResponse.json({ ok: false, error: "bad_phone_format", detail: debug ? { rawPhone } : undefined }, { status: 400 });
     }
     if (!isCode(code)) {
-      return NextResponse.json({ ok: false, error: "bad_code_format" }, { status: 400 });
+      return NextResponse.json({ ok: false, error: "bad_code_format", detail: debug ? { code } : undefined }, { status: 400 });
     }
 
-    const candidates = normalizeCandidates(rawPhone);
     const db = srv();
 
-    // 1) Try exact match first, then tolerant fallbacks
-    //    We only accept non-consumed and non-expired rows.
-    const selectCols = "id, phone, code, expires_at, consumed_at";
-    let found: any = null;
-    let lastErr: any = null;
+    /* 1) Pull candidate OTP rows by CODE first, not by phone (avoid strict SQL equality on phone) */
+    // Columns: id, phone, code, expires_at, consumed_at (created_at optional)
+    const { data: rows, error: selErr } = await db
+      .from("otps")
+      .select("id, phone, code, expires_at, consumed_at")
+      .eq("code", code)
+      .is("consumed_at", null);
 
-    // helper to check a single phone candidate
-    async function tryOne(phoneValue: string) {
-      const q = db.from("otps")
-        .select(selectCols)
-        .eq("code", code)
-        .eq("phone", phoneValue)
-        .is("consumed_at", null);
-      // If your table has created_at, prefer latest: .order("created_at", { ascending: false })
-      const { data, error } = await q;
-      if (error) { lastErr = error; return null; }
-      if (Array.isArray(data) && data.length > 0) return data[0];
-      return null;
+    if (selErr) {
+      if (debug) console.error("OTP select error", selErr);
+      return NextResponse.json({ ok: false, error: "otp_lookup_failed" }, { status: 400 });
     }
-
-    // strict first: the raw phone as sent
-    found = await tryOne(rawPhone);
-    // then try tolerant variants
-    for (const cand of candidates) {
-      if (found) break;
-      if (cand === rawPhone) continue;
-      found = await tryOne(cand);
-    }
-
-    if (!found) {
-      // nothing matched: either wrong code, already consumed, or phone formatting mismatch
+    if (!rows || rows.length === 0) {
       return NextResponse.json({ ok: false, error: "invalid_or_used_code" }, { status: 400 });
     }
 
-    // expiry check
-    if (found.expires_at && new Date(found.expires_at) < new Date()) {
-      return NextResponse.json({ ok: false, error: "otp_expired" }, { status: 400 });
+    /* 2) Tolerant phone match in JS */
+    const want10 = normalizeToLocal10Digits(rawPhone);
+    let found: any = null;
+
+    for (const r of rows) {
+      const row10 = normalizeToLocal10Digits(String(r.phone ?? ""));
+      // Also reject expired ones even if present
+      const isExpired = r.expires_at ? new Date(r.expires_at) < new Date() : false;
+      if (!isExpired && row10 && want10 && row10 === want10) {
+        found = r;
+        break;
+      }
     }
 
-    // 2) Consume the OTP atomically (idempotent)
+    if (!found) {
+      return NextResponse.json(
+        { ok: false, error: "invalid_or_used_code", detail: debug ? { want10, tried: rows.map(r => normalizeToLocal10Digits(String(r.phone ?? ""))) } : undefined },
+        { status: 400 }
+      );
+    }
+
+    /* 3) Consume OTP (idempotent by id) */
     await db.from("otps").update({ consumed_at: new Date().toISOString() }).eq("id", found.id);
 
-    // 3) Ensure a real phone user exists (NO alias email), confirm phone, deterministic password
-    //    Use an E.164 shape for password seed; if rawPhone lacks '+', prepend '+' now.
-    const phoneE164 = rawPhone.startsWith("+") ? rawPhone : `+${rawPhone}`;
+    /* 4) Ensure real phone user (no alias email) */
+    const phoneE164 = toE164(rawPhone);
     const deterministicPassword = phonePassword(phoneE164);
-
     const created = await db.auth.admin.createUser({
       phone: phoneE164,
       password: deterministicPassword,
@@ -104,18 +118,19 @@ export async function POST(req: Request) {
       user_metadata: { provider: "phone", e164: phoneE164 },
     });
     if (created.error && created.status !== 422) {
-      // 422 = already exists; anything else we log and continue
-      console.warn("admin.createUser warning", created.error);
+      if (debug) console.warn("admin.createUser warning", created.error);
+      // continue; user may already exist with different password
     }
 
-    // 4) Sign in and set cookies manually (no auth-helpers dependency)
+    /* 5) Sign in and set cookies manually */
     const pub = anon();
     const { data: signIn, error: signInErr } = await pub.auth.signInWithPassword({
       phone: phoneE164,
       password: deterministicPassword,
     });
     if (signInErr || !signIn?.session) {
-      console.error("signInWithPassword error", signInErr);
+      if (debug) console.error("signInWithPassword error", signInErr);
+      // If there’s an existing user with a different password, we surface a clear error
       return NextResponse.json({ ok: false, error: "password_mismatch_existing_phone_user" }, { status: 400 });
     }
 
@@ -130,9 +145,11 @@ export async function POST(req: Request) {
       maxAge: 60 * 60 * 24 * 28,
     });
 
-    // 5) Ensure profile reflects real phone, NULL email
-    await db.from("profiles")
-      .upsert({ id: signIn.user.id, phone: phoneE164, email: null }, { onConflict: "id" });
+    /* 6) Ensure profile mirrors real phone, email NULL */
+    await db.from("profiles").upsert(
+      { id: signIn.user.id, phone: phoneE164, email: null },
+      { onConflict: "id" }
+    );
 
     return NextResponse.json({ ok: true, next: "/onboard?src=join&step=welcome" });
   } catch (e: any) {
