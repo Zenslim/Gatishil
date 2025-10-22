@@ -7,7 +7,6 @@ export function getSupabaseServer(resp?: NextResponse) {
   const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
   if (!url || !anon) throw new Error('Missing Supabase env');
 
-  // If bound to a Response, write via resp.cookies; else use request-scoped cookies()
   const writer = resp ? resp.cookies : cookies();
 
   return createServerClient(url, anon, {
