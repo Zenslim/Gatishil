@@ -17,7 +17,7 @@ async function postJSON(url: string, body: any) {
   return { ok: res.ok, status: res.status, data };
 }
 
-const NEPAL_E164 = /^\+977\d{9,10}$/;
+const NEPAL_E164 = /^\+9779[78]\d{8}$/;
 const isEmail = (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
 
 function JoinClientBody() {
@@ -99,7 +99,14 @@ function JoinClientBody() {
         code: phoneCode,
       });
       if (!ok || data?.ok !== true) throw new Error(data?.message || data?.error || 'Invalid or expired code.');
+      const access_token = data?.session?.access_token as string | undefined;
+      const refresh_token = data?.session?.refresh_token as string | undefined;
+      if (!access_token || !refresh_token) {
+        throw new Error('Could not establish session. Please try again.');
+      }
+      await supabase.auth.setSession({ access_token, refresh_token });
       router.replace('/dashboard');
+      router.refresh();
     } catch (e: any) {
       setError(e?.message || 'Invalid or expired code.');
     } finally {
@@ -134,14 +141,17 @@ function JoinClientBody() {
     }
     setEmailSending(true);
     try {
-      const { ok, data } = await postJSON('/api/otp/email/send', {
+      const redirectBase =
+        typeof window !== 'undefined' && window.location?.origin
+          ? window.location.origin
+          : 'https://www.gatishilnepal.org';
+      const emailRedirectTo = `${redirectBase}/onboard?src=join`;
+
+      const { error } = await supabase.auth.signInWithOtp({
         email: addr,
-        redirectTo:
-          typeof window !== 'undefined'
-            ? `${window.location.origin}/onboard?src=join`
-            : 'https://www.gatishilnepal.org/onboard?src=join',
+        options: { shouldCreateUser: true, emailRedirectTo },
       });
-      if (!ok || data?.ok !== true) throw new Error(data?.message || data?.error || 'Could not send email OTP.');
+      if (error) throw new Error(error.message || 'Could not send email OTP.');
       setEmailSentTo(addr);
       setEmailCode('');
       setMessage('We sent a 6-digit code (expires in 5 minutes).');
@@ -159,12 +169,15 @@ function JoinClientBody() {
     resetAlerts();
     setEmailVerifying(true);
     try {
-      const { ok, data } = await postJSON('/api/otp/email/verify', {
+      const { data, error } = await supabase.auth.verifyOtp({
         email: emailSentTo,
         token: emailCode,
+        type: 'email',
       });
-      if (!ok || data?.ok !== true) throw new Error(data?.message || data?.error || 'Invalid or expired code.');
+      if (error) throw new Error(error.message || 'Invalid or expired code.');
+      if (!data?.session) throw new Error('No session returned. Please try again.');
       router.replace('/onboard?src=join');
+      router.refresh();
     } catch (e: any) {
       setError(e?.message || 'Invalid or expired code.');
     } finally {
@@ -228,7 +241,7 @@ function JoinClientBody() {
           {tab === 'phone' && (
             <div>
               <label className="block text-xs text-slate-300/70 mb-2">
-                🇳🇵 +977 — SMS works for Nepali numbers only
+                🇳🇵 +977 — SMS works for Nepali numbers starting with 97 or 98
               </label>
               <input
                 ref={phoneInputRef}
