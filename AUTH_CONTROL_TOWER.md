@@ -27,7 +27,7 @@ This control tower distills every moving part of Gatishil Nepal’s authenticati
 | File | Purpose | Key exports / functions | Called by | Redirect / Side effects |
 | --- | --- | --- | --- | --- |
 | `app/api/otp/send/route.ts` | Sends OTPs (email via Supabase, phone via Aakash) and logs to `public.otps`. | `POST` handler plus helper send/save functions. | `/join` client (phone/email tabs). | Responds with `{ ok, message }`; enforces 60s cooldown and 5‑minute TTL. |
-| `app/api/otp/verify/route.ts` | Validates phone codes against `public.otps`, tracks attempts, and returns Supabase tokens. | `POST` handler. | `/join` verify flow; `verifyOtpAndSync`. | Returns `{ ok, access_token, refresh_token, next }`; phone branch normalises Supabase user to `{ email: null, phone }` before handing tokens back. |
+| `app/api/otp/verify/route.ts` | Validates phone codes against `public.otps`, tracks attempts, and returns Supabase tokens. | `POST` handler. | `/join` verify flow; `verifyOtpAndSync`. | Returns `{ ok, access_token, refresh_token, next }`; phone branch normalises Supabase user to `{ email: null, phone }` then uses the admin tokens endpoint to mint the session. |
 | `app/api/auth/sync/route.ts` | Writes Supabase access/refresh tokens into secure cookies (plus legacy JSON). | `OPTIONS`, `POST`. | Login flows, TrustStep, Supabase browser sync. | No redirect; response `{ ok: true }` with Set-Cookie. |
 
 ### Shared Libraries & Utilities
@@ -138,7 +138,7 @@ sequenceDiagram
 | `/api/otp/send` request | `{ phone?: string, email?: string, identifier?: string }` | Join client | OTP send route | Rejects non-`+977` phones; email goes straight to Supabase OTP. |
 | `/api/otp/send` response | `{ ok: boolean, channel?: 'sms'|'email', message: string }` | OTP send route | Join client UI | Sets success/error toast; no redirects. |
 | `/api/otp/verify` request | `{ phone?: string, code?: string, email?: string, token?: string, type?: string }` | Join verify flow, OTP login helper | OTP verify route | Phone path needs `{ phone, code }`; email path can pass `{ email, token }` or `{ email, code }`. |
-| `/api/otp/verify` response | `{ ok: true, access_token, refresh_token?, next }` | OTP verify route | Join client, `verifyOtpAndSync` | Phone branch normalises Supabase user to `{ email: null, phone }`. |
+| `/api/otp/verify` response | `{ ok: true, access_token, refresh_token?, next }` | OTP verify route | Join client, `verifyOtpAndSync` | Phone branch normalises Supabase user to `{ email: null, phone }` and generates tokens via the admin endpoint. |
 | `/api/auth/sync` request | `{ access_token: string, refresh_token?: string|null }` | Login flows, TrustStep, browser sync | Auth sync route | Fails if `access_token` missing; sets modern + legacy cookies. |
 | Supabase browser storage | `localStorage['gatishil.auth.token']` | Supabase client | Supabase auth refresh logic | Mirrors session for SPA persistence. |
 | Local PIN | `localStorage['gn.local.secret']`, `['gn.local.salt']` | TrustStep | `hasLocalPin`, `unlockWithPin` | AES-GCM encrypted secret derived from PIN. |

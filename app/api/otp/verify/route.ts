@@ -20,7 +20,7 @@ export async function POST(req: Request) {
     const SEED = process.env.SERVER_PHONE_PASSWORD_SEED || "";
 
     // ─────────────────────────────────────────────
-    // PHONE: Custom SoT → verify hash → ensure Supabase phone user → sign in with password
+    // PHONE: Custom SoT → verify hash → ensure Supabase phone user → mint session via admin tokens
     // ─────────────────────────────────────────────
     if (typeof phone === "string" && typeof code === "string") {
       if (!NEPAL_E164.test(phone)) {
@@ -29,14 +29,13 @@ export async function POST(req: Request) {
       if (code.trim().length !== 6) {
         return NextResponse.json({ ok: false, error: "INVALID_CODE" }, { status: 400 });
       }
-      if (!URL || !ANON || !SERVICE || !SEED) {
+      if (!URL || !SERVICE || !SEED) {
         return NextResponse.json({ ok: false, error: "SERVER_MISCONFIG" }, { status: 500 });
       }
 
       const admin = createClient(URL, SERVICE, {
         auth: { autoRefreshToken: false, persistSession: false },
       });
-      const anon = createClient(URL, ANON, { auth: { persistSession: false } });
 
       // 1) Load latest unused OTP for this phone
       const { data: row, error: selErr } = await admin
@@ -118,23 +117,38 @@ export async function POST(req: Request) {
         return NextResponse.json({ ok: false, error: "USER_NOT_FOUND_OR_CREATED" }, { status: 500 });
       }
 
-      // 5) Mint a session using PHONE+PASSWORD
-      const sign = await anon.auth.signInWithPassword({ phone, password });
-      if (sign.error || !sign.data?.session) {
+      // 5) Mint a session for the verified user via the admin tokens endpoint
+      const tokenRes = await fetch(`${URL}/auth/v1/admin/users/${userId}/tokens`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          apikey: SERVICE,
+          Authorization: `Bearer ${SERVICE}`,
+        },
+        body: JSON.stringify({}),
+      });
+
+      const tokenJson = await tokenRes.json().catch(() => ({} as any));
+
+      if (!tokenRes.ok || !tokenJson?.access_token) {
+        const message =
+          tokenJson?.message ||
+          tokenJson?.error_description ||
+          tokenJson?.error ||
+          "Could not create session";
         return NextResponse.json(
-          { ok: false, error: "SIGNIN_FAILED", message: sign.error?.message },
+          { ok: false, error: "SESSION_CREATE_FAILED", message },
           { status: 500 }
         );
       }
 
-      const s = sign.data.session;
       return NextResponse.json(
         {
           ok: true,
-          access_token: s.access_token,
-          refresh_token: s.refresh_token,
-          token_type: s.token_type,
-          expires_in: s.expires_in,
+          access_token: tokenJson.access_token,
+          refresh_token: tokenJson.refresh_token,
+          token_type: tokenJson.token_type,
+          expires_in: tokenJson.expires_in,
           next: "/onboard?src=join",
         },
         { status: 200 }
