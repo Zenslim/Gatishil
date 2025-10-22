@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { createServiceRoleClient, createSupabaseForRoute } from "@/lib/supabase/serverClient";
+import { cookies } from "next/headers";
+import { createServiceRoleClient, createAnonServerClient } from "@/lib/supabase/serverClient";
 import crypto from "crypto";
 
 function isE164Phone(s: string): boolean {
@@ -28,6 +29,7 @@ export async function POST(req: Request) {
 
     const srv = createServiceRoleClient();
 
+    // 1) Validate OTP
     const { data: otpRow, error: otpErr } = await srv
       .from("otps")
       .select("id, phone, code, expires_at, consumed_at")
@@ -49,6 +51,7 @@ export async function POST(req: Request) {
 
     await srv.from("otps").update({ consumed_at: new Date().toISOString() }).eq("id", otpRow.id);
 
+    // 2) Ensure user exists with real phone
     const deterministicPassword = phonePassword(phone);
     const createRes = await srv.auth.admin.createUser({
       phone,
@@ -60,16 +63,41 @@ export async function POST(req: Request) {
       console.warn("admin.createUser warning", createRes.error);
     }
 
-    const supa = createSupabaseForRoute();
-    const { data: signIn, error: signInErr } = await supa.auth.signInWithPassword({
+    // 3) Sign in with anon server client (no cookie persistence here)
+    const anon = createAnonServerClient();
+    const { data: signIn, error: signInErr } = await anon.auth.signInWithPassword({
       phone,
       password: deterministicPassword,
     });
-    if (signInErr) {
+    if (signInErr || !signIn?.session) {
       console.error("signInWithPassword error", signInErr);
       return NextResponse.json({ ok: false, error: "password_mismatch_existing_phone_user" }, { status: 400 });
     }
 
+    // 4) Manually set Supabase cookies for the app (names used by auth-helpers)
+    const access = signIn.session.access_token;
+    const refresh = signIn.session.refresh_token;
+    const accessExpires = new Date(Date.now() + signIn.session.expires_in * 1000);
+    const cookieStore = cookies();
+    const prod = process.env.NODE_ENV === "production";
+    // These cookie names are the conventional ones used by Supabase auth-helpers.
+    cookieStore.set("sb-access-token", access, {
+      httpOnly: true,
+      secure: prod,
+      sameSite: "lax",
+      path: "/",
+      expires: accessExpires,
+    });
+    cookieStore.set("sb-refresh-token", refresh, {
+      httpOnly: true,
+      secure: prod,
+      sameSite: "lax",
+      path: "/",
+      // typical refresh token TTL ~4 weeks; set a long expiration
+      maxAge: 60 * 60 * 24 * 28,
+    });
+
+    // 5) Ensure profile has phone (email stays NULL)
     const upsert = await srv
       .from("profiles")
       .upsert({ id: signIn.user.id, phone, email: null }, { onConflict: "id" })
