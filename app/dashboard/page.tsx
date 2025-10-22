@@ -51,12 +51,22 @@ export default async function DashboardPage() {
     await supabase.from('profiles').select('*').eq('user_id', user.id).maybeSingle();
   if (profileErr) console.error('dashboard:profiles error', profileErr);
 
+  const profilePhone = typeof (profile as any)?.phone === 'string' ? String((profile as any).phone) : null;
+  const profileEmail = typeof (profile as any)?.email === 'string' ? String((profile as any).email) : null;
+  const idLabel =
+    user.phone ??
+    profilePhone ??
+    user.email ??
+    profileEmail ??
+    '';
+
   const { data: link, error: linkErr } =
     await supabase.from('user_person_links').select('person_id').eq('user_id', user.id).maybeSingle();
   if (linkErr) console.error('dashboard:user_person_links error', linkErr);
 
   const enriched = {
     user_id: user.id,
+    phone: user.phone ?? profilePhone ?? null,
     email: user.email ?? null,
     name: profile?.name ?? null,
     surname: profile?.surname ?? null,
@@ -96,7 +106,7 @@ export default async function DashboardPage() {
             )}
           </div>
           <div>
-            <h1 className="text-xl font-semibold">Welcome, {enriched.email ?? enriched.name ?? 'Member'}</h1>
+            <h1 className="text-xl font-semibold">Welcome, {idLabel || enriched.name || 'Member'}</h1>
             <p className="text-sm text-white/60">This is your movement console.</p>
           </div>
         </header>

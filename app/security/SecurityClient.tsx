@@ -9,7 +9,7 @@ export default function SecurityClient() {
   const router = useRouter();
   const params = useSearchParams();
 
-  const [email, setEmail] = useState<string>('');
+  const [identifier, setIdentifier] = useState<string>('');
   const [hasSession, setHasSession] = useState<boolean>(false);
   const [password, setPassword] = useState<string>('');
   const [saving, setSaving] = useState<boolean>(false);
@@ -21,7 +21,30 @@ export default function SecurityClient() {
       const { data } = await supabase.auth.getSession();
       const sess = data?.session ?? null;
       setHasSession(!!sess);
-      setEmail(sess?.user?.email ?? '');
+      if (sess?.user) {
+        let profilePhone: string | null = null;
+        let profileEmail: string | null = null;
+        try {
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('phone,email')
+            .eq('user_id', sess.user.id)
+            .maybeSingle();
+          profilePhone = typeof profile?.phone === 'string' ? profile.phone : null;
+          profileEmail = typeof profile?.email === 'string' ? profile.email : null;
+        } catch (profileErr) {
+          console.warn('security:profiles lookup failed', profileErr);
+        }
+        const label =
+          sess.user.phone ??
+          profilePhone ??
+          sess.user.email ??
+          profileEmail ??
+          '';
+        setIdentifier(label);
+      } else {
+        setIdentifier('');
+      }
 
       // Optional: enrich profile on first load using query params
       const name = params.get('name');
@@ -69,7 +92,7 @@ export default function SecurityClient() {
         ) : (
           <form onSubmit={savePassword} className="mt-6 space-y-3">
             <div className="text-sm text-slate-300/80">
-              Signed in as <span className="text-white font-semibold">{email || 'unknown'}</span>
+              Signed in as <span className="text-white font-semibold">{identifier || 'unknown'}</span>
             </div>
             <input
               type="password"
