@@ -9,6 +9,12 @@ const NEPAL_E164 = /^\+977\d{9,10}$/;
 const sha256Hex = (s: string) => crypto.createHash("sha256").update(s).digest("hex");
 const EXPIRY_GRACE_MS = 2 * 60 * 1000; // tolerate small clock skew
 
+// stable alias email for any phone (no collisions, valid email syntax)
+function aliasEmailFor(phoneE164: string) {
+  // p9779863...@gn.local
+  return `p${phoneE164.replace(/^\+/, "")}@gn.local`;
+}
+
 export async function POST(req: Request) {
   try {
     const body = await req.json().catch(() => ({} as any));
@@ -20,7 +26,7 @@ export async function POST(req: Request) {
     const SEED = process.env.SERVER_PHONE_PASSWORD_SEED || "";
 
     // ─────────────────────────────────────────────
-    // PHONE: Custom SoT → verify hash → ensure Supabase phone user → mint session via admin tokens
+    // PHONE: Custom SoT → verify hash → sign in via alias email (no phone provider)
     // ─────────────────────────────────────────────
     if (typeof phone === "string" && typeof code === "string") {
       if (!NEPAL_E164.test(phone)) {
@@ -29,13 +35,14 @@ export async function POST(req: Request) {
       if (code.trim().length !== 6) {
         return NextResponse.json({ ok: false, error: "INVALID_CODE" }, { status: 400 });
       }
-      if (!URL || !SERVICE || !SEED) {
+      if (!URL || !ANON || !SERVICE || !SEED) {
         return NextResponse.json({ ok: false, error: "SERVER_MISCONFIG" }, { status: 500 });
       }
 
       const admin = createClient(URL, SERVICE, {
         auth: { autoRefreshToken: false, persistSession: false },
       });
+      const anon = createClient(URL, ANON, { auth: { persistSession: false } });
 
       // 1) Load latest unused OTP for this phone
       const { data: row, error: selErr } = await admin
@@ -77,15 +84,16 @@ export async function POST(req: Request) {
       const usedAtIso = new Date().toISOString();
       await admin.from("otps").update({ used_at: usedAtIso, verified_at: usedAtIso }).eq("id", row.id);
 
-      // 4) Ensure a Supabase user exists with the verified phone number
+      // 4) Ensure a Supabase user exists BUT via a synthetic email alias (no phone-provider needed)
+      const emailAlias = aliasEmailFor(phone);
       const password = sha256Hex(`${SEED}:${phone}`).slice(0, 32);
 
       let userId: string | null = null;
 
-      // Try to create / confirm phone user
+      // Try to create alias-email user
       const created = await admin.auth.admin.createUser({
-        phone,
-        phone_confirm: true,
+        email: emailAlias,
+        email_confirm: true, // no email sent; mark confirmed
         password,
         user_metadata: { signup_method: "phone_custom_otp", phone_e164: phone },
       });
@@ -93,20 +101,16 @@ export async function POST(req: Request) {
       if (created.data?.user?.id) {
         userId = created.data.user.id;
       } else {
-        // If exists, locate and update by phone
+        // If exists, locate and update by alias (or by phone fallback)
         const list = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 });
-        const normalizedPhone = phone.replace(/^\+/, "");
-        const legacyAlias = `p${normalizedPhone}@gn.local`;
         const found =
-          list.data?.users?.find((u: any) => u.phone === phone) ||
-          list.data?.users?.find((u: any) => u.email === legacyAlias) ||
-          null;
+          list.data?.users?.find((u: any) => u.email === emailAlias) ||
+          list.data?.users?.find((u: any) => u.phone === phone);
         if (found) {
           userId = found.id;
           await admin.auth.admin.updateUserById(userId, {
-            email: null,
-            phone,
-            phone_confirm: true,
+            email: emailAlias,
+            email_confirm: true,
             password,
             user_metadata: { ...(found.user_metadata || {}), phone_e164: phone, signup_method: "phone_custom_otp" },
           });
@@ -117,38 +121,23 @@ export async function POST(req: Request) {
         return NextResponse.json({ ok: false, error: "USER_NOT_FOUND_OR_CREATED" }, { status: 500 });
       }
 
-      // 5) Mint a session for the verified user via the admin tokens endpoint
-      const tokenRes = await fetch(`${URL}/auth/v1/admin/users/${userId}/tokens`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          apikey: SERVICE,
-          Authorization: `Bearer ${SERVICE}`,
-        },
-        body: JSON.stringify({}),
-      });
-
-      const tokenJson = await tokenRes.json().catch(() => ({} as any));
-
-      if (!tokenRes.ok || !tokenJson?.access_token) {
-        const message =
-          tokenJson?.message ||
-          tokenJson?.error_description ||
-          tokenJson?.error ||
-          "Could not create session";
+      // 5) Mint a session using EMAIL+PASSWORD (alias)
+      const sign = await anon.auth.signInWithPassword({ email: emailAlias, password });
+      if (sign.error || !sign.data?.session) {
         return NextResponse.json(
-          { ok: false, error: "SESSION_CREATE_FAILED", message },
+          { ok: false, error: "SIGNIN_FAILED", message: sign.error?.message },
           { status: 500 }
         );
       }
 
+      const s = sign.data.session;
       return NextResponse.json(
         {
           ok: true,
-          access_token: tokenJson.access_token,
-          refresh_token: tokenJson.refresh_token,
-          token_type: tokenJson.token_type,
-          expires_in: tokenJson.expires_in,
+          access_token: s.access_token,
+          refresh_token: s.refresh_token,
+          token_type: s.token_type,
+          expires_in: s.expires_in,
           next: "/onboard?src=join",
         },
         { status: 200 }
