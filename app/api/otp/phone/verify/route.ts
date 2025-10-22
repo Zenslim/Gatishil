@@ -14,7 +14,7 @@ const anon = () => createClient(SUPABASE_URL, SUPABASE_ANON, { auth: { persistSe
 const admin = () => createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
 
 const j = (status: number, body: unknown) => NextResponse.json(body, { status });
-const NEPAL_E164 = /^\+977\d{9,10}$/;
+const NEPAL_E164 = /^\+9779[78]\d{8}$/;
 const sha256Hex = (s: string) => crypto.createHash("sha256").update(s).digest("hex");
 
 function toLocal(msisdn: string): string | null {

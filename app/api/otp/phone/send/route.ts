@@ -11,7 +11,7 @@ const AAKASH_SMS_API_KEY = process.env.AAKASH_SMS_API_KEY as string;
 
 const admin = () => createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
 
-const NEPAL_E164 = /^\+977\d{9,10}$/;
+const NEPAL_E164 = /^\+9779[78]\d{8}$/;
 const ttlMinutes = 5;
 const resendSeconds = 30;
 
