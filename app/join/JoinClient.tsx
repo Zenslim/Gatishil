@@ -262,7 +262,7 @@ function JoinClientBody() {
                 autoComplete="tel"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
-                placeholder="+97798XXXXXXXX"
+                placeholder="98XXXXXXXX"
                 className={inputClass}
                 aria-label="Phone number"
               />
