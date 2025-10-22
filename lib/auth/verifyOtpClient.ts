@@ -1,6 +1,6 @@
 // lib/auth/verifyOtpClient.ts
-// PHONE uses our API (Custom SoT), EMAIL uses Supabase via API.
-// On success (phone), set session with returned tokens.
+// Both phone and email OTP verification routes return Supabase tokens.
+// The helper sets the browser session and hands the response back to the caller.
 
 import { getSupabaseBrowser } from "@/lib/supabaseClient";
 
