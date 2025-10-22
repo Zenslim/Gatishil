@@ -19,8 +19,8 @@ This document maps the end-to-end authentication journey for the Gatishil Nepal 
   - **API dependencies:** Fetches `/api/otp/send` (phone), `/api/otp/verify` (phone), `/api/auth/sync` (after session), Supabase direct email OTP.
   - **Redirect logic:**
     - If a session already exists → `router.replace('/onboard?src=join')`.
-    - Phone OTP success → `router.replace('/dashboard')`.
-    - Email OTP success → `router.replace('/onboard?src=otp')`.
+    - Phone OTP success → `router.replace(next ?? '/onboard?src=join')` (server returns `/onboard?src=join`).
+    - Email OTP success → `router.replace(next ?? '/onboard?src=join')` (shared onboarding path).
   - **State touched:**
     - Uses `localStorage` implicitly via Supabase auth storage key `gatishil.auth.token`.
     - Tracks OTP focus using refs; manages UI state (`tab`, `otpSentTo`, etc.).
@@ -223,15 +223,13 @@ flowchart LR
   B -->|Phone +977| C[Call /api/otp/send]
   C --> D[Receive SMS]
   D --> E[Submit code via /api/otp/verify]
-  E --> F[Supabase auth.verifyOtp (client)]
+  E --> F[Supabase auth.setSession]
   F --> G[Sync tokens via /api/auth/sync]
-  G --> H{Middleware sees cookies?}
-  H -->|Yes| I[/dashboard]
-  H -->|No| J[/login?next=/dashboard]
   B -->|Email| K[Supabase signInWithOtp email]
   K --> L[Enter code in Join]
   L --> M[supabase.auth.verifyOtp]
-  M --> N[waitForSession -> /onboard?src=otp]
+  M --> N[waitForSession -> /onboard?src=join]
+  G --> N
   N --> O[Welcome]
   O --> P[Name & Photo upload]
   P --> Q[Roots location]

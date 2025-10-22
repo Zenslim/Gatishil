@@ -138,7 +138,7 @@ export async function POST(req: Request) {
           refresh_token: s.refresh_token,
           token_type: s.token_type,
           expires_in: s.expires_in,
-          next: "/onboard?src=otp",
+          next: "/onboard?src=join",
         },
         { status: 200 }
       );
@@ -147,15 +147,17 @@ export async function POST(req: Request) {
     // ─────────────────────────────────────────────
     // EMAIL: unchanged — Supabase verifies and returns a session
     // ─────────────────────────────────────────────
-    if (typeof email === "string" && typeof token === "string") {
+    if (typeof email === "string" && (typeof token === "string" || typeof code === "string")) {
       if (!URL || !ANON) {
         return NextResponse.json({ ok: false, error: "SERVER_MISCONFIG" }, { status: 500 });
       }
       const sb = createClient(URL, ANON, { auth: { persistSession: false } });
 
+      const otp = (typeof token === "string" ? token : code)!.trim();
+
       const { data, error } = await sb.auth.verifyOtp({
         email: email.trim(),
-        token: token.trim(),
+        token: otp,
         type: (type as any) ?? "email",
       });
 
@@ -181,7 +183,7 @@ export async function POST(req: Request) {
           refresh_token: session.refresh_token,
           token_type: session.token_type,
           expires_in: session.expires_in,
-          next: "/onboard?src=otp",
+          next: "/onboard?src=join",
         },
         { status: 200 }
       );
