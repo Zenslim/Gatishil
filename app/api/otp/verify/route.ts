@@ -1,15 +1,13 @@
 import { NextResponse } from "next/server";
-import { z } from "zod";
-import { cookies } from "next/headers";
-import { createServiceRoleClient, createAnonClientForCookies } from "@/lib/supabase/serverClient";
+import { createServiceRoleClient, createSupabaseForRoute } from "@/lib/supabase/serverClient";
 import crypto from "crypto";
 
-const Body = z.object({
-  phone: z.string().min(10).startsWith("+"),
-  code: z.string().min(4).max(8),
-});
-
-// Deterministic server password for phone users (so we can sign them in via password safely)
+function isE164Phone(s: string): boolean {
+  return typeof s === "string" && s.startsWith("+") && s.replace("+","").length >= 10 && /^\+[0-9]+$/.test(s);
+}
+function isCode(s: string): boolean {
+  return typeof s === "string" && s.length >= 4 && s.length <= 8 && /^[0-9]+$/.test(s);
+}
 function phonePassword(phone: string) {
   const seed = process.env.SERVER_PHONE_PASSWORD_SEED || "change-me";
   return crypto.createHmac("sha256", seed).update(phone).digest("hex");
@@ -17,14 +15,19 @@ function phonePassword(phone: string) {
 
 export async function POST(req: Request) {
   try {
-    const body = await req.json();
-    const { phone, code } = Body.parse(body);
+    const body = await req.json().catch(() => ({}));
+    const phone = String(body?.phone ?? "");
+    const code  = String(body?.code ?? "");
 
-    // 1) Verify OTP against our custom otps table (Aakash SMS pipeline)
-    //    Expect table public.otps(phone text, code text, expires_at timestamptz, consumed_at timestamptz)
+    if (!isE164Phone(phone)) {
+      return NextResponse.json({ ok: false, error: "bad_phone_format" }, { status: 400 });
+    }
+    if (!isCode(code)) {
+      return NextResponse.json({ ok: false, error: "bad_code_format" }, { status: 400 });
+    }
+
     const srv = createServiceRoleClient();
 
-    // Lookup
     const { data: otpRow, error: otpErr } = await srv
       .from("otps")
       .select("id, phone, code, expires_at, consumed_at")
@@ -44,65 +47,38 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: false, error: "otp_expired" }, { status: 400 });
     }
 
-    // Mark consumed
     await srv.from("otps").update({ consumed_at: new Date().toISOString() }).eq("id", otpRow.id);
 
-    // 2) Ensure an auth user exists that uses REAL phone (no alias email), with deterministic password
     const deterministicPassword = phonePassword(phone);
-
-    // Try create user (if exists, Supabase will throw 422)
-    let createdUserId: string | null = null;
-    {
-      const { data: created, error: createErr, status } = await srv.auth.admin.createUser({
-        phone,
-        password: deterministicPassword,
-        phone_confirm: true,
-        user_metadata: { provider: "phone", e164: phone },
-      });
-      if (!createErr && created?.user?.id) {
-        createdUserId = created.user.id;
-      } else if (status === 422) {
-        // User already exists; ok to proceed
-      } else if (createErr) {
-        console.warn("createUser warning (continuing if exists):", createErr);
-      }
+    const createRes = await srv.auth.admin.createUser({
+      phone,
+      password: deterministicPassword,
+      phone_confirm: true,
+      user_metadata: { provider: "phone", e164: phone },
+    });
+    if (createRes.error && createRes.status !== 422) {
+      console.warn("admin.createUser warning", createRes.error);
     }
 
-    // 3) Sign the user in with phone+password to mint a normal session (no admin token hack)
-    const anon = createAnonClientForCookies();
-    const { data: signIn, error: signInErr } = await anon.auth.signInWithPassword({
+    const supa = createSupabaseForRoute();
+    const { data: signIn, error: signInErr } = await supa.auth.signInWithPassword({
       phone,
       password: deterministicPassword,
     });
     if (signInErr) {
-      // If password mismatch (e.g., pre-existing user), try to reset it via admin then retry
-      if (signInErr.message?.toLowerCase().includes("invalid login")) {
-        // Reset password
-        const { data: list, error: listErr } = await srv
-          .from("auth.users") // not accessible; fallback to admin API does not list by phone. We attempt update via password recovery:
-          // NOTE: Supabase Admin API lacks direct update-by-phone; so try admin.createUser again with same phone+password; if still fails, return error.
-          .select("*"); // no-op but avoids TS complaints
-        // Attempt admin password update if we somehow know the id; skip and fail if cannot.
-        return NextResponse.json({ ok: false, error: "password_mismatch_existing_phone_user" }, { status: 400 });
-      }
       console.error("signInWithPassword error", signInErr);
-      return NextResponse.json({ ok: false, error: "signin_failed" }, { status: 400 });
+      return NextResponse.json({ ok: false, error: "password_mismatch_existing_phone_user" }, { status: 400 });
     }
 
-    // Set cookie via auth-helpers cookie jar (signInWithPassword already set session cookies on response headers in edge/server runtime)
-    // NextResponse will carry Set-Cookie from anon client fetch under the hood
-
-    // 4) Upsert profile to copy phone (email stays NULL)
-    const { data: profile, error: upsertErr } = await srv
+    const upsert = await srv
       .from("profiles")
-      .upsert({ id: signIn.user.id, phone, email: null })
+      .upsert({ id: signIn.user.id, phone, email: null }, { onConflict: "id" })
       .select("id")
       .single();
-    if (upsertErr) {
-      console.warn("profiles upsert warning", upsertErr);
+    if (upsert.error) {
+      console.warn("profiles upsert warning", upsert.error);
     }
 
-    // 5) Redirect into unified onboarding wizard
     return NextResponse.json({ ok: true, next: "/onboard?src=join&step=welcome" });
   } catch (e: any) {
     console.error("verify route error", e);
