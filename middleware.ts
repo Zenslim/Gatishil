@@ -1,65 +1,71 @@
-// middleware.ts — redirect unauthenticated users on protected paths,
-// but allow Supabase `?code=` onboarding links to establish a session first.
+// middleware.ts — protects selected paths, allows Supabase ?code=, and emits debug headers.
 
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 
-// 1) Single source of truth: list protected path prefixes
-const PROTECTED: string[] = ['/dashboard', '/onboard', '/people'];
+// Single source of truth: protected path prefixes
+const PROTECTED = ['/dashboard', '/onboard', '/people'];
 
-/** Detect signed-in state from Supabase cookies (modern and legacy) */
-function isSignedIn(req: NextRequest): boolean {
-  const modern = req.cookies.get('sb-access-token')?.value;   // modern
-  const legacy = req.cookies.get('sb:token')?.value;          // legacy (auth-helpers <1.0)
-  // Some setups also mirror the token in Authorization; keep cookie check as primary
+// Helpers
+function isProtectedPath(pathname: string) {
+  return PROTECTED.some((p) => pathname.startsWith(p));
+}
+function hasSupabaseCode(url: URL) {
+  return url.searchParams.has('code');
+}
+function isSignedIn(req: NextRequest) {
+  const modern = req.cookies.get('sb-access-token')?.value;
+  const legacy = req.cookies.get('sb:token')?.value;
   const bearer = req.headers.get('authorization')?.startsWith('Bearer ');
   return Boolean(modern || legacy || bearer);
 }
-
-/** Allow magic-link/OTP/OAuth callbacks carrying `?code=` to pass */
-function hasSupabaseCode(url: URL): boolean {
-  // Supabase sends `?code=...` (and sometimes `?next=...`) to your site
-  return url.searchParams.has('code');
-}
-
-/** Should middleware guard this path? */
-function isProtectedPath(pathname: string): boolean {
-  return PROTECTED.some((p) => pathname.startsWith(p));
+function isStatic(pathname: string) {
+  return pathname.startsWith('/_next') ||
+         pathname.startsWith('/static') ||
+         pathname.startsWith('/favicon') ||
+         pathname.match(/\.(js|css|png|jpg|jpeg|gif|svg|ico|txt|map)$/i);
 }
 
 export function middleware(req: NextRequest) {
   const url = req.nextUrl;
   const { pathname, search } = url;
 
-  // Skip: not a protected path (extra safety; matcher already narrows this)
+  // Never guard static assets or the login page itself
+  if (isStatic(pathname) || pathname.startsWith('/login')) {
+    return NextResponse.next({ headers: debugHeaders('skip:static/login', pathname) });
+  }
+
+  // Only guard our protected prefixes
   if (!isProtectedPath(pathname)) {
-    return NextResponse.next();
+    return NextResponse.next({ headers: debugHeaders('skip:not-protected', pathname) });
   }
 
-  // Skip: Supabase is redirecting back with `?code=...` to finalize a session
+  // Let Supabase finalize sessions (?code=...) before we enforce redirects
   if (hasSupabaseCode(url)) {
-    return NextResponse.next();
+    return NextResponse.next({ headers: debugHeaders('allow:code-handshake', pathname) });
   }
 
-  // Skip: already on login route
-  if (pathname.startsWith('/login')) {
-    return NextResponse.next();
-  }
-
-  // If unauthenticated, redirect to /login with return path
+  // Enforce auth
   if (!isSignedIn(req)) {
-    const loginUrl = new URL('/login', url);
-    // Preserve original path + query so we can land the user back exactly there
-    const destination = pathname + (search || '');
-    loginUrl.searchParams.set('next', destination);
-    return NextResponse.redirect(loginUrl);
+    const login = new URL('/login', url);
+    login.searchParams.set('next', pathname + (search || ''));
+    const res = NextResponse.redirect(login, { headers: debugHeaders('redirect:login', pathname) });
+    return res;
   }
 
-  // Otherwise let it through
-  return NextResponse.next();
+  // Auth OK
+  return NextResponse.next({ headers: debugHeaders('allow:authed', pathname) });
 }
 
-// 3) Run middleware only where needed: derive matcher from PROTECTED
+// Emit easy-to-see headers for debugging in Network panel
+function debugHeaders(reason: string, path: string) {
+  const h = new Headers();
+  h.set('x-guard', reason);
+  h.set('x-guard-path', path);
+  return h;
+}
+
+// Run only where needed
 export const config = {
   matcher: PROTECTED.map((p) => `${p}/:path*`),
 };
