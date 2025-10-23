@@ -28,7 +28,7 @@ export default function SecurityClient() {
           const { data: profile } = await supabase
             .from('profiles')
             .select('phone,email')
-            .eq('user_id', sess.user.id)
+            .eq('id', sess.user.id)
             .maybeSingle();
           profilePhone = typeof profile?.phone === 'string' ? profile.phone : null;
           profileEmail = typeof profile?.email === 'string' ? profile.email : null;
@@ -51,7 +51,7 @@ export default function SecurityClient() {
       const role = params.get('role');
       if (sess && (name || role)) {
         // Example if you have public.profiles:
-        // await supabase.from('profiles').upsert({ user_id: sess.user.id, name, role });
+        // await supabase.from('profiles').upsert({ id: sess.user.id, name, role }, { onConflict: 'id' });
       }
     })();
   }, [params]);

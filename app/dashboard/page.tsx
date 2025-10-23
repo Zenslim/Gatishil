@@ -48,7 +48,7 @@ export default async function DashboardPage() {
 
   // Best-effort profile/link loads. We log problems but never throw (no white screen).
   const { data: profile, error: profileErr } =
-    await supabase.from('profiles').select('*').eq('user_id', user.id).maybeSingle();
+    await supabase.from('profiles').select('*').eq('id', user.id).maybeSingle();
   if (profileErr) console.error('dashboard:profiles error', profileErr);
 
   const profilePhone = typeof (profile as any)?.phone === 'string' ? String((profile as any).phone) : null;
@@ -65,7 +65,7 @@ export default async function DashboardPage() {
   if (linkErr) console.error('dashboard:user_person_links error', linkErr);
 
   const enriched = {
-    user_id: user.id,
+    id: user.id,
     phone: user.phone ?? profilePhone ?? null,
     email: user.email ?? null,
     name: profile?.name ?? null,

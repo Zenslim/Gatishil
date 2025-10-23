@@ -15,9 +15,11 @@ export function useEnsureProfile() {
 function TrueOnce() {
   ;(async () => {
     const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
+    if (!user?.id) return
 
-    const payload: any = { user_id: user.id }
+    const payload: any = {
+      id: user.id,
+    }
     // If available, fill soft fields once (do not overwrite on conflict)
     const fullName = user.user_metadata?.full_name || user.user_metadata?.name
     if (fullName && typeof fullName === 'string') {
@@ -29,12 +31,11 @@ function TrueOnce() {
     if (avatar) payload.photo_url = avatar
 
     // Insert-ignoring duplicates. If row exists, do nothing.
-    await supabase
+    const { error } = await supabase
       .from('profiles')
-      .insert(payload, { upsert: false })
-      .select('user_id')
-      .single()
-      .catch(() => undefined)
+      .upsert(payload, { onConflict: 'id', ignoreDuplicates: true })
+
+    if (error) console.error('[profiles.upsert]', error.message)
   })()
   return true
 }
