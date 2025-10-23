@@ -1,14 +1,44 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { getSupabaseBrowser } from '@/lib/supabaseClient';
 import { createLocalPin, hasLocalPin } from '@/lib/localPin';
 
+/** Wait for a Supabase session to exist (immediately or within a short timeout). */
+async function waitForSession(ms = 8000) {
+  const supabase = getSupabaseBrowser();
+  // 1) Already signed in?
+  const { data: { session } } = await supabase.auth.getSession();
+  if (session?.access_token) return session;
+
+  // 2) Otherwise, wait for the SIGNED_IN event
+  return await new Promise((resolve, reject) => {
+    let done = false;
+    const timer = setTimeout(() => {
+      if (done) return;
+      done = true;
+      sub?.unsubscribe();
+      reject(new Error('No active session'));
+    }, ms);
+
+    const { data: { subscription: sub } } = supabase.auth.onAuthStateChange((event, s) => {
+      if (event === 'SIGNED_IN' && s?.access_token && !done) {
+        done = true;
+        clearTimeout(timer);
+        sub?.unsubscribe();
+        resolve(s);
+      }
+    });
+  });
+}
+
+/** Mirror client tokens into HttpOnly cookies so SSR/edge sees the session. */
 async function syncToServerCookies() {
   const supabase = getSupabaseBrowser();
   const { data: { session } } = await supabase.auth.getSession();
   if (!session?.access_token) throw new Error('No active session');
+
   const res = await fetch('/api/auth/sync', {
     method: 'POST',
     credentials: 'include',
@@ -18,6 +48,7 @@ async function syncToServerCookies() {
       refresh_token: session.refresh_token ?? null,
     }),
   });
+
   if (!res.ok) {
     const j = await res.json().catch(() => ({}));
     throw new Error(j?.error || `Auth sync failed (${res.status})`);
@@ -27,6 +58,9 @@ async function syncToServerCookies() {
 
 export default function TrustStep({ onDone }) {
   const router = useRouter();
+  const q = useSearchParams();
+  const next = q.get('next') || '/dashboard';
+
   const [toast, setToast] = useState(null);
   const [pin, setPin] = useState('');
   const [pinConfirm, setPinConfirm] = useState('');
@@ -45,14 +79,17 @@ export default function TrustStep({ onDone }) {
     return () => clearTimeout(id);
   }, [toast]);
 
-  const goDashboard = async () => {
-    // Ensure cookies are written, then hard-replace and refresh so SSR reads them
+  const goNext = async () => {
+    // 1) Ensure a real Supabase session exists (magic link / OTP may still be finalizing)
+    await waitForSession(); // throws if it never arrives
+    // 2) Write HttpOnly cookies so middleware/SSR recognizes auth before navigating
     await syncToServerCookies();
-    // small tick to ensure Set-Cookie is committed before navigation
-    await new Promise(r => setTimeout(r, 50));
-    router.replace('/dashboard');
+    // 3) Small tick to ensure Set-Cookie is committed
+    await new Promise((r) => setTimeout(r, 50));
+    // 4) Navigate to the intended place and refresh to hydrate with SSR state
+    router.replace(next);
     router.refresh();
-    if (onDone) onDone();
+    onDone?.();
   };
 
   const pinLengthOk = pin.length >= 4 && pin.length <= 8;
@@ -76,12 +113,23 @@ export default function TrustStep({ onDone }) {
       await createLocalPin(pin);
       setExistingPin(true);
       setToast('🌿 Your voice is now sealed to this device.');
-      await goDashboard();
+      await goNext();
     } catch (error) {
-      console.error('PIN save failed:', error);
-      setPinErr(error?.message || 'Could not save PIN. Try again.');
+      console.error('PIN save / navigation failed:', error);
+      setPinErr(error?.message || 'Could not finish trust step. Try again.');
     } finally {
       setPinBusy(false);
+    }
+  };
+
+  const keepExisting = async () => {
+    setPinErr(null);
+    try {
+      setToast('🌿 Your voice is now sealed to this device.');
+      await goNext();
+    } catch (error) {
+      console.error('Continue with existing PIN failed:', error);
+      setPinErr(error?.message || 'Could not finish trust step. Try again.');
     }
   };
 
@@ -153,10 +201,7 @@ export default function TrustStep({ onDone }) {
           <div className="mt-6">
             <button
               type="button"
-              onClick={async () => {
-                setToast('🌿 Your voice is now sealed to this device.');
-                await goDashboard();
-              }}
+              onClick={keepExisting}
               className="w-full py-3 rounded-xl border border-white/20 hover:bg-white/10"
             >
               Keep existing PIN → Continue
