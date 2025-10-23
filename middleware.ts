@@ -1,4 +1,4 @@
-// middleware.ts — protects selected paths, allows Supabase ?code=, and emits debug headers.
+// middleware.ts — protect selected paths; allow Supabase ?code=; trust ONLY Supabase cookies.
 
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
@@ -11,13 +11,8 @@ function isProtectedPath(pathname: string) {
   return PROTECTED.some((p) => pathname.startsWith(p));
 }
 function hasSupabaseCode(url: URL) {
+  // Supabase magic-link/OTP/OAuth callback carries ?code=
   return url.searchParams.has('code');
-}
-function isSignedIn(req: NextRequest) {
-  const modern = req.cookies.get('sb-access-token')?.value;
-  const legacy = req.cookies.get('sb:token')?.value;
-  const bearer = req.headers.get('authorization')?.startsWith('Bearer ');
-  return Boolean(modern || legacy || bearer);
 }
 function isStatic(pathname: string) {
   return pathname.startsWith('/_next') ||
@@ -26,38 +21,17 @@ function isStatic(pathname: string) {
          pathname.match(/\.(js|css|png|jpg|jpeg|gif|svg|ico|txt|map)$/i);
 }
 
-export function middleware(req: NextRequest) {
-  const url = req.nextUrl;
-  const { pathname, search } = url;
-
-  // Never guard static assets or the login page itself
-  if (isStatic(pathname) || pathname.startsWith('/login')) {
-    return NextResponse.next({ headers: debugHeaders('skip:static/login', pathname) });
-  }
-
-  // Only guard our protected prefixes
-  if (!isProtectedPath(pathname)) {
-    return NextResponse.next({ headers: debugHeaders('skip:not-protected', pathname) });
-  }
-
-  // Let Supabase finalize sessions (?code=...) before we enforce redirects
-  if (hasSupabaseCode(url)) {
-    return NextResponse.next({ headers: debugHeaders('allow:code-handshake', pathname) });
-  }
-
-  // Enforce auth
-  if (!isSignedIn(req)) {
-    const login = new URL('/login', url);
-    login.searchParams.set('next', pathname + (search || ''));
-    const res = NextResponse.redirect(login, { headers: debugHeaders('redirect:login', pathname) });
-    return res;
-  }
-
-  // Auth OK
-  return NextResponse.next({ headers: debugHeaders('allow:authed', pathname) });
+/** Strict session check: ONLY trust Supabase cookies set by our app */
+function isSignedIn(req: NextRequest) {
+  // Modern helpers: sb-access-token / sb-refresh-token
+  const access = req.cookies.get('sb-access-token')?.value;
+  const refresh = req.cookies.get('sb-refresh-token')?.value;
+  // Legacy helpers: sb:token (stringified JSON with access/refresh)
+  const legacy = req.cookies.get('sb:token')?.value;
+  return Boolean(access || refresh || legacy);
 }
 
-// Emit easy-to-see headers for debugging in Network panel
+// Debug headers so we can see decisions in DevTools
 function debugHeaders(reason: string, path: string) {
   const h = new Headers();
   h.set('x-guard', reason);
@@ -65,7 +39,33 @@ function debugHeaders(reason: string, path: string) {
   return h;
 }
 
-// Run only where needed
+export function middleware(req: NextRequest) {
+  const url = req.nextUrl;
+  const { pathname, search } = url;
+
+  if (isStatic(pathname) || pathname.startsWith('/login')) {
+    return NextResponse.next({ headers: debugHeaders('skip:static/login', pathname) });
+  }
+
+  if (!isProtectedPath(pathname)) {
+    return NextResponse.next({ headers: debugHeaders('skip:not-protected', pathname) });
+  }
+
+  // Let Supabase complete session creation first
+  if (hasSupabaseCode(url)) {
+    return NextResponse.next({ headers: debugHeaders('allow:code-handshake', pathname) });
+  }
+
+  // Enforce auth with strict cookie check
+  if (!isSignedIn(req)) {
+    const login = new URL('/login', url);
+    login.searchParams.set('next', pathname + (search || ''));
+    return NextResponse.redirect(login, { headers: debugHeaders('redirect:login', pathname) });
+  }
+
+  return NextResponse.next({ headers: debugHeaders('allow:authed', pathname) });
+}
+
 export const config = {
   matcher: PROTECTED.map((p) => `${p}/:path*`),
 };
