@@ -7,8 +7,21 @@ import { getFriendlySupabaseEmailError } from '@/lib/auth/emailErrorHints';
 
 type Tab = 'phone' | 'email';
 
+// Valid final form (what Supabase needs)
 const NEPAL_E164 = /^\+9779[78]\d{8}$/;
+// Raw 10-digit local Nepal mobile like 98XXXXXXXX or 97XXXXXXXX
+const NEPAL_LOCAL_10 = /^9[78]\d{8}$/;
+
 const isEmail = (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
+
+// Normalize anything the user types to E.164 (+977…) or return null if invalid
+function normalizeNepalPhone(raw: string): string | null {
+  const s = raw.trim().replace(/\s+/g, '');
+  if (NEPAL_E164.test(s)) return s;
+  const digits = s.replace(/\D/g, '');
+  if (NEPAL_LOCAL_10.test(digits)) return `+977${digits}`;
+  return null;
+}
 
 function JoinClientBody() {
   const router = useRouter();
@@ -17,7 +30,10 @@ function JoinClientBody() {
   const [tab, setTab] = useState<Tab>('phone');
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const resetAlerts = () => { setMessage(null); setError(null); };
+  const resetAlerts = () => {
+    setMessage(null);
+    setError(null);
+  };
 
   // Session guard → if already signed in, go to onboard
   useEffect(() => {
@@ -53,23 +69,25 @@ function JoinClientBody() {
   async function sendPhoneOtp() {
     if (phoneSending || phoneCountdown > 0) return;
     resetAlerts();
-    const msisdn = phone.trim();
-    if (!NEPAL_E164.test(msisdn)) {
-      setError('Phone OTP is Nepal-only. Use +97797/98… format, or switch to email.');
+
+    const normalized = normalizeNepalPhone(phone);
+    if (!normalized) {
+      setError('Phone OTP is Nepal-only. Enter 97/98 number (e.g., 98XXXXXXXX) or +97798…');
       phoneInputRef.current?.focus();
       return;
     }
+
     setPhoneSending(true);
     try {
       const { error } = await supabase.auth.signInWithOtp({
-        phone: msisdn,
+        phone: normalized,
         options: { channel: 'sms' },
       });
       if (error) throw new Error(error.message || 'Could not send SMS OTP.');
-      setPhoneSentTo(msisdn);
+      setPhoneSentTo(normalized);
       setPhoneCode('');
       setMessage('We sent a 6-digit code (expires in 5 minutes).');
-      setPhoneResendAt(Date.now() + 30_000); // match server throttle (30s)
+      setPhoneResendAt(Date.now() + 30_000); // UI throttle to 30s (align with server)
       setTimeout(() => phoneCodeRef.current?.focus(), 50);
     } catch (e: any) {
       setError(e?.message || 'Could not send SMS OTP.');
@@ -89,9 +107,7 @@ function JoinClientBody() {
         type: 'sms',
       });
       if (error) throw new Error(error.message || 'Invalid or expired code.');
-      if (!data?.session) {
-        throw new Error('Could not establish session. Please try again.');
-      }
+      if (!data?.session) throw new Error('Could not establish session. Please try again.');
       router.replace('/dashboard');
       router.refresh();
     } catch (e: any) {
@@ -149,7 +165,7 @@ function JoinClientBody() {
       setEmailSentTo(addr);
       setEmailCode('');
       setMessage('We sent a 6-digit code (expires in 5 minutes).');
-      setEmailResendAt(Date.now() + 30_000); // UI throttle to 30s, even if email allows faster
+      setEmailResendAt(Date.now() + 30_000);
       setTimeout(() => emailCodeRef.current?.focus(), 50);
     } catch (e: any) {
       const friendly = getFriendlySupabaseEmailError(e);
@@ -224,13 +240,19 @@ function JoinClientBody() {
         <div className="max-w-xl mx-auto rounded-2xl border border-white/10 bg-white/[0.03] backdrop-blur-xl p-6 shadow-[0_0_60px_-20px_rgba(255,255,255,0.3)]">
           <div className="flex gap-2 rounded-xl bg-white/5 p-1 mb-6">
             <button
-              onClick={() => { setTab('phone'); resetAlerts(); }}
+              onClick={() => {
+                setTab('phone');
+                resetAlerts();
+              }}
               className={tabBtn(tab === 'phone')}
             >
               Phone OTP
             </button>
             <button
-              onClick={() => { setTab('email'); resetAlerts(); }}
+              onClick={() => {
+                setTab('email');
+                resetAlerts();
+              }}
               className={tabBtn(tab === 'email')}
             >
               Email OTP
@@ -240,7 +262,7 @@ function JoinClientBody() {
           {tab === 'phone' && (
             <div>
               <label className="block text-xs text-slate-300/70 mb-2">
-                🇳🇵 +977 — SMS works for Nepali numbers starting with 97 or 98
+                🇳🇵 Nepal-only — enter <b>98XXXXXXXX</b> or <b>+97798XXXXXXXX</b>
               </label>
               <input
                 ref={phoneInputRef}
@@ -273,7 +295,10 @@ function JoinClientBody() {
                     onChange={(e) => setPhoneCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
                     onPaste={(e) => {
                       const pasted = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6);
-                      if (pasted) { e.preventDefault(); setPhoneCode(pasted); }
+                      if (pasted) {
+                        e.preventDefault();
+                        setPhoneCode(pasted);
+                      }
                     }}
                     placeholder="123456"
                     className={codeInputClass}
@@ -345,7 +370,10 @@ function JoinClientBody() {
                     onChange={(e) => setEmailCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
                     onPaste={(e) => {
                       const pasted = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6);
-                      if (pasted) { e.preventDefault(); setEmailCode(pasted); }
+                      if (pasted) {
+                        e.preventDefault();
+                        setEmailCode(pasted);
+                      }
                     }}
                     placeholder="123456"
                     className={codeInputClass}
