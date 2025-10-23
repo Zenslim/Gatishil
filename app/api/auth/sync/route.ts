@@ -1,51 +1,42 @@
 import { NextResponse } from 'next/server';
+import { cookies } from 'next/headers';
+import { createServerClient } from '@supabase/ssr';
 
-function setCookie(
-  res: NextResponse,
-  name: string,
-  value: string,
-  maxAgeSeconds: number
-) {
-  res.cookies.set({
-    name,
-    value,
-    httpOnly: true,
-    secure: true,
-    sameSite: 'lax',
-    path: '/',
-    maxAge: maxAgeSeconds,
-  });
-}
-
-export async function OPTIONS() {
-  return new NextResponse(null, { status: 204 });
-}
-
+/**
+ * Accepts client-side tokens and writes the official Supabase HttpOnly cookies
+ * (sb-access-token / sb-refresh-token) so middleware/SSR can see the session.
+ */
 export async function POST(req: Request) {
   try {
-    const { access_token, refresh_token } = await req.json();
-
-    if (!access_token || typeof access_token !== 'string') {
-      return NextResponse.json({ error: 'access_token required' }, { status: 400 });
+    const { access_token, refresh_token } = await req.json().catch(() => ({}));
+    if (!access_token) {
+      return NextResponse.json({ error: 'Missing access_token' }, { status: 400 });
     }
 
-    const res = NextResponse.json({ ok: true });
+    const cookieStore = cookies();
 
-    setCookie(res, 'sb-access-token', access_token, 60 * 60);               // 1h
-    if (typeof refresh_token === 'string' && refresh_token.length > 0) {
-      setCookie(res, 'sb-refresh-token', refresh_token, 60 * 60 * 24 * 30); // 30d
+    // Use public URL + anon key. @supabase/ssr will attach Set-Cookie headers.
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      { cookies: () => cookieStore }
+    );
+
+    const { error } = await supabase.auth.setSession({
+      access_token,
+      refresh_token: typeof refresh_token === 'string' ? refresh_token : undefined,
+    });
+
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
     }
 
-    try {
-      const legacy = JSON.stringify({
-        access_token,
-        refresh_token: typeof refresh_token === 'string' ? refresh_token : null,
-      });
-      setCookie(res, 'supabase-auth-token', legacy, 60 * 60 * 24 * 30);
-    } catch {}
-
-    return res;
-  } catch {
-    return NextResponse.json({ error: 'invalid JSON' }, { status: 400 });
+    // Success → HttpOnly cookies were written to the response.
+    return NextResponse.json({ ok: true }, { status: 200 });
+  } catch (err: any) {
+    return NextResponse.json(
+      { error: err?.message ?? 'sync failed' },
+      { status: 400 }
+    );
   }
 }
