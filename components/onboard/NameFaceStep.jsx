@@ -1,7 +1,7 @@
 "use client";
 import Image from "next/image";
 import { useEffect, useState, useRef } from "react";
-import { supabase } from "@/lib/supabaseClient";
+import { supabaseBrowser } from "@/lib/supabaseBrowser";
 import OnboardCardLayout from "./OnboardCardLayout";
 import CameraCapture from "./CameraCapture";
 import ImageEditor from "./ImageEditor";
@@ -12,7 +12,7 @@ const AVATAR_BUCKET = "avatars";
  * NameFaceStep — UI preserved (card, colors), logic fixed
  * - Keeps your original beautiful UI (OnboardCardLayout, Tailwind classes).
  * - Uploads to Supabase Storage and stores the PUBLIC url (not blob:).
- * - Upserts profiles by user_id (UNIQUE), with updated_at.
+ * - Upserts profiles by auth user id (profiles.id), with updated_at.
  * - Continue enables only when first name + publicUrl exist.
  */
 export default function NameFaceStep({ t, onBack, onNext }) {
@@ -51,9 +51,9 @@ export default function NameFaceStep({ t, onBack, onNext }) {
     const mime = blob.type || "image/webp";
     const ext = (mime.split("/")[1] || "webp").toLowerCase();
     const key = `${uid}/${Date.now()}.${ext}`;
-    const up = await supabase.storage.from(AVATAR_BUCKET).upload(key, blob, { contentType: mime, upsert: true });
+    const up = await supabaseBrowser.storage.from(AVATAR_BUCKET).upload(key, blob, { contentType: mime, upsert: true });
     if (up.error) throw up.error;
-    return supabase.storage.from(AVATAR_BUCKET).getPublicUrl(up.data.path).data.publicUrl;
+    return supabaseBrowser.storage.from(AVATAR_BUCKET).getPublicUrl(up.data.path).data.publicUrl;
   };
 
   const confirmAndSave = async (imgBlob) => {
@@ -63,17 +63,30 @@ export default function NameFaceStep({ t, onBack, onNext }) {
       if (previewUrl?.startsWith("blob:")) URL.revokeObjectURL(previewUrl);
       setPreviewUrl(localUrl);
 
-      const { data } = await supabase.auth.getSession();
-      const uid = data.session?.user?.id;
-      if (!uid) throw new Error("No session");
+      const { data: { user } } = await supabaseBrowser.auth.getUser();
+      if (!user?.id) throw new Error("No user");
+
+      const uid = user.id;
 
       const photo_url = await uploadAvatar(imgBlob, uid);
       setPublicUrl(photo_url);
 
-      const { error } = await supabase.from("profiles").upsert(
-        { user_id: uid, name: first.trim(), surname: surname.trim() || null, photo_url, updated_at: new Date().toISOString() },
-        { onConflict: "user_id" }
-      );
+      const metadata = user.user_metadata ?? {};
+      const fallbackFullName = metadata.full_name || metadata.name || null;
+      const nameValue = first.trim() || fallbackFullName || user.email || null;
+      const row = {
+        id: uid,
+        name: nameValue,
+        surname: surname.trim() || null,
+        email: user.email ?? null,
+        phone: user.phone ?? null,
+        photo_url,
+        updated_at: new Date().toISOString(),
+      };
+
+      const { error } = await supabaseBrowser
+        .from("profiles")
+        .upsert(row, { onConflict: "id" });
       if (error) throw error;
 
       setToast("Saved.");
