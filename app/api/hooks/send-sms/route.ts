@@ -1,25 +1,26 @@
-// Force Node runtime so we can read env vars on Vercel
+// Run on Node so process.env is available
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 
-// Accept BOTH env names: TOKEN (old) or SECRET (yours)
-const HOOK_TOKEN =
-  process.env.SUPABASE_SMS_HOOK_TOKEN || process.env.SUPABASE_SMS_HOOK_SECRET;
+// Accept either env name so you don't have to rename your variable
+const HOOK_SECRET =
+  (process.env.SUPABASE_SMS_HOOK_SECRET || process.env.SUPABASE_SMS_HOOK_TOKEN || '').trim();
 
-const AAKASH_KEY = process.env.AAKASH_SMS_API_KEY; // Bearer token from Aakash
+// Aakash bearer key
+const AAKASH_KEY = (process.env.AAKASH_SMS_API_KEY || '').trim();
+
+// Optional debug: set DEBUG_SMS_HOOK=1 in Vercel to get non-sensitive diagnostics
 const DEBUG = process.env.DEBUG_SMS_HOOK === '1';
 
+// Small helper to JSON-respond
 function J(status: number, body: Record<string, unknown>) {
-  return NextResponse.json(DEBUG ? { ...body, _debug: { status } } : body, { status });
+  return NextResponse.json(body, { status });
 }
 
-// Extract phone + message from various possible hook shapes
-function extractPayload(b: any): { recipient?: string; message?: string; reason?: string } {
-  if (!b || typeof b !== 'object') return { reason: 'body not object' };
-
-  // Common Supabase / custom shapes
+// Pull phone + message from multiple possible shapes
+function extract(b: any): { recipient?: string; message?: string } {
   const phone =
     b?.user?.phone ??
     b?.recipient ??
@@ -30,41 +31,62 @@ function extractPayload(b: any): { recipient?: string; message?: string; reason?
 
   const otp = b?.sms?.otp ?? b?.otp ?? undefined;
 
-  const msg =
+  const message =
     b?.message ??
     b?.content ??
     b?.text ??
     (otp ? `Your Gatishil Nepal code is ${otp}` : undefined);
 
-  const recipient = typeof phone === 'string' ? phone : undefined;
-  const message = typeof msg === 'string' ? msg : undefined;
-
-  return { recipient, message, reason: !recipient || !message ? 'missing recipient/message' : 'ok' };
+  return {
+    recipient: typeof phone === 'string' ? phone : undefined,
+    message: typeof message === 'string' ? message : undefined,
+  };
 }
 
-// Normalize local 98/97 → +97798/97
+// Normalize local 97/98 -> +97797/98
 function toE164Nepal(raw: string): string | null {
   const s = String(raw).trim();
   if (s.startsWith('+977')) return s;
   const digits = s.replace(/\D/g, '');
   if (/^9[78]\d{8}$/.test(digits)) return `+977${digits}`;
-  if (/^\+/.test(s)) return null;
   return null;
 }
 
+// Get token from headers (Authorization: Bearer ... or X-Auth-Token: ...)
+function getIncomingToken(req: NextRequest): string {
+  const auth = (req.headers.get('authorization') || '').trim();
+  if (auth.toLowerCase().startsWith('bearer ')) return auth.slice(7).trim();
+  const alt = (req.headers.get('x-auth-token') || '').trim();
+  return alt;
+}
+
 export async function POST(req: NextRequest) {
-  // 0) Env guard
-  if (!HOOK_TOKEN) return J(500, { ok: false, error: 'Server missing SUPABASE_SMS_HOOK_TOKEN/SUPABASE_SMS_HOOK_SECRET' });
+  // Env guards
+  if (!HOOK_SECRET) return J(500, { ok: false, error: 'Server missing SUPABASE_SMS_HOOK_SECRET/TOKEN' });
   if (!AAKASH_KEY) return J(500, { ok: false, error: 'AAKASH_SMS_API_KEY missing' });
 
-  // 1) Auth header: support Authorization: Bearer <token> OR X-Auth-Token
-  const auth = req.headers.get('authorization') || '';
-  const bearer = auth.startsWith('Bearer ') ? auth.slice(7).trim() : '';
-  const alt = (req.headers.get('x-auth-token') || '').trim();
-  const token = bearer || alt;
-  if (token !== HOOK_TOKEN) return J(401, { ok: false, error: 'Hook requires authorization token' });
+  // Auth
+  const incomingToken = getIncomingToken(req);
+  if (incomingToken !== HOOK_SECRET) {
+    // In debug we expose harmless diagnostics (no secrets)
+    if (DEBUG) {
+      return J(401, {
+        ok: false,
+        error: 'Hook requires authorization token',
+        diag: {
+          haveAuthHeader: !!req.headers.get('authorization'),
+          haveXAuthHeader: !!req.headers.get('x-auth-token'),
+          // reveal only lengths & hashes of empty strings (safe)
+          incomingLen: incomingToken.length,
+          secretLen: HOOK_SECRET.length,
+          note: 'Trim spaces/newlines; token must match EXACTLY. Set same string in Vercel env and Supabase Hook header.',
+        },
+      });
+    }
+    return J(401, { ok: false, error: 'Hook requires authorization token' });
+  }
 
-  // 2) Parse body
+  // Body
   let body: any;
   try {
     body = await req.json();
@@ -72,22 +94,20 @@ export async function POST(req: NextRequest) {
     return J(400, { ok: false, error: 'Invalid JSON body' });
   }
 
-  // 3) Extract + validate payload
-  const { recipient: rawRecipient, message, reason } = extractPayload(body);
+  const { recipient: rawRecipient, message } = extract(body);
   if (!rawRecipient || !message) {
-    return J(400, { ok: false, error: `Missing phone or message (${reason})`, shape_hint: body && typeof body === 'object' ? Object.keys(body) : typeof body });
+    return J(400, { ok: false, error: 'Missing phone or message', shape_hint: Object.keys(body || {}) });
   }
 
-  // 4) Ensure Nepal +977 97/98
+  // Ensure Nepal +977 97/98
   const e164 = rawRecipient.startsWith('+977') ? rawRecipient : toE164Nepal(rawRecipient);
   if (!e164) return J(400, { ok: false, error: 'Recipient not Nepal +977 97/98', recipient: rawRecipient });
   if (!/^\+9779[78]\d{8}$/.test(e164)) {
     return J(400, { ok: false, error: 'Recipient must be +97797/98 followed by 8 digits', recipient: e164 });
   }
 
-  // 5) Send to Aakash (expects local 98/97 without +977)
+  // Send to Aakash (expects local 98/97 without +977)
   const local = e164.replace('+977', '');
-
   try {
     const res = await fetch('https://sms.aakashsms.com/sms/v3/send', {
       method: 'POST',
@@ -99,7 +119,9 @@ export async function POST(req: NextRequest) {
     });
 
     const txt = await res.text().catch(() => '');
-    if (!res.ok) return J(502, { ok: false, error: `Aakash ${res.status}`, body: txt.slice(0, 300) });
+    if (!res.ok) {
+      return J(502, { ok: false, error: `Aakash ${res.status}`, body: txt.slice(0, 300) });
+    }
 
     let parsed: any = null;
     try { parsed = JSON.parse(txt); } catch {}
