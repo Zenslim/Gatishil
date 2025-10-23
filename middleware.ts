@@ -1,53 +1,65 @@
-import { NextResponse, type NextRequest } from 'next/server'
+// middleware.ts — redirect unauthenticated users on protected paths,
+// but allow Supabase `?code=` onboarding links to establish a session first.
 
-const PROTECTED_PREFIXES = ['/dashboard', '/onboard', '/people'] as const
+import type { NextRequest } from 'next/server';
+import { NextResponse } from 'next/server';
 
-const PROTECTED_MATCHERS = Array.from(
-  new Set(
-    PROTECTED_PREFIXES.map((prefix) => {
-      const normalized = prefix.endsWith('/') ? prefix.slice(0, -1) : prefix
-      return `${normalized}/:path*`
-    }),
-  ),
-)
+// 1) Single source of truth: list protected path prefixes
+const PROTECTED: string[] = ['/dashboard', '/onboard', '/people'];
 
-function hasSupabaseSession(req: NextRequest) {
-  const accessToken = req.cookies.get('sb-access-token')?.value
-  if (accessToken && accessToken !== 'null' && accessToken !== 'undefined') return true
+/** Detect signed-in state from Supabase cookies (modern and legacy) */
+function isSignedIn(req: NextRequest): boolean {
+  const modern = req.cookies.get('sb-access-token')?.value;   // modern
+  const legacy = req.cookies.get('sb:token')?.value;          // legacy (auth-helpers <1.0)
+  // Some setups also mirror the token in Authorization; keep cookie check as primary
+  const bearer = req.headers.get('authorization')?.startsWith('Bearer ');
+  return Boolean(modern || legacy || bearer);
+}
 
-  const legacy = req.cookies.get('supabase-auth-token')?.value
-  if (legacy) {
-    try {
-      const parsed = JSON.parse(legacy)
-      if (parsed && typeof parsed === 'object' && parsed.access_token) return true
-    } catch {
-      // ignore malformed legacy cookie values
-    }
-  }
+/** Allow magic-link/OTP/OAuth callbacks carrying `?code=` to pass */
+function hasSupabaseCode(url: URL): boolean {
+  // Supabase sends `?code=...` (and sometimes `?next=...`) to your site
+  return url.searchParams.has('code');
+}
 
-  return false
+/** Should middleware guard this path? */
+function isProtectedPath(pathname: string): boolean {
+  return PROTECTED.some((p) => pathname.startsWith(p));
 }
 
 export function middleware(req: NextRequest) {
-  const url = req.nextUrl
-  const path = url.pathname
+  const url = req.nextUrl;
+  const { pathname, search } = url;
 
-  const protectedPath = PROTECTED_PREFIXES.some((prefix) => path.startsWith(prefix))
-  if (!protectedPath) return NextResponse.next()
-
-  // Allow onboarding links that arrive with a Supabase `code` to exchange for a session first
-  if (path.startsWith('/onboard') && url.searchParams.has('code')) {
-    return NextResponse.next()
+  // Skip: not a protected path (extra safety; matcher already narrows this)
+  if (!isProtectedPath(pathname)) {
+    return NextResponse.next();
   }
 
-  if (hasSupabaseSession(req)) return NextResponse.next()
+  // Skip: Supabase is redirecting back with `?code=...` to finalize a session
+  if (hasSupabaseCode(url)) {
+    return NextResponse.next();
+  }
 
-  const loginUrl = new URL('/login', url)
-  const nextPath = url.search ? `${path}${url.search}` : path
-  loginUrl.searchParams.set('next', nextPath)
-  return NextResponse.redirect(loginUrl)
+  // Skip: already on login route
+  if (pathname.startsWith('/login')) {
+    return NextResponse.next();
+  }
+
+  // If unauthenticated, redirect to /login with return path
+  if (!isSignedIn(req)) {
+    const loginUrl = new URL('/login', url);
+    // Preserve original path + query so we can land the user back exactly there
+    const destination = pathname + (search || '');
+    loginUrl.searchParams.set('next', destination);
+    return NextResponse.redirect(loginUrl);
+  }
+
+  // Otherwise let it through
+  return NextResponse.next();
 }
 
+// 3) Run middleware only where needed: derive matcher from PROTECTED
 export const config = {
-  matcher: PROTECTED_MATCHERS,
-}
+  matcher: PROTECTED.map((p) => `${p}/:path*`),
+};
