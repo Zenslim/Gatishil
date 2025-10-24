@@ -1,5 +1,8 @@
 import { cookies } from "next/headers";
+import { NextResponse } from "next/server";
 import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
+import { createServerClient, type CookieOptions } from "@supabase/ssr";
+import type { Session } from "@supabase/supabase-js";
 
 /**
  * Unified OTP (Email + Phone/SMS) for Next.js App Router.
@@ -18,6 +21,7 @@ type VerifyPayload =
   | { phone: string; token: string };
 
 const NEPAL_PREFIX = "+977";
+type CookieStore = ReturnType<typeof cookies>;
 
 function isEmailSend(p: any): p is { email: string; type?: "otp" | "magiclink"; redirectTo?: string } {
   return typeof p?.email === "string" && p.email.includes("@");
@@ -33,8 +37,9 @@ function isPhoneVerify(p: any): p is { phone: string; token: string } {
 }
 
 export async function handleSend(req: Request): Promise<Response> {
+  const cookieStore = cookies();
   const supabase = createRouteHandlerClient({
-    cookies,
+    cookies: () => cookieStore,
     supabaseUrl: process.env.SUPABASE_URL,
     supabaseKey: process.env.SUPABASE_ANON_KEY,
   } as any);
@@ -89,8 +94,9 @@ export async function handleSend(req: Request): Promise<Response> {
 }
 
 export async function handleVerify(req: Request): Promise<Response> {
+  const cookieStore = cookies();
   const supabase = createRouteHandlerClient({
-    cookies,
+    cookies: () => cookieStore,
     supabaseUrl: process.env.SUPABASE_URL,
     supabaseKey: process.env.SUPABASE_ANON_KEY,
   } as any);
@@ -109,7 +115,10 @@ export async function handleVerify(req: Request): Promise<Response> {
     if (!email || !token) return json({ error: "bad_request", detail: "email and token required" }, 400);
     const { data, error } = await supabase.auth.verifyOtp({ email, token, type: "email" });
     if (error) return json({ error: "verify_failed", detail: error.message }, 400);
-    return json({ ok: true, channel: "email", user: data?.user ?? null, session: data?.session ?? null });
+    if (!data?.session) {
+      return json({ error: "verify_failed", detail: "No session returned from Supabase." }, 400);
+    }
+    return await respondWithServerCommit(data.session, cookieStore);
   }
 
   // PHONE VERIFY
@@ -119,15 +128,55 @@ export async function handleVerify(req: Request): Promise<Response> {
     if (!phone || !token) return json({ error: "bad_request", detail: "phone and token required" }, 400);
     const { data, error } = await supabase.auth.verifyOtp({ phone, token, type: "sms" });
     if (error) return json({ error: "verify_failed", detail: error.message }, 400);
-    return json({ ok: true, channel: "phone", user: data?.user ?? null, session: data?.session ?? null });
+    if (!data?.session) {
+      return json({ error: "verify_failed", detail: "No session returned from Supabase." }, 400);
+    }
+    return await respondWithServerCommit(data.session, cookieStore);
   }
 
   return json({ error: "bad_request", detail: "Provide {email, token} or {phone, token}" }, 400);
 }
 
-export function json(payload: any, status = 200): Response {
-  return new Response(JSON.stringify(payload), {
+export function json(payload: any, status = 200): NextResponse {
+  return NextResponse.json(payload, {
     status,
-    headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
+    headers: { "Cache-Control": "no-store" },
   });
+}
+
+async function respondWithServerCommit(session: Session, cookieStore: CookieStore): Promise<NextResponse> {
+  const response = json({ ok: true, serverCommitted: true });
+  await attachSessionCookies(response, session, cookieStore);
+  return response;
+}
+
+async function attachSessionCookies(response: NextResponse, session: Session, cookieStore: CookieStore) {
+  if (!session?.access_token) return;
+
+  const supabaseUrl = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseKey = process.env.SUPABASE_ANON_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!supabaseUrl || !supabaseKey) return;
+
+  try {
+    const supabase = createServerClient(supabaseUrl, supabaseKey, {
+      cookies: {
+        get(name: string) {
+          return cookieStore.get(name)?.value;
+        },
+        set(name: string, value: string, options: CookieOptions) {
+          response.cookies.set({ name, value, ...options });
+        },
+        remove(name: string, options: CookieOptions) {
+          response.cookies.set({ name, value: "", ...options, maxAge: 0 });
+        },
+      },
+    });
+
+    await supabase.auth.setSession({
+      access_token: session.access_token,
+      refresh_token: session.refresh_token ?? undefined,
+    });
+  } catch (error) {
+    console.error("[otp/attachSessionCookies] Failed to persist session cookies", error);
+  }
 }
