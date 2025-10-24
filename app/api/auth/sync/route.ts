@@ -1,96 +1,55 @@
-export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
+// app/api/auth/sync/route.ts
+// Normalizes token sync from browser → server using @supabase/ssr getSupabaseServer.
+// Accepts either { access_token, refresh_token } OR
+// { event:'TOKEN_REFRESHED', session:{ access_token, refresh_token } }
 
-import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
+import { NextResponse } from 'next/server'
+import { getSupabaseServer } from '@/lib/supabase/server'
 
-/**
- * This route sets Supabase auth cookies on the server.
- * It is intentionally backward-compatible with BOTH of your previous client flows:
- *
- *  A) Old email callback client sent:
- *     POST /api/auth/sync
- *     { "access_token": "...", "refresh_token": "..." }
- *
- *  B) Newer helper-style client sent:
- *     POST /api/auth/sync
- *     { "event": "SIGNED_IN", "session": { "access_token": "...", "refresh_token": "..." } }
- *
- * We accept either shape and call supabase.auth.setSession() to write cookies.
- * Always 200 JSON so the client can handle UI without breaking.
- */
+type LegacyBody = { access_token?: string; refresh_token?: string }
+type HelperBody = { event?: string; session?: { access_token?: string; refresh_token?: string } }
 
-type LegacyPayload = {
-  access_token?: string | null;
-  refresh_token?: string | null;
-};
-
-type HelperPayload = {
-  event?: string | null;
-  session?: {
-    access_token?: string | null;
-    refresh_token?: string | null;
-  } | null;
-};
-
-function extractTokens(body: any): { access_token: string | null; refresh_token: string | null } {
-  // Prefer helper-style if present
-  const evt = typeof body?.event === 'string' ? body.event.trim().toUpperCase() : null;
-  const sess = body?.session;
-  const sessAT = typeof sess?.access_token === 'string' ? sess.access_token : null;
-  const sessRT = typeof sess?.refresh_token === 'string' ? sess.refresh_token : null;
-
-  if (evt === 'SIGNED_IN' && sessAT && sessRT) {
-    return { access_token: sessAT, refresh_token: sessRT };
-  }
-
-  // Fallback to legacy flat shape
-  const at = typeof body?.access_token === 'string' ? body.access_token : null;
-  const rt = typeof body?.refresh_token === 'string' ? body.refresh_token : null;
-
-  return { access_token: at, refresh_token: rt };
-}
+export const runtime = 'nodejs'
 
 export async function POST(req: Request) {
-  let body: LegacyPayload & HelperPayload;
+  const res = new NextResponse()
+  const supabase = getSupabaseServer({ response: res })
+
+  let at: string | undefined
+  let rt: string | undefined
 
   try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json({ ok: false, error: 'Invalid JSON' }, { status: 200 });
-  }
-
-  const { access_token, refresh_token } = extractTokens(body);
-
-  if (!access_token || !refresh_token) {
-    return NextResponse.json(
-      { ok: false, error: 'Missing access_token or refresh_token' },
-      { status: 200 }
-    );
-  }
-
-  try {
-    const supabase = createRouteHandlerClient({ cookies });
-    const { error } = await supabase.auth.setSession({ access_token, refresh_token });
-
-    if (error) {
-      return NextResponse.json({ ok: false, error: error.message }, { status: 200 });
+    const body = (await req.json()) as LegacyBody & HelperBody
+    if (body?.session?.access_token || body?.session?.refresh_token) {
+      at = body.session.access_token
+      rt = body.session.refresh_token
+    } else {
+      at = body.access_token
+      rt = body.refresh_token
     }
+  } catch {
+    // empty body is OK for health checks; just return ok:false
+  }
 
-    // Cookies set successfully – email OTP will proceed to your /onboard redirect in the client
-    return NextResponse.json({ ok: true }, { status: 200 });
+  if (!at || !rt) {
+    await supabase.commitCookies(res)
+    return NextResponse.json({ ok: false, error: 'missing_tokens' }, { status: 400, headers: res.headers })
+  }
+
+  try {
+    await supabase.auth.setSession({ access_token: at, refresh_token: rt })
+    await supabase.commitCookies(res)
+    return NextResponse.json({ ok: true }, { status: 200, headers: res.headers })
   } catch (e: any) {
-    return NextResponse.json({ ok: false, error: e?.message ?? 'setSession failed' }, { status: 200 });
+    await supabase.commitCookies(res)
+    return NextResponse.json({ ok: false, error: e?.message || 'set_session_failed' }, { status: 400, headers: res.headers })
   }
 }
 
 export async function GET() {
-  // Simple health probe
-  return NextResponse.json({
-    ok: true,
-    version: 'auth-sync-v2',
-    expects: 'legacy {access_token,refresh_token} OR helper {event,session}',
-    runtime: 'nodejs',
-  });
+  const res = new NextResponse()
+  const supabase = getSupabaseServer({ response: res })
+  const { data } = await supabase.auth.getUser()
+  await supabase.commitCookies(res)
+  return NextResponse.json({ ok: true, authenticated: !!data.user }, { headers: res.headers })
 }
