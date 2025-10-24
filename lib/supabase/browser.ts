@@ -1,25 +1,21 @@
 import { createBrowserClient } from '@supabase/ssr';
-import type { SupabaseClient } from '@supabase/supabase-js';
+import type { Session, SupabaseClient } from '@supabase/supabase-js';
 
 let singleton: SupabaseClient | null = null;
 let isSyncing = false;
 
-const syncSessionCookies = async (client: SupabaseClient) => {
+const syncSessionCookies = async (session: Session | null | undefined) => {
   if (isSyncing) return;
+  const access_token = session?.access_token ?? null;
+  const refresh_token = session?.refresh_token ?? null;
+  if (!access_token || !refresh_token) return;
   isSyncing = true;
   try {
-    const {
-      data: { session },
-    } = await client.auth.getSession();
-    const access_token = session?.access_token ?? null;
-    const refresh_token = session?.refresh_token ?? null;
-    if (!access_token) return;
-
     await fetch('/api/auth/sync', {
       method: 'POST',
       credentials: 'include',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ access_token, refresh_token }),
+      body: JSON.stringify({ event: 'TOKEN_REFRESHED', session: { access_token, refresh_token } }),
     });
   } catch {
     // Ignore network failures — cookies simply won't sync this cycle.
@@ -47,11 +43,9 @@ export function getSupabaseBrowser(): SupabaseClient {
     },
   });
 
-  void syncSessionCookies(singleton);
-
-  singleton.auth.onAuthStateChange(event => {
-    if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-      void syncSessionCookies(singleton!);
+  singleton.auth.onAuthStateChange((event, session) => {
+    if (event === 'TOKEN_REFRESHED') {
+      void syncSessionCookies(session);
     }
   });
 

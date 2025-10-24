@@ -105,6 +105,7 @@ export async function POST(req: Request) {
       if (verify.error) return new NextResponse('Verify failed', { status: 500 });
     }
 
+    bound.commitCookies(resp);
     return resp;
   } catch (e: any) {
     return new NextResponse(e?.message || 'Login failed', { status: 500 });

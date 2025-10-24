@@ -79,11 +79,16 @@ function JoinClientBody() {
 
     setPhoneSending(true);
     try {
-      const { error } = await supabase.auth.signInWithOtp({
-        phone: normalized,
-        options: { channel: 'sms' },
+      const res = await fetch('/api/otp/phone/send', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ phone: normalized }),
       });
-      if (error) throw new Error(error.message || 'Could not send SMS OTP.');
+      const payload: any = await res.json().catch(() => null);
+      if (!res.ok || payload?.error) {
+        throw new Error(payload?.detail || payload?.error || 'Could not send SMS OTP.');
+      }
       setPhoneSentTo(normalized);
       setPhoneCode('');
       setMessage('We sent a 6-digit code (expires in 5 minutes).');
@@ -101,14 +106,28 @@ function JoinClientBody() {
     resetAlerts();
     setPhoneVerifying(true);
     try {
-      const { data, error } = await supabase.auth.verifyOtp({
-        phone: phoneSentTo,
-        token: phoneCode,
-        type: 'sms',
+      const res = await fetch('/api/otp/phone/verify', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ phone: phoneSentTo, token: phoneCode }),
       });
-      if (error) throw new Error(error.message || 'Invalid or expired code.');
-      if (!data?.session) throw new Error('Could not establish session. Please try again.');
-      router.replace('/dashboard');
+      const payload: any = await res.json().catch(() => null);
+      if (!res.ok || !payload?.ok) {
+        throw new Error(payload?.detail || payload?.error || 'Invalid or expired code.');
+      }
+
+      const session = payload?.session;
+      if (session?.access_token && session?.refresh_token) {
+        await supabase.auth.setSession({
+          access_token: session.access_token,
+          refresh_token: session.refresh_token,
+        });
+      } else {
+        await supabase.auth.getSession();
+      }
+
+      router.replace('/onboard?src=join');
       router.refresh();
     } catch (e: any) {
       setError(e?.message || 'Invalid or expired code.');
@@ -150,17 +169,20 @@ function JoinClientBody() {
           : 'https://www.gatishilnepal.org';
       const emailRedirectTo = `${redirectBase}/onboard?src=join`;
 
-      const { error } = await supabase.auth.signInWithOtp({
-        email: addr,
-        options: { emailRedirectTo },
+      const res = await fetch('/api/otp/email/send', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ email: addr, type: 'otp', redirectTo: emailRedirectTo }),
       });
-      if (error) {
-        const friendly = getFriendlySupabaseEmailError(error);
+      const payload: any = await res.json().catch(() => null);
+      if (!res.ok || payload?.error) {
+        const detail = payload?.detail || payload?.error;
+        const friendly = detail ? getFriendlySupabaseEmailError({ message: detail } as any) : null;
         if (friendly) {
-          console.error('[join/email] Supabase signInWithOtp failed:', error);
           throw new Error(friendly);
         }
-        throw new Error(error.message || 'Could not send email OTP.');
+        throw new Error(detail || 'Could not send email OTP.');
       }
       setEmailSentTo(addr);
       setEmailCode('');
@@ -184,13 +206,30 @@ function JoinClientBody() {
     resetAlerts();
     setEmailVerifying(true);
     try {
-      const { data, error } = await supabase.auth.verifyOtp({
-        email: emailSentTo,
-        token: emailCode,
-        type: 'email',
+      const res = await fetch('/api/otp/email/verify', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ email: emailSentTo, token: emailCode }),
       });
-      if (error) throw new Error(error.message || 'Invalid or expired code.');
-      if (!data?.session) throw new Error('No session returned. Please try again.');
+      const payload: any = await res.json().catch(() => null);
+      if (!res.ok || !payload?.ok) {
+        const msg = payload?.detail || payload?.error || 'Invalid or expired code.';
+        const friendly = getFriendlySupabaseEmailError({ message: msg } as any);
+        if (friendly) throw new Error(friendly);
+        throw new Error(msg);
+      }
+
+      const session = payload?.session;
+      if (session?.access_token && session?.refresh_token) {
+        await supabase.auth.setSession({
+          access_token: session.access_token,
+          refresh_token: session.refresh_token,
+        });
+      } else {
+        await supabase.auth.getSession();
+      }
+
       router.replace('/onboard?src=join');
       router.refresh();
     } catch (e: any) {
