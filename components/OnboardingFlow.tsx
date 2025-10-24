@@ -36,16 +36,37 @@ export default function OnboardingFlow({ lang = 'en' }: Props) {
     let cancelled = false
     ;(async () => {
       setAuthError(null)
-      const { error } = await supabase.auth.exchangeCodeForSession(code)
-      if (cancelled) return
-      if (error) {
-        console.error('Failed to exchange onboarding code', error)
+      try {
+        const res = await fetch('/api/auth/exchange', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ code }),
+        })
+        const payload: any = await res.json().catch(() => null)
+        if (!res.ok || !payload?.ok) {
+          throw new Error(payload?.error || 'Could not confirm your sign-in link.')
+        }
+
+        const session = payload?.session
+        if (session?.access_token && session?.refresh_token) {
+          await supabase.auth.setSession({
+            access_token: session.access_token,
+            refresh_token: session.refresh_token,
+          })
+        } else {
+          await supabase.auth.getSession()
+        }
+
+        if (cancelled) return
+        setAuthReady(true)
+        if (sanitizedHref) router.replace(sanitizedHref)
+      } catch (err: any) {
+        if (cancelled) return
+        console.error('Failed to exchange onboarding code', err)
         setAuthError('Your sign-in link expired. Please request a new link from /join.')
         setAuthReady(true)
-        return
       }
-      setAuthReady(true)
-      if (sanitizedHref) router.replace(sanitizedHref)
     })()
     return () => {
       cancelled = true

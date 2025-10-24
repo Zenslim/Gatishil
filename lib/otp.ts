@@ -1,5 +1,5 @@
-import { cookies } from "next/headers";
-import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
+import { getSupabaseServer } from "@/lib/supabase/server";
+import { getSupabaseAdmin } from "@/lib/supabase/admin";
 
 /**
  * Unified OTP (Email + Phone/SMS) for Next.js App Router.
@@ -33,11 +33,7 @@ function isPhoneVerify(p: any): p is { phone: string; token: string } {
 }
 
 export async function handleSend(req: Request): Promise<Response> {
-  const supabase = createRouteHandlerClient({
-    cookies,
-    supabaseUrl: process.env.SUPABASE_URL,
-    supabaseKey: process.env.SUPABASE_ANON_KEY,
-  } as any);
+  const supabase = getSupabaseServer();
 
   let body: SendPayload;
   try {
@@ -89,11 +85,7 @@ export async function handleSend(req: Request): Promise<Response> {
 }
 
 export async function handleVerify(req: Request): Promise<Response> {
-  const supabase = createRouteHandlerClient({
-    cookies,
-    supabaseUrl: process.env.SUPABASE_URL,
-    supabaseKey: process.env.SUPABASE_ANON_KEY,
-  } as any);
+  const supabase = getSupabaseServer();
 
   let body: VerifyPayload;
   try {
@@ -109,7 +101,8 @@ export async function handleVerify(req: Request): Promise<Response> {
     if (!email || !token) return json({ error: "bad_request", detail: "email and token required" }, 400);
     const { data, error } = await supabase.auth.verifyOtp({ email, token, type: "email" });
     if (error) return json({ error: "verify_failed", detail: error.message }, 400);
-    return json({ ok: true, channel: "email", user: data?.user ?? null, session: data?.session ?? null });
+    const safeUser = data?.user ? { ...data.user } : null;
+    return json({ ok: true, channel: "email", user: safeUser, session: data?.session ?? null });
   }
 
   // PHONE VERIFY
@@ -119,7 +112,27 @@ export async function handleVerify(req: Request): Promise<Response> {
     if (!phone || !token) return json({ error: "bad_request", detail: "phone and token required" }, 400);
     const { data, error } = await supabase.auth.verifyOtp({ phone, token, type: "sms" });
     if (error) return json({ error: "verify_failed", detail: error.message }, 400);
-    return json({ ok: true, channel: "phone", user: data?.user ?? null, session: data?.session ?? null });
+
+    const originalUser = data?.user ?? null;
+    const safeUser = originalUser ? { ...originalUser } : null;
+
+    if (originalUser?.email && /@gn\.local$/i.test(originalUser.email) && originalUser.phone) {
+      try {
+        const admin = getSupabaseAdmin();
+        await admin.auth.admin.updateUserById(originalUser.id, {
+          email: null,
+          email_confirm: false,
+          phone: originalUser.phone,
+        } as any);
+        if (safeUser) {
+          (safeUser as any).email = null;
+        }
+      } catch {
+        // Swallow scrub failures – OTP success should not fail because cleanup failed.
+      }
+    }
+
+    return json({ ok: true, channel: "phone", user: safeUser, session: data?.session ?? null });
   }
 
   return json({ error: "bad_request", detail: "Provide {email, token} or {phone, token}" }, 400);
