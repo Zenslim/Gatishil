@@ -1,69 +1,81 @@
-// middleware.ts — protect selected paths; allow Supabase ?code=; trust ONLY Supabase cookies.
+// middleware.ts — Supabase-aware guard for protected routes.
+// Verifies/refreshes session cookies on the Edge before deciding access.
 
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
+import { createServerClient } from '@supabase/ssr';
 
 // Single source of truth: protected path prefixes
 const PROTECTED = ['/dashboard', '/onboard', '/people'];
 
-// Helpers
-function isProtectedPath(pathname: string) {
-  return PROTECTED.some((p) => pathname.startsWith(p));
-}
-function hasSupabaseCode(url: URL) {
-  // Supabase magic-link/OTP/OAuth callback carries ?code=
-  return url.searchParams.has('code');
-}
-function isStatic(pathname: string) {
-  return pathname.startsWith('/_next') ||
-         pathname.startsWith('/static') ||
-         pathname.startsWith('/favicon') ||
-         pathname.match(/\.(js|css|png|jpg|jpeg|gif|svg|ico|txt|map)$/i);
-}
+// Simple filters
+const isStatic = (p: string) =>
+  p.startsWith('/_next') ||
+  p.startsWith('/static') ||
+  p.startsWith('/favicon') ||
+  /\.(js|css|png|jpg|jpeg|gif|svg|ico|txt|map|woff2?)$/i.test(p);
 
-/** Strict session check: ONLY trust Supabase cookies set by our app */
-function isSignedIn(req: NextRequest) {
-  // Modern helpers: sb-access-token / sb-refresh-token
-  const access = req.cookies.get('sb-access-token')?.value;
-  const refresh = req.cookies.get('sb-refresh-token')?.value;
-  // Legacy helpers: sb:token (stringified JSON with access/refresh)
-  const legacy = req.cookies.get('sb:token')?.value;
-  return Boolean(access || refresh || legacy);
-}
+const hasSupabaseCode = (url: URL) => url.searchParams.has('code'); // OTP/magic-link/OAuth
 
-// Debug headers so we can see decisions in DevTools
-function debugHeaders(reason: string, path: string) {
-  const h = new Headers();
-  h.set('x-guard', reason);
-  h.set('x-guard-path', path);
-  return h;
-}
+export async function middleware(req: NextRequest) {
+  const { pathname, search } = req.nextUrl;
 
-export function middleware(req: NextRequest) {
-  const url = req.nextUrl;
-  const { pathname, search } = url;
-
+  // Skip static assets and the login page itself
   if (isStatic(pathname) || pathname.startsWith('/login')) {
-    return NextResponse.next({ headers: debugHeaders('skip:static/login', pathname) });
+    return NextResponse.next();
   }
 
-  if (!isProtectedPath(pathname)) {
-    return NextResponse.next({ headers: debugHeaders('skip:not-protected', pathname) });
+  // Only guard protected paths
+  const isProtected = PROTECTED.some((p) => pathname.startsWith(p));
+  if (!isProtected) {
+    return NextResponse.next();
   }
 
-  // Let Supabase complete session creation first
-  if (hasSupabaseCode(url)) {
-    return NextResponse.next({ headers: debugHeaders('allow:code-handshake', pathname) });
+  // Allow the initial Supabase handshake to reach the route/page
+  if (hasSupabaseCode(req.nextUrl)) {
+    return NextResponse.next();
   }
 
-  // Enforce auth with strict cookie check
-  if (!isSignedIn(req)) {
-    const login = new URL('/login', url);
+  // Create a mutable response; Supabase may rotate cookies into it
+  const res = NextResponse.next();
+
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+  if (!url || !anon) {
+    // Fail-open if envs are missing to avoid lockout in production
+    return res;
+  }
+
+  // Edge-safe cookie adapter: read from req, write into the response we return
+  const supabase = createServerClient(url, anon, {
+    cookies: {
+      getAll: () => req.cookies.getAll(),
+      setAll: (cookiesToSet) => {
+        for (const cookie of cookiesToSet) {
+          res.cookies.set({
+            ...cookie,
+            // Normalize secure defaults on the edge
+            sameSite: cookie.sameSite ?? 'lax',
+            secure: cookie.secure ?? true,
+          });
+        }
+      },
+    },
+  });
+
+  // Touch auth to both verify and give Supabase a chance to refresh cookies
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    const login = new URL('/login', req.nextUrl);
     login.searchParams.set('next', pathname + (search || ''));
-    return NextResponse.redirect(login, { headers: debugHeaders('redirect:login', pathname) });
+    return NextResponse.redirect(login);
   }
 
-  return NextResponse.next({ headers: debugHeaders('allow:authed', pathname) });
+  // Important: return the same response so refreshed cookies are sent back
+  return res;
 }
 
 export const config = {
