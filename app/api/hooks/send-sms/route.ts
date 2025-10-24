@@ -1,4 +1,4 @@
-// Run on Node and prevent static caching
+// Run on Node and avoid static caching
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
@@ -7,32 +7,22 @@ import { createHmac, timingSafeEqual } from 'crypto';
 
 const HOOK_SECRET =
   (process.env.SUPABASE_SMS_HOOK_SECRET || process.env.SUPABASE_SMS_HOOK_TOKEN || '').trim();
-const AAKASH_KEY = (process.env.AAKASH_SMS_API_KEY || '').trim();
 
-// DEBUG flags
+// IMPORTANT: make sure the name matches *exactly* in Vercel
+const AAKASH_KEY_RAW = process.env.AAKASH_SMS_API_KEY ?? '';
+const AAKASH_KEY = AAKASH_KEY_RAW.trim();
+
 const DEBUG = process.env.DEBUG_SMS_HOOK === '1';
-// **Unconditional** bypass for diagnostics (TURN OFF AFTER TESTING!)
+// TEMP—leave 1 only while testing; set back to 0 afterward
 const ALLOW_ALL_BYPASS = process.env.ALLOW_ALL_BYPASS === '1';
 
 function J(status: number, body: Record<string, unknown>) {
   return NextResponse.json(body, { status });
 }
 
-function bearerVariants(secretShown: string): string[] {
-  const out = new Set<string>();
-  const s = secretShown.trim();
-  if (!s) return [];
-  out.add(s);                                // "v1,whsec_...."
-  const noV1 = s.startsWith('v1,') ? s.slice(3) : s;
-  out.add(noV1);                              // "whsec_...."
-  const noWhsec = noV1.startsWith('whsec_') ? noV1.slice(6) : noV1;
-  out.add(noWhsec);                           // base64 only
-  return [...out];
-}
-
 function parseSigHeader(h: string | null) {
   if (!h) return { t: '', v1: '' };
-  if (/^[0-9a-f]{64}$/i.test(h)) return { t: '', v1: h }; // just hex
+  if (/^[0-9a-f]{64}$/i.test(h)) return { t: '', v1: h }; // hex-only
   let t = '', v1 = '';
   for (const p of h.split(',').map(s => s.trim())) {
     const [k, v] = p.split('=');
@@ -48,16 +38,26 @@ function verifySignature(raw: string, secretShown: string, header: string | null
   const b64 = cleaned.startsWith('whsec_') ? cleaned.slice(6) : cleaned;
   const { v1 } = parseSigHeader(header);
   if (!v1) return false;
-
   let key: Buffer;
   try { key = Buffer.from(b64, 'base64'); } catch { return false; }
-
   const macHex = createHmac('sha256', key).update(raw, 'utf8').digest('hex');
   try {
     return timingSafeEqual(Buffer.from(macHex, 'hex'), Buffer.from(v1, 'hex'));
   } catch {
     return false;
   }
+}
+
+function bearerVariants(secretShown: string): string[] {
+  const out = new Set<string>();
+  const s = (secretShown || '').trim();
+  if (!s) return [];
+  out.add(s); // "v1,whsec_..."
+  const noV1 = s.startsWith('v1,') ? s.slice(3) : s;
+  out.add(noV1); // "whsec_..."
+  const noWh = noV1.startsWith('whsec_') ? noV1.slice(6) : noV1;
+  out.add(noWh); // base64 core
+  return [...out];
 }
 
 function extractPayload(b: any): { recipient?: string; message?: string } {
@@ -91,29 +91,66 @@ function toE164Nepal(raw: string): string | null {
   return null;
 }
 
-// ---- GET: self-check -------------------------------------------------------
+// ---- GET: confirm version live
 export async function GET() {
   return J(200, {
     ok: true,
-    version: 'v6-bypass-all',
+    version: 'v7-aakash-diag',
     expects: 'Signature or Bearer; TEMP bypass via ALLOW_ALL_BYPASS=1',
     runtime,
-    DEBUG,
-    ALLOW_ALL_BYPASS,
   });
 }
 
-// ---- POST ------------------------------------------------------------------
 export async function POST(req: NextRequest) {
-  // Read RAW body (needed for signature verification and for echoing)
   const raw = await req.text();
 
-  // If unconditional bypass is enabled, immediately echo headers + body and proceed.
-  // This guarantees we SEE what Supabase is actually sending.
+  // TEMP bypass to surface what the server sees, and to test Aakash end-to-end.
   if (ALLOW_ALL_BYPASS) {
-    const echo: Record<string, unknown> = {
+    let body: any = null;
+    try { body = JSON.parse(raw); } catch {}
+    const { recipient: rawRecipient, message } = extractPayload(body || {});
+    const e164 = rawRecipient
+      ? (rawRecipient.startsWith('+977') ? rawRecipient : toE164Nepal(rawRecipient))
+      : null;
+
+    // Try BOTH Aakash auth styles:
+    //  1) Authorization: Bearer <token>
+    //  2) Body field: auth_token: <token>   (fallback for tenants that still require body token)
+    const local = e164 ? e164.replace('+977', '') : null;
+    let aakashResult: any = { skipped: true, reason: 'no e164/message or no token' };
+
+    if (AAKASH_KEY && local && message && /^\+9779[78]\d{8}$/.test(e164!)) {
+      try {
+        const res = await fetch('https://sms.aakashsms.com/sms/v3/send', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            // Bearer header path
+            Authorization: `Bearer ${AAKASH_KEY}`,
+          },
+          // Include body auth_token as well for backwards/tenant-specific configs
+          body: JSON.stringify({
+            to: [local],
+            text: message,
+            auth_token: AAKASH_KEY,
+          }),
+        });
+        const txt = await res.text().catch(() => '');
+        try { aakashResult = JSON.parse(txt); } catch { aakashResult = { status: res.status, body: txt.slice(0, 500) }; }
+        // normalize
+        aakashResult.status = res.status;
+        aakashResult.ok = res.ok;
+      } catch (e: any) {
+        aakashResult = { ok: false, error: e?.message || 'Failed to reach Aakash' };
+      }
+    }
+
+    return J(200, {
       ok: true,
       bypass: 'ALLOW_ALL_BYPASS',
+      saw_env: {
+        aakash_key_len: AAKASH_KEY.length, // proves what runtime sees; no secret leaked
+      },
       saw_headers: {
         'x-supabase-webhook-signature':
           req.headers.get('x-supabase-webhook-signature') ||
@@ -121,47 +158,15 @@ export async function POST(req: NextRequest) {
           req.headers.get('x-signature') ||
           null,
         authorization: req.headers.get('authorization') || null,
-        'user-agent': req.headers.get('user-agent') || null,
-        host: req.headers.get('host') || null,
+        'content-type': req.headers.get('content-type') || null,
       },
       raw_body_len: raw.length,
-    };
-
-    // Try to parse; if it fails we still return echo for visibility
-    let body: any = null;
-    try { body = JSON.parse(raw); } catch {}
-    const { recipient: rawRecipient, message } = extractPayload(body || {});
-    let e164: string | null = null;
-    if (rawRecipient) {
-      e164 = rawRecipient.startsWith('+977') ? rawRecipient : toE164Nepal(rawRecipient);
-    }
-
-    // If we don’t have Aakash key or recipient yet, return echo only (200) so you can inspect headers in Supabase.
-    if (!AAKASH_KEY || !e164 || !message || !/^\+9779[78]\d{8}$/.test(e164)) {
-      return J(200, { ...echo, aakash_skipped: true, reason: 'missing AAKASH key or invalid payload', e164, message });
-    }
-
-    // Otherwise, go ahead and send to Aakash so you can receive a test SMS while bypass is on.
-    const local = e164.replace('+977', '');
-    try {
-      const res = await fetch('https://sms.aakashsms.com/sms/v3/send', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${AAKASH_KEY}`,
-        },
-        body: JSON.stringify({ to: [local], text: message }),
-      });
-      const txt = await res.text().catch(() => '');
-      let parsed: any = null;
-      try { parsed = JSON.parse(txt); } catch {}
-      return J(res.ok ? 200 : 502, { ...echo, aakash: parsed || txt.slice(0, 300) });
-    } catch (e: any) {
-      return J(502, { ...echo, error: e?.message || 'Failed to reach Aakash' });
-    }
+      e164,
+      aakash: aakashResult,
+    });
   }
 
-  // Normal secured path (after bypass is turned OFF)
+  // ------- Secure path (after bypass is off) -------
   if (!HOOK_SECRET) return J(500, { ok: false, error: 'Server missing SUPABASE_SMS_HOOK_SECRET/TOKEN' });
   if (!AAKASH_KEY)  return J(500, { ok: false, error: 'AAKASH_SMS_API_KEY missing' });
 
@@ -174,10 +179,7 @@ export async function POST(req: NextRequest) {
   let bearerOk = false;
   const auth = (req.headers.get('authorization') || '').trim();
   const token = auth.toLowerCase().startsWith('bearer ') ? auth.slice(7).trim() : '';
-  if (!sigOk && token) {
-    bearerOk = bearerVariants(HOOK_SECRET).includes(token);
-  }
-
+  if (!sigOk && token) bearerOk = bearerVariants(HOOK_SECRET).includes(token);
   if (!sigOk && !bearerOk) {
     return J(401, {
       ok: false,
@@ -208,12 +210,16 @@ export async function POST(req: NextRequest) {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${AAKASH_KEY}`,
       },
-      body: JSON.stringify({ to: [local], text: message }),
+      body: JSON.stringify({
+        to: [local],
+        text: message,
+        auth_token: AAKASH_KEY, // keep dual path even on secure flow
+      }),
     });
     const txt = await res.text().catch(() => '');
     let parsed: any = null;
     try { parsed = JSON.parse(txt); } catch {}
-    return J(res.ok ? 200 : 502, { ok: res.ok, aakash: parsed || txt.slice(0, 300) });
+    return J(res.ok ? 200 : 502, { ok: res.ok, aakash: parsed || txt.slice(0, 500) });
   } catch (e: any) {
     return J(502, { ok: false, error: e?.message || 'Failed to reach Aakash' });
   }
