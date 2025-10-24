@@ -1,41 +1,38 @@
-// Force Node runtime and disable static caching
+// Run on Node and prevent static caching
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createHmac, timingSafeEqual } from 'crypto';
 
-// === CONFIG =================================================================
 const HOOK_SECRET =
   (process.env.SUPABASE_SMS_HOOK_SECRET || process.env.SUPABASE_SMS_HOOK_TOKEN || '').trim();
 const AAKASH_KEY = (process.env.AAKASH_SMS_API_KEY || '').trim();
 
-// TEMP diagnostic bypass: set to "1" for a few minutes to capture what Supabase sends.
-const ALLOW_UNAUTH_HOOK = process.env.ALLOW_UNAUTH_HOOK === '1';
-
-// Optional debug noise in JSON
+// DEBUG flags
 const DEBUG = process.env.DEBUG_SMS_HOOK === '1';
+// **Unconditional** bypass for diagnostics (TURN OFF AFTER TESTING!)
+const ALLOW_ALL_BYPASS = process.env.ALLOW_ALL_BYPASS === '1';
 
 function J(status: number, body: Record<string, unknown>) {
   return NextResponse.json(body, { status });
 }
 
-// ---- Auth helpers ----------------------------------------------------------
 function bearerVariants(secretShown: string): string[] {
   const out = new Set<string>();
   const s = secretShown.trim();
   if (!s) return [];
-  out.add(s); // "v1,whsec_...."
+  out.add(s);                                // "v1,whsec_...."
   const noV1 = s.startsWith('v1,') ? s.slice(3) : s;
-  out.add(noV1); // "whsec_...."
+  out.add(noV1);                              // "whsec_...."
   const noWhsec = noV1.startsWith('whsec_') ? noV1.slice(6) : noV1;
-  out.add(noWhsec); // base64 only
+  out.add(noWhsec);                           // base64 only
   return [...out];
 }
 
 function parseSigHeader(h: string | null) {
   if (!h) return { t: '', v1: '' };
-  if (/^[0-9a-f]{64}$/i.test(h)) return { t: '', v1: h };
+  if (/^[0-9a-f]{64}$/i.test(h)) return { t: '', v1: h }; // just hex
   let t = '', v1 = '';
   for (const p of h.split(',').map(s => s.trim())) {
     const [k, v] = p.split('=');
@@ -63,7 +60,6 @@ function verifySignature(raw: string, secretShown: string, header: string | null
   }
 }
 
-// ---- Payload helpers -------------------------------------------------------
 function extractPayload(b: any): { recipient?: string; message?: string } {
   const phone =
     b?.user?.phone ??
@@ -99,63 +95,97 @@ function toE164Nepal(raw: string): string | null {
 export async function GET() {
   return J(200, {
     ok: true,
-    version: 'v5-auth-diag',
-    expects: 'Signature or Bearer; diag bypass via ALLOW_UNAUTH_HOOK=1',
+    version: 'v6-bypass-all',
+    expects: 'Signature or Bearer; TEMP bypass via ALLOW_ALL_BYPASS=1',
     runtime,
+    DEBUG,
+    ALLOW_ALL_BYPASS,
   });
 }
 
-// ---- POST: handler ---------------------------------------------------------
+// ---- POST ------------------------------------------------------------------
 export async function POST(req: NextRequest) {
+  // Read RAW body (needed for signature verification and for echoing)
+  const raw = await req.text();
+
+  // If unconditional bypass is enabled, immediately echo headers + body and proceed.
+  // This guarantees we SEE what Supabase is actually sending.
+  if (ALLOW_ALL_BYPASS) {
+    const echo: Record<string, unknown> = {
+      ok: true,
+      bypass: 'ALLOW_ALL_BYPASS',
+      saw_headers: {
+        'x-supabase-webhook-signature':
+          req.headers.get('x-supabase-webhook-signature') ||
+          req.headers.get('x-webhook-signature') ||
+          req.headers.get('x-signature') ||
+          null,
+        authorization: req.headers.get('authorization') || null,
+        'user-agent': req.headers.get('user-agent') || null,
+        host: req.headers.get('host') || null,
+      },
+      raw_body_len: raw.length,
+    };
+
+    // Try to parse; if it fails we still return echo for visibility
+    let body: any = null;
+    try { body = JSON.parse(raw); } catch {}
+    const { recipient: rawRecipient, message } = extractPayload(body || {});
+    let e164: string | null = null;
+    if (rawRecipient) {
+      e164 = rawRecipient.startsWith('+977') ? rawRecipient : toE164Nepal(rawRecipient);
+    }
+
+    // If we don’t have Aakash key or recipient yet, return echo only (200) so you can inspect headers in Supabase.
+    if (!AAKASH_KEY || !e164 || !message || !/^\+9779[78]\d{8}$/.test(e164)) {
+      return J(200, { ...echo, aakash_skipped: true, reason: 'missing AAKASH key or invalid payload', e164, message });
+    }
+
+    // Otherwise, go ahead and send to Aakash so you can receive a test SMS while bypass is on.
+    const local = e164.replace('+977', '');
+    try {
+      const res = await fetch('https://sms.aakashsms.com/sms/v3/send', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${AAKASH_KEY}`,
+        },
+        body: JSON.stringify({ to: [local], text: message }),
+      });
+      const txt = await res.text().catch(() => '');
+      let parsed: any = null;
+      try { parsed = JSON.parse(txt); } catch {}
+      return J(res.ok ? 200 : 502, { ...echo, aakash: parsed || txt.slice(0, 300) });
+    } catch (e: any) {
+      return J(502, { ...echo, error: e?.message || 'Failed to reach Aakash' });
+    }
+  }
+
+  // Normal secured path (after bypass is turned OFF)
   if (!HOOK_SECRET) return J(500, { ok: false, error: 'Server missing SUPABASE_SMS_HOOK_SECRET/TOKEN' });
   if (!AAKASH_KEY)  return J(500, { ok: false, error: 'AAKASH_SMS_API_KEY missing' });
 
-  const raw = await req.text();
-
-  // Prefer signature
   const sigHeader =
     req.headers.get('x-supabase-webhook-signature') ||
     req.headers.get('x-webhook-signature') ||
     req.headers.get('x-signature');
-
   const sigOk = verifySignature(raw, HOOK_SECRET, sigHeader);
 
-  // Fallback: Authorization: Bearer
   let bearerOk = false;
   const auth = (req.headers.get('authorization') || '').trim();
   const token = auth.toLowerCase().startsWith('bearer ') ? auth.slice(7).trim() : '';
   if (!sigOk && token) {
-    const variants = bearerVariants(HOOK_SECRET);
-    bearerOk = variants.includes(token);
+    bearerOk = bearerVariants(HOOK_SECRET).includes(token);
   }
 
-  // TEMP bypass for diagnostics (very strict; switch off after test!)
-  let bypassOk = false;
-  if (!sigOk && !bearerOk && ALLOW_UNAUTH_HOOK) {
-    const ua = (req.headers.get('user-agent') || '').toLowerCase();
-    const ref = (req.headers.get('referer') || '').toLowerCase();
-    const host = (req.headers.get('host') || '').toLowerCase();
-    const looksSupabaseUA = ua.includes('got') || ua.includes('supabase') || ua.includes('node-fetch');
-    const looksOurHost = host.endsWith('gatishilnepal.org') || host.includes('vercel.app');
-    if (looksSupabaseUA && looksOurHost) bypassOk = true;
-  }
-
-  if (!sigOk && !bearerOk && !bypassOk) {
+  if (!sigOk && !bearerOk) {
     return J(401, {
       ok: false,
       error: 'Unauthorized: invalid signature or bearer',
-      ...(DEBUG ? {
-        diag: {
-          haveSigHeader: !!sigHeader,
-          haveAuthHeader: !!auth,
-          bearerTokenLen: token.length,
-          note: 'Set ALLOW_UNAUTH_HOOK=1 temporarily to capture what Supabase sends.',
-        }
-      } : {}),
+      ...(DEBUG ? { diag: { haveSigHeader: !!sigHeader, haveAuthHeader: !!auth, tokenLen: token.length } } : {}),
     });
   }
 
-  // Parse JSON after auth/bypass
   let body: any;
   try { body = JSON.parse(raw); }
   catch { return J(400, { ok: false, error: 'Invalid JSON body' }); }
@@ -166,19 +196,8 @@ export async function POST(req: NextRequest) {
   }
 
   const e164 = rawRecipient.startsWith('+977') ? rawRecipient : toE164Nepal(rawRecipient);
-  if (!e164) return J(400, { ok: false, error: 'Recipient not Nepal +977 97/98', recipient: rawRecipient });
-  if (!/^\+9779[78]\d{8}$/.test(e164)) {
-    return J(400, { ok: false, error: 'Recipient must be +97797/98 followed by 8 digits', recipient: e164 });
-  }
-
-  // If we’re bypassing, include what we saw in the response for one time inspection
-  const diag: Record<string, unknown> = {};
-  if (ALLOW_UNAUTH_HOOK && DEBUG && !sigOk && !bearerOk) {
-    diag['saw_headers'] = {
-      'x-supabase-webhook-signature': sigHeader || null,
-      authorization: auth || null,
-      'user-agent': req.headers.get('user-agent') || null,
-    };
+  if (!e164 || !/^\+9779[78]\d{8}$/.test(e164)) {
+    return J(400, { ok: false, error: 'Recipient must be +977 and start with 97/98', recipient: rawRecipient });
   }
 
   const local = e164.replace('+977', '');
@@ -191,14 +210,11 @@ export async function POST(req: NextRequest) {
       },
       body: JSON.stringify({ to: [local], text: message }),
     });
-
     const txt = await res.text().catch(() => '');
-    if (!res.ok) return J(502, { ok: false, error: `Aakash ${res.status}`, body: txt.slice(0, 300), ...diag });
-
     let parsed: any = null;
     try { parsed = JSON.parse(txt); } catch {}
-    return J(200, { ok: true, aakash: parsed || txt.slice(0, 200), ...diag });
+    return J(res.ok ? 200 : 502, { ok: res.ok, aakash: parsed || txt.slice(0, 300) });
   } catch (e: any) {
-    return J(502, { ok: false, error: e?.message || 'Failed to reach Aakash', ...diag });
+    return J(502, { ok: false, error: e?.message || 'Failed to reach Aakash' });
   }
 }
