@@ -123,8 +123,6 @@ function JoinClientBody() {
           access_token: session.access_token,
           refresh_token: session.refresh_token,
         });
-      } else {
-        await supabase.auth.getSession();
       }
 
       router.replace('/onboard?src=join');
@@ -226,8 +224,6 @@ function JoinClientBody() {
           access_token: session.access_token,
           refresh_token: session.refresh_token,
         });
-      } else {
-        await supabase.auth.getSession();
       }
 
       router.replace('/onboard?src=join');
