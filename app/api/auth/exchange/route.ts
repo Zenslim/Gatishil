@@ -20,11 +20,13 @@ export async function POST(req: Request) {
 
     const safeUser = data?.user ? { ...data.user } : null;
 
-    return NextResponse.json({
+    const res = NextResponse.json({
       ok: true,
       session: data?.session ?? null,
       user: safeUser,
     });
+    supabase.commitCookies(res);
+    return res;
   } catch (err: any) {
     return NextResponse.json({ ok: false, error: err?.message || 'exchange_failed' }, { status: 500 });
   }
