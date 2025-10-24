@@ -5,8 +5,8 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { createHmac, timingSafeEqual } from 'crypto';
 
-// ---- CONFIG (from Vercel env) ---------------------------------------------
-// Paste the SAME value you see in Supabase's "Secret" box (e.g. "v1,whsec_....")
+// === CONFIG =================================================================
+// Put the SAME value you see in Supabase’s "Secret" box (e.g., "v1,whsec_........").
 const HOOK_SECRET =
   (process.env.SUPABASE_SMS_HOOK_SECRET || process.env.SUPABASE_SMS_HOOK_TOKEN || '').trim();
 
@@ -16,15 +16,26 @@ const AAKASH_KEY = (process.env.AAKASH_SMS_API_KEY || '').trim();
 // Optional debug: set DEBUG_SMS_HOOK=1 in Vercel while testing
 const DEBUG = process.env.DEBUG_SMS_HOOK === '1';
 
-// ---- HELPERS ---------------------------------------------------------------
+// === HELPERS ================================================================
 function J(status: number, body: Record<string, unknown>) {
   return NextResponse.json(body, { status });
 }
 
+function bearerCandidates(secretShown: string): string[] {
+  const out = new Set<string>();
+  const s = secretShown.trim();
+  if (!s) return [];
+  out.add(s);                                // "v1,whsec_...."
+  const noV1 = s.startsWith('v1,') ? s.slice(3) : s;
+  out.add(noV1);                              // "whsec_...."
+  const noWhsec = noV1.startsWith('whsec_') ? noV1.slice(6) : noV1;
+  out.add(noWhsec);                           // "<base64>"
+  return [...out].filter(Boolean);
+}
+
 function parseSigHeader(h: string | null) {
   if (!h) return { t: '', v1: '' };
-  // Header can be "t=...,v1=<hex>" OR just "<hex>"
-  if (/^[0-9a-f]{64}$/i.test(h)) return { t: '', v1: h };
+  if (/^[0-9a-f]{64}$/i.test(h)) return { t: '', v1: h }; // just hex
   let t = '', v1 = '';
   for (const part of h.split(',').map(s => s.trim())) {
     const [k, v] = part.split('=');
@@ -34,12 +45,11 @@ function parseSigHeader(h: string | null) {
   return { t, v1 };
 }
 
-// Supabase UI shows a secret like "v1,whsec_...." (base64 after "whsec_")
+// Supabase UI shows "v1,whsec_<base64>"; verify signature if present.
 function verifySignature(raw: string, secretShown: string, header: string | null): boolean {
-  if (!secretShown) return false;
+  if (!secretShown || !header) return false;
   const cleaned = secretShown.startsWith('v1,') ? secretShown.slice(3) : secretShown;
   const b64 = cleaned.startsWith('whsec_') ? cleaned.slice(6) : cleaned;
-
   const { v1 } = parseSigHeader(header);
   if (!v1) return false;
 
@@ -85,20 +95,25 @@ function toE164Nepal(raw: string): string | null {
   return null;
 }
 
-// ---- GET: lightweight self-check so you know the right code is live --------
+// === GET: self-check so you know the right code is live =====================
 export async function GET() {
-  return J(200, { ok: true, version: 'v3-signature', expects: 'X-Supabase-Webhook-Signature', runtime });
+  return J(200, {
+    ok: true,
+    version: 'v4-signature-or-bearer',
+    expects: 'X-Supabase-Webhook-Signature OR Authorization: Bearer',
+    runtime,
+  });
 }
 
-// ---- POST: Supabase hook handler ------------------------------------------
+// === POST: main handler =====================================================
 export async function POST(req: NextRequest) {
   if (!HOOK_SECRET) return J(500, { ok: false, error: 'Server missing SUPABASE_SMS_HOOK_SECRET/TOKEN' });
-  if (!AAKASH_KEY)  return J(500, { ok: false, error: 'AAKASH_SMS_API_KEY missing' });
+  if (!AAKASH_KEY)  return J(500, { ok: false, error: 'AAKASH_SMS_AK missing' });
 
-  // 1) must read RAW body to verify signature
+  // 1) Read RAW body (needed for signature verification)
   const raw = await req.text();
 
-  // 2) verify Supabase signature (no custom headers needed)
+  // 2) Prefer signature auth if header is present
   const sigHeader =
     req.headers.get('x-supabase-webhook-signature') ||
     req.headers.get('x-webhook-signature') ||
@@ -106,43 +121,50 @@ export async function POST(req: NextRequest) {
 
   const sigOk = verifySignature(raw, HOOK_SECRET, sigHeader);
 
-  // BACKSTOP (only for legacy migrations): allow Bearer = HOOK_SECRET if no signature present.
+  // 3) Fallback: accept Authorization: Bearer with any canonical form of the secret
   let bearerOk = false;
   if (!sigOk) {
     const auth = (req.headers.get('authorization') || '').trim();
-    if (auth.toLowerCase().startsWith('bearer ')) {
-      const token = auth.slice(7).trim();
-      bearerOk = token === HOOK_SECRET;
+    const token = auth.toLowerCase().startsWith('bearer ') ? auth.slice(7).trim() : '';
+    if (token) {
+      const candidates = bearerCandidates(HOOK_SECRET);
+      bearerOk = candidates.includes(token);
     }
   }
 
   if (!sigOk && !bearerOk) {
     return J(401, {
       ok: false,
-      error: 'Unauthorized: invalid or missing Supabase hook signature',
-      ...(DEBUG ? { diag: { haveSigHeader: !!sigHeader, haveAuthHeader: !!req.headers.get('authorization') } } : {}),
+      error: 'Unauthorized: invalid signature or bearer',
+      ...(DEBUG ? {
+        diag: {
+          haveSigHeader: !!sigHeader,
+          haveAuthHeader: !!req.headers.get('authorization'),
+          acceptedBearer: bearerOk,
+        }
+      } : {}),
     });
   }
 
-  // 3) parse JSON after signature verification
+  // 4) Parse JSON after auth
   let body: any;
   try { body = JSON.parse(raw); }
   catch { return J(400, { ok: false, error: 'Invalid JSON body' }); }
 
-  // 4) extract phone + message
+  // 5) Extract phone + message
   const { recipient: rawRecipient, message } = extractPayload(body);
   if (!rawRecipient || !message) {
     return J(400, { ok: false, error: 'Missing phone or message', shape_hint: Object.keys(body || {}) });
   }
 
-  // 5) Nepal +977 97/98 only
+  // 6) Nepal +977 97/98 only
   const e164 = rawRecipient.startsWith('+977') ? rawRecipient : toE164Nepal(rawRecipient);
   if (!e164) return J(400, { ok: false, error: 'Recipient not Nepal +977 97/98', recipient: rawRecipient });
   if (!/^\+9779[78]\d{8}$/.test(e164)) {
     return J(400, { ok: false, error: 'Recipient must be +97797/98 followed by 8 digits', recipient: e164 });
   }
 
-  // 6) send via Aakash (expects local number)
+  // 7) Send via Aakash
   const local = e164.replace('+977', '');
   try {
     const res = await fetch('https://sms.aakashsms.com/sms/v3/send', {
