@@ -6,6 +6,7 @@ import { createHmac, timingSafeEqual } from 'crypto';
 
 // --- Env --------------------------------------------------------------------
 const HOOK_SECRET = (process.env.SUPABASE_SMS_HOOK_SECRET || process.env.SUPABASE_SMS_HOOK_TOKEN || '').trim();
+// IMPORTANT: keep the same env name you already set in Vercel
 const AAKASH_KEY  = (process.env.AAKASH_SMS_API_KEY || '').trim();
 const AAKASH_SENDER_ID = (process.env.AAKASH_SENDER_ID || '').trim(); // optional approved mask
 const DEBUG = process.env.DEBUG_SMS_HOOK === '1';
@@ -47,8 +48,13 @@ function extractPayload(b: any): { recipient?: string; message?: string } {
   const phone =
     b?.user?.phone ?? b?.recipient ?? b?.to ?? b?.phone ??
     (Array.isArray(b?.destinations) && b.destinations[0]?.to) ?? undefined;
+
   const otp = b?.sms?.otp ?? b?.otp ?? undefined;
-  const message = b?.message ?? b?.content ?? b?.text ?? (otp ? `Your Gatishil Nepal code is ${otp}` : undefined);
+
+  const message =
+    b?.message ?? b?.content ?? b?.text ??
+    (otp ? `Your Gatishil Nepal code is ${otp}` : undefined);
+
   return { recipient: typeof phone === 'string' ? phone : undefined, message: typeof message === 'string' ? message : undefined };
 }
 function toE164Nepal(raw: string): string | null {
@@ -58,16 +64,18 @@ function toE164Nepal(raw: string): string | null {
   if (/^9[78]\d{8}$/.test(digits)) return `+977${digits}`;
   return null;
 }
-function formEncode(obj: Record<string, string>): string {
-  return Object.entries(obj).map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join('&');
+function toAakashLocal(e164: string): string | null {
+  if (!e164.startsWith('+977')) return null;
+  const local = e164.slice(4);
+  return /^98\d{8}$/.test(local) ? local : null;
 }
 
 // --- GET probe --------------------------------------------------------------
 export async function GET() {
   return J(200, {
     ok: true,
-    version: 'v9-aakash-form',
-    expects: 'Supabase signature or bearer; Aakash form-encoded',
+    version: 'v10-aakash-v4-json',
+    expects: 'Supabase signature or bearer; Aakash v4 JSON + auth-token',
     runtime,
   });
 }
@@ -105,50 +113,46 @@ export async function POST(req: NextRequest) {
   if (!e164 || !/^\+9779[78]\d{8}$/.test(e164)) {
     return J(400, { ok: false, error: 'Recipient must be +977 and start with 97/98', recipient: rawRecipient });
   }
-  const local10 = e164.replace('+977', ''); // Aakash wants 10-digit local
+  const local10 = toAakashLocal(e164);
+  if (!local10) return J(400, { ok: false, error: 'Invalid Nepal number for Aakash v4', recipient: e164 });
 
   if (!AAKASH_KEY) return J(500, { ok: false, error: 'AAKASH_SMS_API_KEY missing' });
 
-  // 4) Build **form-encoded** body per Aakash v3 docs
-  //    Required: auth_token, to (string), text
+  // 4) Build **JSON** body for Aakash v4 + auth-token header
+  //    v4 spec (working in your old code): { to: [ "98xxxxxxxx" ], text: [ "..." ] }
   //    Optional: from (mask) if your account needs it
-  const payload: Record<string, string> = {
-    auth_token: AAKASH_KEY,
-    to: local10,                 // NOT an array
-    text: message,
-  };
+  const payload: Record<string, any> = { to: [local10], text: [message] };
   if (AAKASH_SENDER_ID) payload['from'] = AAKASH_SENDER_ID;
 
   try {
-    const res = await fetch('https://sms.aakashsms.com/sms/v3/send', {
+    const res = await fetch('https://sms.aakashsms.com/sms/v4/send-user', {
       method: 'POST',
       headers: {
-        // Aakash examples use urlencoded form; keep Authorization too just-in-case
-        'Content-Type': 'application/x-www-form-urlencoded',
-        Authorization: `Bearer ${AAKASH_KEY}`,
+        'Content-Type': 'application/json',
+        // CRITICAL: v4 uses "auth-token" header, not Authorization: Bearer
+        'auth-token': AAKASH_KEY,
       },
-      body: formEncode(payload),
+      body: JSON.stringify(payload),
     });
 
     const txt = await res.text().catch(() => '');
     let parsed: any = null;
-    try { parsed = JSON.parse(txt); } catch { /* some tenants return plain text/HTML on success/error */ }
-
+    try { parsed = JSON.parse(txt); } catch {/* v4 can return plain text on some tenants */}
     if (!res.ok) {
       return J(502, {
         ok: false,
-        error: `Aakash ${res.status}`,
+        error: `Aakash v4 ${res.status}`,
         body: parsed ?? txt.slice(0, 800),
-        sent: { to: local10, has_sender: !!AAKASH_SENDER_ID, content_type: 'application/x-www-form-urlencoded' },
+        sent: { to: local10, has_sender: !!AAKASH_SENDER_ID, content_type: 'application/json', header: 'auth-token' },
       });
     }
 
     return J(200, {
       ok: true,
       aakash: parsed ?? txt.slice(0, 400),
-      sent: { to: local10, has_sender: !!AAKASH_SENDER_ID, content_type: 'application/x-www-form-urlencoded' },
+      sent: { to: local10, has_sender: !!AAKASH_SENDER_ID, content_type: 'application/json', header: 'auth-token' },
     });
   } catch (e: any) {
-    return J(502, { ok: false, error: e?.message || 'Failed to reach Aakash' });
+    return J(502, { ok: false, error: e?.message || 'Failed to reach Aakash v4' });
   }
 }
