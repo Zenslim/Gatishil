@@ -33,29 +33,6 @@ async function waitForSession(ms = 8000) {
   });
 }
 
-/** Mirror client tokens into HttpOnly cookies so SSR/edge sees the session. */
-async function syncToServerCookies() {
-  const supabase = getSupabaseBrowser();
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session?.access_token) throw new Error('No active session');
-
-  const res = await fetch('/api/auth/sync', {
-    method: 'POST',
-    credentials: 'include',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({
-      access_token: session.access_token,
-      refresh_token: session.refresh_token ?? null,
-    }),
-  });
-
-  if (!res.ok) {
-    const j = await res.json().catch(() => ({}));
-    throw new Error(j?.error || `Auth sync failed (${res.status})`);
-  }
-  return true;
-}
-
 export default function TrustStep({ onDone }) {
   const router = useRouter();
   const q = useSearchParams();
@@ -80,13 +57,8 @@ export default function TrustStep({ onDone }) {
   }, [toast]);
 
   const goNext = async () => {
-    // 1) Ensure a real Supabase session exists (magic link / OTP may still be finalizing)
-    await waitForSession(); // throws if it never arrives
-    // 2) Write HttpOnly cookies so middleware/SSR recognizes auth before navigating
-    await syncToServerCookies();
-    // 3) Small tick to ensure Set-Cookie is committed
-    await new Promise((r) => setTimeout(r, 50));
-    // 4) Navigate to the intended place and refresh to hydrate with SSR state
+    // Ensure a real Supabase session exists before navigating away
+    await waitForSession();
     router.replace(next);
     router.refresh();
     onDone?.();
@@ -111,6 +83,16 @@ export default function TrustStep({ onDone }) {
     setPinBusy(true);
     try {
       await createLocalPin(pin);
+      const response = await fetch('/api/pin/set', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ pin }),
+      });
+      if (!response.ok) {
+        const text = await response.text().catch(() => '');
+        throw new Error(text || 'Could not store PIN securely.');
+      }
       setExistingPin(true);
       setToast('🌿 Your voice is now sealed to this device.');
       await goNext();
