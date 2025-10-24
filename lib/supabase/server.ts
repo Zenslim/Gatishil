@@ -69,6 +69,21 @@ export function getSupabaseServer(resp?: NextResponse): SupabaseWithCommit {
         queueRemove(name, options);
       },
     },
+    setAll(cookieList: CookieDescriptor[]) {
+      for (const { name, value, options } of cookieList) {
+        applySet(name, value, options);
+      }
+    },
+    remove(name: string, options?: CookieOptions) {
+      applyRemove(name, options);
+    },
+    delete(name: string, options?: CookieOptions) {
+      applyRemove(name, options);
+    },
+  } as const;
+
+  return createServerClient(url, anon, {
+    cookies: methods,
   });
 
   const commitCookies = (response?: NextResponse) => {
