@@ -115,11 +115,10 @@ export async function handleVerify(req: Request): Promise<Response> {
     if (!email || !token) return json({ error: "bad_request", detail: "email and token required" }, 400);
     const { data, error } = await supabase.auth.verifyOtp({ email, token, type: "email" });
     if (error) return json({ error: "verify_failed", detail: error.message }, 400);
-    return await respondWithSession(
-      { ok: true, channel: "email", user: data?.user ?? null, session: data?.session ?? null },
-      data?.session ?? null,
-      cookieStore,
-    );
+    if (!data?.session) {
+      return json({ error: "verify_failed", detail: "No session returned from Supabase." }, 400);
+    }
+    return await respondWithServerCommit(data.session, cookieStore);
   }
 
   // PHONE VERIFY
@@ -129,11 +128,10 @@ export async function handleVerify(req: Request): Promise<Response> {
     if (!phone || !token) return json({ error: "bad_request", detail: "phone and token required" }, 400);
     const { data, error } = await supabase.auth.verifyOtp({ phone, token, type: "sms" });
     if (error) return json({ error: "verify_failed", detail: error.message }, 400);
-    return await respondWithSession(
-      { ok: true, channel: "phone", user: data?.user ?? null, session: data?.session ?? null },
-      data?.session ?? null,
-      cookieStore,
-    );
+    if (!data?.session) {
+      return json({ error: "verify_failed", detail: "No session returned from Supabase." }, 400);
+    }
+    return await respondWithServerCommit(data.session, cookieStore);
   }
 
   return json({ error: "bad_request", detail: "Provide {email, token} or {phone, token}" }, 400);
@@ -146,17 +144,13 @@ export function json(payload: any, status = 200): NextResponse {
   });
 }
 
-async function respondWithSession(
-  payload: any,
-  session: Session | null,
-  cookieStore: CookieStore,
-): Promise<NextResponse> {
-  const response = json(payload);
+async function respondWithServerCommit(session: Session, cookieStore: CookieStore): Promise<NextResponse> {
+  const response = json({ ok: true, serverCommitted: true });
   await attachSessionCookies(response, session, cookieStore);
   return response;
 }
 
-async function attachSessionCookies(response: NextResponse, session: Session | null, cookieStore: CookieStore) {
+async function attachSessionCookies(response: NextResponse, session: Session, cookieStore: CookieStore) {
   if (!session?.access_token) return;
 
   const supabaseUrl = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL;

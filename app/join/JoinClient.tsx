@@ -117,12 +117,8 @@ function JoinClientBody() {
         throw new Error(payload?.detail || payload?.error || 'Invalid or expired code.');
       }
 
-      const session = payload?.session;
-      if (session?.access_token && session?.refresh_token) {
-        await supabase.auth.setSession({
-          access_token: session.access_token,
-          refresh_token: session.refresh_token,
-        });
+      if (!payload?.serverCommitted) {
+        throw new Error('Could not complete sign-in. Please try again.');
       }
 
       router.replace('/onboard?src=join');
@@ -218,12 +214,8 @@ function JoinClientBody() {
         throw new Error(msg);
       }
 
-      const session = payload?.session;
-      if (session?.access_token && session?.refresh_token) {
-        await supabase.auth.setSession({
-          access_token: session.access_token,
-          refresh_token: session.refresh_token,
-        });
+      if (!payload?.serverCommitted) {
+        throw new Error('Could not complete sign-in. Please try again.');
       }
 
       router.replace('/onboard?src=join');
