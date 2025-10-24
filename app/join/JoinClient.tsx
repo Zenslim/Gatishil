@@ -17,9 +17,12 @@ function JoinClientBody() {
   const [tab, setTab] = useState<Tab>('phone');
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const resetAlerts = () => { setMessage(null); setError(null); };
+  const resetAlerts = () => {
+    setMessage(null);
+    setError(null);
+  };
 
-  // Session guard → if already signed in, go to onboard
+  // If already signed in, go straight to onboard
   useEffect(() => {
     (async () => {
       const { data } = await supabase.auth.getSession();
@@ -33,6 +36,26 @@ function JoinClientBody() {
     const id = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(id);
   }, []);
+
+  // ---- cookie sync helper (await before navigating) ----
+  async function syncServerCookiesOrThrow() {
+    const { data } = await supabase.auth.getSession();
+    const access_token = data.session?.access_token ?? null;
+    const refresh_token = data.session?.refresh_token ?? null;
+    if (!access_token || !refresh_token) {
+      throw new Error('Session not ready. Please try again.');
+    }
+    const r = await fetch('/api/auth/sync', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ access_token, refresh_token }),
+    });
+    if (!r.ok) {
+      const j = await r.json().catch(() => ({}));
+      throw new Error(j?.error ?? 'Cookie sync failed');
+    }
+  }
 
   // ---- PHONE lane ----
   const phoneInputRef = useRef<HTMLInputElement>(null);
@@ -69,7 +92,7 @@ function JoinClientBody() {
       setPhoneSentTo(msisdn);
       setPhoneCode('');
       setMessage('We sent a 6-digit code (expires in 5 minutes).');
-      setPhoneResendAt(Date.now() + 30_000); // match server throttle (30s)
+      setPhoneResendAt(Date.now() + 30_000); // UI throttle 30s
       setTimeout(() => phoneCodeRef.current?.focus(), 50);
     } catch (e: any) {
       setError(e?.message || 'Could not send SMS OTP.');
@@ -89,10 +112,12 @@ function JoinClientBody() {
         type: 'sms',
       });
       if (error) throw new Error(error.message || 'Invalid or expired code.');
-      if (!data?.session) {
-        throw new Error('Could not establish session. Please try again.');
-      }
-      router.replace('/dashboard');
+      if (!data?.session) throw new Error('Could not establish session. Please try again.');
+
+      // Block until server writes sb-* cookies
+      await syncServerCookiesOrThrow();
+
+      router.replace('/onboard?src=join');
       router.refresh();
     } catch (e: any) {
       setError(e?.message || 'Invalid or expired code.');
@@ -149,7 +174,7 @@ function JoinClientBody() {
       setEmailSentTo(addr);
       setEmailCode('');
       setMessage('We sent a 6-digit code (expires in 5 minutes).');
-      setEmailResendAt(Date.now() + 30_000); // UI throttle to 30s, even if email allows faster
+      setEmailResendAt(Date.now() + 30_000);
       setTimeout(() => emailCodeRef.current?.focus(), 50);
     } catch (e: any) {
       const friendly = getFriendlySupabaseEmailError(e);
@@ -175,6 +200,10 @@ function JoinClientBody() {
       });
       if (error) throw new Error(error.message || 'Invalid or expired code.');
       if (!data?.session) throw new Error('No session returned. Please try again.');
+
+      // Block until server writes sb-* cookies
+      await syncServerCookiesOrThrow();
+
       router.replace('/onboard?src=join');
       router.refresh();
     } catch (e: any) {
@@ -205,7 +234,7 @@ function JoinClientBody() {
 
   return (
     <main className="min-h-dvh bg-black text-white">
-      {/* ===== Welcome header (restored) ===== */}
+      {/* ===== Welcome header ===== */}
       <header className="px-6 md:px-10 pt-10 pb-6">
         <span className="inline-block text-[10px] tracking-[0.2em] rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-sky-300/80">
           GATISHILNEPAL.ORG
@@ -224,13 +253,19 @@ function JoinClientBody() {
         <div className="max-w-xl mx-auto rounded-2xl border border-white/10 bg-white/[0.03] backdrop-blur-xl p-6 shadow-[0_0_60px_-20px_rgba(255,255,255,0.3)]">
           <div className="flex gap-2 rounded-xl bg-white/5 p-1 mb-6">
             <button
-              onClick={() => { setTab('phone'); resetAlerts(); }}
+              onClick={() => {
+                setTab('phone');
+                resetAlerts();
+              }}
               className={tabBtn(tab === 'phone')}
             >
               Phone OTP
             </button>
             <button
-              onClick={() => { setTab('email'); resetAlerts(); }}
+              onClick={() => {
+                setTab('email');
+                resetAlerts();
+              }}
               className={tabBtn(tab === 'email')}
             >
               Email OTP
@@ -273,7 +308,10 @@ function JoinClientBody() {
                     onChange={(e) => setPhoneCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
                     onPaste={(e) => {
                       const pasted = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6);
-                      if (pasted) { e.preventDefault(); setPhoneCode(pasted); }
+                      if (pasted) {
+                        e.preventDefault();
+                        setPhoneCode(pasted);
+                      }
                     }}
                     placeholder="123456"
                     className={codeInputClass}
@@ -345,7 +383,10 @@ function JoinClientBody() {
                     onChange={(e) => setEmailCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
                     onPaste={(e) => {
                       const pasted = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6);
-                      if (pasted) { e.preventDefault(); setEmailCode(pasted); }
+                      if (pasted) {
+                        e.preventDefault();
+                        setEmailCode(pasted);
+                      }
                     }}
                     placeholder="123456"
                     className={codeInputClass}
