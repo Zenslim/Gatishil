@@ -2,6 +2,22 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { getSupabaseServer } from '@/lib/supabase/server';
 
+/**
+ * IMPORTANT
+ * We must preserve ALL 'set-cookie' headers from Supabase after commitCookies(res).
+ * Returning a brand new NextResponse without properly APPENDING those headers causes 500s
+ * (and drops cookies for the next navigation).
+ */
+function send(resWithCookies: NextResponse, body: any, status = 200) {
+  const out = NextResponse.json(body, { status });
+  // Preserve every header set on the original response (notably multiple Set-Cookie)
+  for (const [k, v] of resWithCookies.headers) {
+    // Use append to keep multiple Set-Cookie values intact
+    out.headers.append(k, v as string);
+  }
+  return out;
+}
+
 const emailSendSchema = z.object({
   email: z.string().email().transform((s) => s.toLowerCase().trim()),
   type: z.enum(['otp', 'magiclink']).default('otp').optional(),
@@ -26,7 +42,14 @@ export async function handleSendEmail(req: Request) {
   const res = new NextResponse();
   const supabase = getSupabaseServer({ response: res });
 
-  const payload = emailSendSchema.parse(await req.json());
+  let payload;
+  try {
+    payload = emailSendSchema.parse(await req.json());
+  } catch (e: any) {
+    await supabase.commitCookies(res);
+    return send(res, { ok: false, error: 'bad_request' }, 400);
+  }
+
   const { error } = await supabase.auth.signInWithOtp({
     email: payload.email,
     options: {
@@ -35,69 +58,78 @@ export async function handleSendEmail(req: Request) {
     },
   });
 
-  if (error) {
-    await supabase.commitCookies(res);
-    return json(res, { ok: false, error: error.message }, 400);
-  }
-
   await supabase.commitCookies(res);
-  return json(res, { ok: true, channel: 'email', mode: payload.type ?? 'otp' });
+  if (error) return send(res, { ok: false, error: error.message }, 400);
+
+  return send(res, { ok: true, channel: 'email', mode: payload.type ?? 'otp' });
 }
 
 export async function handleSendPhone(req: Request) {
   const res = new NextResponse();
   const supabase = getSupabaseServer({ response: res });
 
-  const payload = phoneSendSchema.parse(await req.json());
-  const { error } = await supabase.auth.signInWithOtp({ phone: payload.phone });
-
-  if (error) {
+  let payload;
+  try {
+    payload = phoneSendSchema.parse(await req.json());
+  } catch (e: any) {
     await supabase.commitCookies(res);
-    return json(res, { ok: false, error: error.message }, 400);
+    return send(res, { ok: false, error: 'bad_request' }, 400);
   }
 
+  const { error } = await supabase.auth.signInWithOtp({ phone: payload.phone });
+
   await supabase.commitCookies(res);
-  return json(res, { ok: true, channel: 'phone', mode: 'sms' });
+  if (error) return send(res, { ok: false, error: error.message }, 400);
+
+  return send(res, { ok: true, channel: 'phone', mode: 'sms' });
 }
 
 export async function handleVerifyEmail(req: Request) {
   const res = new NextResponse();
   const supabase = getSupabaseServer({ response: res });
 
-  const payload = emailVerifySchema.parse(await req.json());
+  let payload;
+  try {
+    payload = emailVerifySchema.parse(await req.json());
+  } catch {
+    await supabase.commitCookies(res);
+    return send(res, { ok: false, error: 'bad_request' }, 400);
+  }
+
   const { data, error } = await supabase.auth.verifyOtp({
     email: payload.email,
     token: payload.token,
     type: 'email',
   });
 
-  if (error || !data.session) {
-    await supabase.commitCookies(res);
-    return json(res, { ok: false, error: error?.message || 'invalid_code' }, 400);
-  }
-
   await supabase.commitCookies(res);
-  return json(res, { ok: true, channel: 'email', user: data.user, session: data.session });
+  if (error || !data.session) return send(res, { ok: false, error: error?.message || 'invalid_code' }, 400);
+
+  return send(res, { ok: true, channel: 'email', user: data.user, session: data.session });
 }
 
 export async function handleVerifyPhone(req: Request) {
   const res = new NextResponse();
   const supabase = getSupabaseServer({ response: res });
 
-  const payload = phoneVerifySchema.parse(await req.json());
+  let payload;
+  try {
+    payload = phoneVerifySchema.parse(await req.json());
+  } catch {
+    await supabase.commitCookies(res);
+    return send(res, { ok: false, error: 'bad_request' }, 400);
+  }
+
   const { data, error } = await supabase.auth.verifyOtp({
     phone: payload.phone,
     token: payload.token,
     type: 'sms',
   });
 
-  if (error || !data.session) {
-    await supabase.commitCookies(res);
-    return json(res, { ok: false, error: error?.message || 'invalid_code' }, 400);
-  }
-
   await supabase.commitCookies(res);
-  return json(res, { ok: true, channel: 'phone', user: data.user, session: data.session });
+  if (error || !data.session) return send(res, { ok: false, error: error?.message || 'invalid_code' }, 400);
+
+  return send(res, { ok: true, channel: 'phone', user: data.user, session: data.session });
 }
 
 export function normalizeNepalPhone(input: string) {
@@ -106,14 +138,4 @@ export function normalizeNepalPhone(input: string) {
   if (raw.startsWith('977')) return '+' + raw;
   if (raw.startsWith('98') || raw.startsWith('97')) return '+977' + raw;
   return raw;
-}
-
-function json(res: NextResponse, body: any, status = 200) {
-  return new NextResponse(JSON.stringify(body), {
-    status,
-    headers: {
-      'content-type': 'application/json',
-      ...Object.fromEntries(res.headers),
-    },
-  });
 }
