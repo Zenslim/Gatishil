@@ -5,33 +5,51 @@ import { NextRequest, NextResponse } from 'next/server';
 
 const AAKASH_URL = process.env.AAKASH_SMS_BASE_URL || 'https://sms.aakashsms.com/sms/v4/send-user';
 const AAKASH_KEY = (process.env.AAKASH_SMS_API_KEY || '').trim();
-const AAKASH_SENDER_ID = (process.env.AAKASH_SENDER_ID || '').trim(); // optional approved mask
+const AAKASH_SENDER_ID = (process.env.AAKASH_SENDER_ID || '').trim(); // optional
+const DEBUG = process.env.DEBUG_SMS_HOOK === '1';
 
-function J(status: number, body: Record<string, unknown>) {
-  return NextResponse.json(body, { status });
+function J(body: Record<string, unknown>, status = 200) {
+  // Always 200 to avoid breaking Supabase /auth/v1/otp
+  return NextResponse.json(body, { status: 200 });
 }
 
-function extractPhoneAndMessage(b: any) {
-  const phone =
-    b?.user?.phone ??
-    b?.recipient ??
-    b?.to ??
-    b?.phone ??
-    (Array.isArray(b?.destinations) && b.destinations[0]?.to) ??
-    undefined;
+// ---------- Permissive extractors ----------
+function pickPhone(b: any): string | undefined {
+  const c = (v: any) => (typeof v === 'string' && v.trim() ? v.trim() : undefined);
+  return (
+    c(b?.user?.phone) ??
+    c(b?.phone) ??
+    c(b?.recipient) ??
+    c(b?.to) ??
+    c(Array.isArray(b?.to) ? b.to[0] : undefined) ??
+    c(b?.record?.phone) ??
+    c(b?.new?.phone) ??
+    c(b?.data?.phone) ??
+    (Array.isArray(b?.destinations) ? c(b.destinations[0]?.to) : undefined)
+  );
+}
 
-  const otp = b?.sms?.otp ?? b?.otp ?? undefined;
-  const message =
-    b?.message ?? b?.content ?? b?.text ?? (otp ? `Your Gatishil Nepal code is ${otp}` : undefined);
+function pickOtp(b: any): string | undefined {
+  const raw =
+    b?.sms?.otp ?? b?.otp ?? b?.code ??
+    b?.record?.otp ?? b?.new?.otp ?? b?.data?.otp;
+  if (raw == null) return undefined;
+  return String(raw).trim();
+}
 
-  return {
-    phone: typeof phone === 'string' ? phone.trim() : undefined,
-    message: typeof message === 'string' ? message : undefined,
-  };
+function pickMessage(b: any, otp?: string): string | undefined {
+  const c = (v: any) => (typeof v === 'string' && v.trim() ? v : undefined);
+  return (
+    c(b?.message) ??
+    c(b?.content) ??
+    c(b?.text) ??
+    (otp ? `Your Gatishil Nepal code is ${otp}` : undefined)
+  );
 }
 
 function toE164Nepal(raw: string): string | null {
   const s = String(raw).trim();
+  if (!s) return null;
   if (s.startsWith('+977')) return s;
   const digits = s.replace(/\D/g, '');
   if (/^9[78]\d{8}$/.test(digits)) return `+977${digits}`;
@@ -44,39 +62,52 @@ function toAakashLocal(e164: string): string | null {
   return /^98\d{8}$/.test(local) ? local : null;
 }
 
-// Simple GET probe
+// ---------- GET: version probe ----------
 export async function GET() {
-  return J(200, {
+  return J({
     ok: true,
-    version: 'restored-aakash-v4-json-nohook',
-    expects: 'Aakash v4 JSON + auth-token',
-    runtime,
+    version: 'v10-permissive-aakash-v4',
+    behavior: 'Always 200; Aakash v4 JSON + auth-token; wide extractor',
+    runtime: 'nodejs',
   });
 }
 
-// POST: accept Supabase Auth hook body and deliver SMS via Aakash v4
+// ---------- POST: never 4xx to Supabase ----------
 export async function POST(req: NextRequest) {
-  if (!AAKASH_KEY) return J(500, { ok: false, error: 'AAKASH_SMS_API_KEY missing' });
+  let raw = '';
+  try { raw = await req.text(); } catch {}
+  let body: any = null;
+  try { body = raw ? JSON.parse(raw) : {}; } catch { body = {}; }
 
-  // Accept JSON or raw text JSON
-  let body: any;
-  try {
-    body = await req.json();
-  } catch {
-    const raw = await req.text();
-    try { body = JSON.parse(raw); } catch { return J(400, { ok: false, error: 'Invalid JSON body' }); }
+  const otp = pickOtp(body);
+  const rawPhone = pickPhone(body);
+  const e164 = rawPhone ? (rawPhone.startsWith('+977') ? rawPhone : toE164Nepal(rawPhone)) : null;
+  const local10 = e164 ? toAakashLocal(e164) : null;
+  const message = pickMessage(body, otp);
+
+  // If we’re missing essentials, return 200 with diagnostics (don’t break Supabase)
+  if (!rawPhone || !e164 || !/^\+9779[78]\d{8}$/.test(e164) || !local10 || !message) {
+    return J({
+      ok: false,
+      reason: 'payload_incomplete',
+      diag: DEBUG ? {
+        havePhone: !!rawPhone,
+        e164,
+        local10,
+        haveMsg: !!message,
+        otp,
+        keys: Object.keys(body || {}),
+      } : undefined
+    });
   }
 
-  const { phone: rawPhone, message } = extractPhoneAndMessage(body || {});
-  if (!rawPhone || !message) return J(400, { ok: false, error: 'Missing phone or message' });
-
-  const e164 = rawPhone.startsWith('+977') ? rawPhone : toE164Nepal(rawPhone);
-  if (!e164 || !/^\+9779[78]\d{8}$/.test(e164)) {
-    return J(400, { ok: false, error: 'Recipient must be +977 and start with 97/98', recipient: rawPhone });
+  if (!AAKASH_KEY) {
+    return J({
+      ok: false,
+      reason: 'aakash_key_missing',
+      diag: DEBUG ? { env: 'AAKASH_SMS_API_KEY missing' } : undefined,
+    });
   }
-
-  const local10 = toAakashLocal(e164);
-  if (!local10) return J(400, { ok: false, error: 'Invalid Nepal number for Aakash v4', recipient: e164 });
 
   const payload: Record<string, any> = { to: [local10], text: [message] };
   if (AAKASH_SENDER_ID) payload.from = AAKASH_SENDER_ID;
@@ -86,22 +117,37 @@ export async function POST(req: NextRequest) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        // CRITICAL: v4 uses "auth-token" (not Authorization: Bearer)
+        // Aakash v4 expects this header name:
         'auth-token': AAKASH_KEY,
       },
       body: JSON.stringify(payload),
     });
 
-    const text = await res.text().catch(() => '');
+    const txt = await res.text().catch(() => '');
     let parsed: any = null;
-    try { parsed = JSON.parse(text); } catch { /* v4 can return plain text */ }
+    try { parsed = JSON.parse(txt); } catch {}
 
     if (!res.ok) {
-      return J(502, { ok: false, error: `Aakash v4 ${res.status}`, body: parsed ?? text.slice(0, 800) });
+      return J({
+        ok: false,
+        reason: 'aakash_error',
+        status: res.status,
+        aakash: parsed ?? txt.slice(0, 800),
+        sent: DEBUG ? payload : undefined,
+      });
     }
 
-    return J(200, { ok: true, aakash: parsed ?? text.slice(0, 400), delivered: true, number: e164 });
+    return J({
+      ok: true,
+      delivered: true,
+      number: e164,
+      aakash: parsed ?? txt.slice(0, 400),
+    });
   } catch (e: any) {
-    return J(502, { ok: false, error: e?.message || 'Failed to reach Aakash v4' });
+    return J({
+      ok: false,
+      reason: 'aakash_exception',
+      error: e?.message || 'Failed to reach Aakash v4',
+    });
   }
 }
