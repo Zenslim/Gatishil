@@ -1,141 +1,133 @@
-import { NextResponse } from 'next/server';
-import { z } from 'zod';
-import { getSupabaseServer } from '@/lib/supabase/server';
+import { cookies } from "next/headers";
+import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
 
 /**
- * IMPORTANT
- * We must preserve ALL 'set-cookie' headers from Supabase after commitCookies(res).
- * Returning a brand new NextResponse without properly APPENDING those headers causes 500s
- * (and drops cookies for the next navigation).
+ * Unified OTP (Email + Phone/SMS) for Next.js App Router.
+ * Single source of truth. No duplication.
+ * Requirements:
+ * - Env on Vercel: SUPABASE_URL, SUPABASE_ANON_KEY (server), NEXT_PUBLIC_SITE_URL
+ * - Supabase Auth: Phone confirmations ON, SMS Hook (HTTPS) configured
  */
-function send(resWithCookies: NextResponse, body: any, status = 200) {
-  const out = NextResponse.json(body, { status });
-  // Preserve every header set on the original response (notably multiple Set-Cookie)
-  for (const [k, v] of resWithCookies.headers) {
-    // Use append to keep multiple Set-Cookie values intact
-    out.headers.append(k, v as string);
-  }
-  return out;
+
+type SendPayload =
+  | { email: string; type?: "otp" | "magiclink"; redirectTo?: string }
+  | { phone: string };
+
+type VerifyPayload =
+  | { email: string; token: string }
+  | { phone: string; token: string };
+
+const NEPAL_PREFIX = "+977";
+
+function isEmailSend(p: any): p is { email: string; type?: "otp" | "magiclink"; redirectTo?: string } {
+  return typeof p?.email === "string" && p.email.includes("@");
+}
+function isPhoneSend(p: any): p is { phone: string } {
+  return typeof p?.phone === "string";
+}
+function isEmailVerify(p: any): p is { email: string; token: string } {
+  return typeof p?.email === "string" && typeof p?.token === "string";
+}
+function isPhoneVerify(p: any): p is { phone: string; token: string } {
+  return typeof p?.phone === "string" && typeof p?.token === "string";
 }
 
-const emailSendSchema = z.object({
-  email: z.string().email().transform((s) => s.toLowerCase().trim()),
-  type: z.enum(['otp', 'magiclink']).default('otp').optional(),
-  redirectTo: z.string().url().optional(),
-});
+export async function handleSend(req: Request): Promise<Response> {
+  const supabase = createRouteHandlerClient({
+    cookies,
+    supabaseUrl: process.env.SUPABASE_URL,
+    supabaseKey: process.env.SUPABASE_ANON_KEY,
+  } as any);
 
-const phoneSendSchema = z.object({
-  phone: z.string().transform((s) => normalizeNepalPhone(s)),
-});
-
-const emailVerifySchema = z.object({
-  email: z.string().email().transform((s) => s.toLowerCase().trim()),
-  token: z.string().min(6).max(6),
-});
-
-const phoneVerifySchema = z.object({
-  phone: z.string().transform((s) => normalizeNepalPhone(s)),
-  token: z.string().min(6).max(6),
-});
-
-export async function handleSendEmail(req: Request) {
-  const res = new NextResponse();
-  const supabase = getSupabaseServer({ response: res });
-
-  let payload;
+  let body: SendPayload;
   try {
-    payload = emailSendSchema.parse(await req.json());
-  } catch (e: any) {
-    await supabase.commitCookies(res);
-    return send(res, { ok: false, error: 'bad_request' }, 400);
-  }
-
-  const { error } = await supabase.auth.signInWithOtp({
-    email: payload.email,
-    options: {
-      emailRedirectTo: payload.redirectTo,
-      shouldCreateUser: true,
-    },
-  });
-
-  await supabase.commitCookies(res);
-  if (error) return send(res, { ok: false, error: error.message }, 400);
-
-  return send(res, { ok: true, channel: 'email', mode: payload.type ?? 'otp' });
-}
-
-export async function handleSendPhone(req: Request) {
-  const res = new NextResponse();
-  const supabase = getSupabaseServer({ response: res });
-
-  let payload;
-  try {
-    payload = phoneSendSchema.parse(await req.json());
-  } catch (e: any) {
-    await supabase.commitCookies(res);
-    return send(res, { ok: false, error: 'bad_request' }, 400);
-  }
-
-  const { error } = await supabase.auth.signInWithOtp({ phone: payload.phone });
-
-  await supabase.commitCookies(res);
-  if (error) return send(res, { ok: false, error: error.message }, 400);
-
-  return send(res, { ok: true, channel: 'phone', mode: 'sms' });
-}
-
-export async function handleVerifyEmail(req: Request) {
-  const res = new NextResponse();
-  const supabase = getSupabaseServer({ response: res });
-
-  let payload;
-  try {
-    payload = emailVerifySchema.parse(await req.json());
+    body = await req.json();
   } catch {
-    await supabase.commitCookies(res);
-    return send(res, { ok: false, error: 'bad_request' }, 400);
+    return json({ error: "invalid_json" }, 400);
   }
 
-  const { data, error } = await supabase.auth.verifyOtp({
-    email: payload.email,
-    token: payload.token,
-    type: 'email',
-  });
+  // EMAIL
+  if (isEmailSend(body)) {
+    const email = body.email.trim().toLowerCase();
+    if (!email) return json({ error: "bad_request", detail: "email required" }, 400);
 
-  await supabase.commitCookies(res);
-  if (error || !data.session) return send(res, { ok: false, error: error?.message || 'invalid_code' }, 400);
+    const redirectTo = body.redirectTo || process.env.NEXT_PUBLIC_SITE_URL || undefined;
+    const mode = body.type || "otp"; // "otp" (6-digit) or "magiclink"
 
-  return send(res, { ok: true, channel: 'email', user: data.user, session: data.session });
+    if (mode === "magiclink") {
+      const { error } = await supabase.auth.signInWithOtp({
+        email,
+        options: { shouldCreateUser: true, emailRedirectTo: redirectTo },
+      });
+      if (error) return json({ error: "supabase_error", detail: error.message }, 400);
+      return json({ ok: true, channel: "email", mode: "magiclink" });
+    } else {
+      const { error } = await supabase.auth.signInWithOtp({
+        email,
+        options: { shouldCreateUser: true },
+      });
+      if (error) return json({ error: "supabase_error", detail: error.message }, 400);
+      return json({ ok: true, channel: "email", mode: "otp" });
+    }
+  }
+
+  // PHONE
+  if (isPhoneSend(body)) {
+    const phone = body.phone.trim();
+    if (!phone.startsWith(NEPAL_PREFIX)) {
+      return json({ error: "nepal_only", detail: "Phone OTP is Nepal-only (+977)." }, 422);
+    }
+    const { error } = await supabase.auth.signInWithOtp({
+      phone,
+      options: { shouldCreateUser: true, channel: "sms" },
+    });
+    if (error) return json({ error: "supabase_error", detail: error.message }, 400);
+    return json({ ok: true, channel: "phone", mode: "sms" });
+  }
+
+  return json({ error: "bad_request", detail: "Provide {email} or {phone}" }, 400);
 }
 
-export async function handleVerifyPhone(req: Request) {
-  const res = new NextResponse();
-  const supabase = getSupabaseServer({ response: res });
+export async function handleVerify(req: Request): Promise<Response> {
+  const supabase = createRouteHandlerClient({
+    cookies,
+    supabaseUrl: process.env.SUPABASE_URL,
+    supabaseKey: process.env.SUPABASE_ANON_KEY,
+  } as any);
 
-  let payload;
+  let body: VerifyPayload;
   try {
-    payload = phoneVerifySchema.parse(await req.json());
+    body = await req.json();
   } catch {
-    await supabase.commitCookies(res);
-    return send(res, { ok: false, error: 'bad_request' }, 400);
+    return json({ error: "invalid_json" }, 400);
   }
 
-  const { data, error } = await supabase.auth.verifyOtp({
-    phone: payload.phone,
-    token: payload.token,
-    type: 'sms',
-  });
+  // EMAIL VERIFY (6-digit OTP flow)
+  if (isEmailVerify(body)) {
+    const email = body.email.trim().toLowerCase();
+    const token = body.token.trim();
+    if (!email || !token) return json({ error: "bad_request", detail: "email and token required" }, 400);
+    const { data, error } = await supabase.auth.verifyOtp({ email, token, type: "email" });
+    if (error) return json({ error: "verify_failed", detail: error.message }, 400);
+    return json({ ok: true, channel: "email", user: data?.user ?? null, session: data?.session ?? null });
+  }
 
-  await supabase.commitCookies(res);
-  if (error || !data.session) return send(res, { ok: false, error: error?.message || 'invalid_code' }, 400);
+  // PHONE VERIFY
+  if (isPhoneVerify(body)) {
+    const phone = body.phone.trim();
+    const token = body.token.trim();
+    if (!phone || !token) return json({ error: "bad_request", detail: "phone and token required" }, 400);
+    const { data, error } = await supabase.auth.verifyOtp({ phone, token, type: "sms" });
+    if (error) return json({ error: "verify_failed", detail: error.message }, 400);
+    return json({ ok: true, channel: "phone", user: data?.user ?? null, session: data?.session ?? null });
+  }
 
-  return send(res, { ok: true, channel: 'phone', user: data.user, session: data.session });
+  return json({ error: "bad_request", detail: "Provide {email, token} or {phone, token}" }, 400);
 }
 
-export function normalizeNepalPhone(input: string) {
-  const raw = input.replace(/\s|-/g, '');
-  if (raw.startsWith('+977')) return raw;
-  if (raw.startsWith('977')) return '+' + raw;
-  if (raw.startsWith('98') || raw.startsWith('97')) return '+977' + raw;
-  return raw;
+export function json(payload: any, status = 200): Response {
+  return new Response(JSON.stringify(payload), {
+    status,
+    headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
+  });
 }
