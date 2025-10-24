@@ -1,55 +1,53 @@
 // app/api/auth/sync/route.ts
-// Normalizes token sync from browser → server using @supabase/ssr getSupabaseServer.
-// Accepts either { access_token, refresh_token } OR
-// { event:'TOKEN_REFRESHED', session:{ access_token, refresh_token } }
+import { NextResponse } from 'next/server';
+import { cookies } from 'next/headers';
+import { createServerClient, type CookieOptions } from '@supabase/ssr';
 
-import { NextResponse } from 'next/server'
-import { getSupabaseServer } from '@/lib/supabase/server'
-
-type LegacyBody = { access_token?: string; refresh_token?: string }
-type HelperBody = { event?: string; session?: { access_token?: string; refresh_token?: string } }
-
-export const runtime = 'nodejs'
-
+// Accept client tokens and write official Supabase HttpOnly cookies
 export async function POST(req: Request) {
-  const res = new NextResponse()
-  const supabase = getSupabaseServer({ response: res })
-
-  let at: string | undefined
-  let rt: string | undefined
-
   try {
-    const body = (await req.json()) as LegacyBody & HelperBody
-    if (body?.session?.access_token || body?.session?.refresh_token) {
-      at = body.session.access_token
-      rt = body.session.refresh_token
-    } else {
-      at = body.access_token
-      rt = body.refresh_token
+    const body = await req.json().catch(() => ({} as any));
+    const access_token: string | undefined = body?.access_token;
+    const refresh_token: string | undefined = body?.refresh_token;
+
+    if (!access_token) {
+      return NextResponse.json({ error: 'Missing access_token' }, { status: 400 });
     }
-  } catch {
-    // empty body is OK for health checks; just return ok:false
-  }
 
-  if (!at || !rt) {
-    await supabase.commitCookies(res)
-    return NextResponse.json({ ok: false, error: 'missing_tokens' }, { status: 400, headers: res.headers })
-  }
+    const cookieStore = cookies();
 
-  try {
-    await supabase.auth.setSession({ access_token: at, refresh_token: rt })
-    await supabase.commitCookies(res)
-    return NextResponse.json({ ok: true }, { status: 200, headers: res.headers })
-  } catch (e: any) {
-    await supabase.commitCookies(res)
-    return NextResponse.json({ ok: false, error: e?.message || 'set_session_failed' }, { status: 400, headers: res.headers })
-  }
-}
+    // NEW: explicit cookie adapter for @supabase/ssr
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          get(name: string) {
+            return cookieStore.get(name)?.value;
+          },
+          set(name: string, value: string, options: CookieOptions) {
+            cookieStore.set({ name, value, ...options });
+          },
+          remove(name: string, options: CookieOptions) {
+            // Next.js doesn’t expose a remove; emulate via an expired cookie
+            cookieStore.set({ name, value: '', ...options, maxAge: 0 });
+          },
+        },
+      }
+    );
 
-export async function GET() {
-  const res = new NextResponse()
-  const supabase = getSupabaseServer({ response: res })
-  const { data } = await supabase.auth.getUser()
-  await supabase.commitCookies(res)
-  return NextResponse.json({ ok: true, authenticated: !!data.user }, { headers: res.headers })
+    const { error } = await supabase.auth.setSession({
+      access_token,
+      refresh_token: refresh_token || undefined,
+    });
+
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
+
+    // If we got here, Set-Cookie (sb-access-token / sb-refresh-token) is attached.
+    return NextResponse.json({ ok: true });
+  } catch (err: any) {
+    return NextResponse.json({ error: err?.message ?? 'sync failed' }, { status: 400 });
+  }
 }
