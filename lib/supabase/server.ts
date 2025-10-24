@@ -1,108 +1,37 @@
-import { cookies } from 'next/headers';
-import { NextResponse } from 'next/server';
+// lib/supabase/server.ts
+import { cookies as nextCookies } from 'next/headers';
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
 
-type CookieDescriptor = {
-  name: string;
-  value: string;
-  options?: CookieOptions;
-};
-
-type SupabaseWithCommit = ReturnType<typeof createServerClient> & {
-  commitCookies: (response?: NextResponse) => void;
-};
-
-function normaliseOptions(options?: CookieOptions) {
-  return {
-    ...options,
-    path: options?.path ?? '/',
-    httpOnly: options?.httpOnly ?? true,
-    sameSite: (options?.sameSite as CookieOptions['sameSite']) ?? 'lax',
-    secure: options?.secure ?? true,
-  } satisfies CookieOptions;
+const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+if (!url || !anon) {
+  throw new Error('Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY');
 }
 
-export function getSupabaseServer(resp?: NextResponse): SupabaseWithCommit {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-  if (!url || !anon) throw new Error('Missing Supabase env');
-
-  const store = cookies();
-  const pending: CookieDescriptor[] = [];
-
-  const queueSet = (name: string, value: string, options?: CookieOptions) => {
-    pending.push({ name, value, options: normaliseOptions(options) });
-  };
-
-  const queueRemove = (name: string, options?: CookieOptions) => {
-    pending.push({
-      name,
-      value: '',
-      options: {
-        ...normaliseOptions(options),
-        maxAge: 0,
-        expires: new Date(0),
-      },
-    });
-  };
-
-  const supabase = createServerClient(url, anon, {
-    cookies: {
-      get(name: string) {
-        return store.get(name)?.value;
-      },
-      getAll() {
-        return store.getAll().map(({ name, value }) => ({ name, value }));
-      },
-      set(name: string, value: string, options?: CookieOptions) {
-        queueSet(name, value, options);
-      },
-      setAll(cookieList: CookieDescriptor[]) {
-        for (const { name, value, options } of cookieList) {
-          queueSet(name, value, options);
-        }
-      },
-      remove(name: string, options?: CookieOptions) {
-        queueRemove(name, options);
-      },
-      delete(name: string, options?: CookieOptions) {
-        queueRemove(name, options);
-      },
-    },
-    setAll(cookieList: CookieDescriptor[]) {
-      for (const { name, value, options } of cookieList) {
-        applySet(name, value, options);
-      }
-    },
-    remove(name: string, options?: CookieOptions) {
-      applyRemove(name, options);
-    },
-    delete(name: string, options?: CookieOptions) {
-      applyRemove(name, options);
-    },
-  } as const;
+/**
+ * Server-side Supabase client bound to Next.js App Router cookies.
+ * Uses the required getAll/setAll adapter so Supabase can read/write
+ * session cookies on the same response cycle (Vercel-friendly).
+ */
+export function getSupabaseServer() {
+  const store = nextCookies();
 
   return createServerClient(url, anon, {
-    cookies: methods,
+    cookies: {
+      // Read the full cookie jar for this request
+      getAll() {
+        // Next.js returns { name, value }[]
+        return store.getAll();
+      },
+      // Commit all cookies emitted by Supabase to this response
+      setAll(cookieList: { name: string; value: string; options?: CookieOptions }[]) {
+        for (const { name, value, options } of cookieList) {
+          store.set(name, value, options);
+        }
+      },
+    },
   });
-
-  const commitCookies = (response?: NextResponse) => {
-    if (pending.length === 0) return;
-    const target = response?.cookies ?? resp?.cookies;
-
-    if (target) {
-      for (const { name, value, options } of pending) {
-        target.set({ name, value, ...options });
-      }
-    } else {
-      const fallback = cookies();
-      for (const { name, value, options } of pending) {
-        fallback.set({ name, value, ...options });
-      }
-    }
-
-    pending.length = 0;
-  };
-
-  return Object.assign(supabase, { commitCookies });
 }
+
+// Optional convenience default export if some files do `import supabase from ...`
+export default getSupabaseServer;
