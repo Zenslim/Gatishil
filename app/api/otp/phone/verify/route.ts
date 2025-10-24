@@ -1,52 +1,36 @@
 import { NextResponse } from 'next/server'
-import { getSupabaseServer } from '@/lib/supabase/server'
-
-function sendJSONWithSetCookies(resWithCookies: NextResponse, body: any, status = 200) {
-  const out = NextResponse.json(body, { status })
-  // Forward ONLY Set-Cookie headers to avoid duplicates
-  const setCookies =
-    (resWithCookies as any).headers.getSetCookie?.() ||
-    Array.from(resWithCookies.headers)
-      .filter(([k]) => k.toLowerCase() === 'set-cookie')
-      .map(([, v]) => v as string)
-
-  if (Array.isArray(setCookies)) {
-    for (const c of setCookies) out.headers.append('set-cookie', c)
-  }
-  return out
-}
+import { cookies } from 'next/headers'
+import { createRouteHandlerClient } from '@supabase/ssr'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 export async function POST(req: Request) {
-  const res = new NextResponse()
-  const supabase = getSupabaseServer({ response: res })
-
   try {
     const { phone, token } = await req.json()
     if (!phone || !token) {
-      await supabase.commitCookies(res)
-      return sendJSONWithSetCookies(res, { ok: false, error: 'bad_request' }, 400)
+      return NextResponse.json({ ok: false, error: 'bad_request' }, { status: 400 })
     }
 
-    const { data, error } = await supabase.auth.verifyOtp({ phone, token, type: 'sms' })
+    const supabase = createRouteHandlerClient({
+      cookies
+    })
+
+    // This call both verifies and writes Set-Cookie into Next's cookies store
+    const { data, error } = await supabase.auth.verifyOtp({
+      phone,
+      token,
+      type: 'sms',
+    })
 
     if (error || !data?.session) {
-      await supabase.commitCookies(res)
-      return sendJSONWithSetCookies(res, { ok: false, error: error?.message || 'invalid_code' }, 400)
+      return NextResponse.json({ ok: false, error: error?.message || 'invalid_code' }, { status: 400 })
     }
 
-    // Atomically set the server session cookies on THIS response
-    const at = data.session.access_token
-    const rt = data.session.refresh_token
-    await supabase.auth.setSession({ access_token: at, refresh_token: rt })
-
-    // Commit cookies and respond (forwarding Set-Cookie only)
-    await supabase.commitCookies(res)
-    return sendJSONWithSetCookies(res, { ok: true, channel: 'phone', user: data.user })
+    // No manual setSession or commitCookies needed. SSR client already wrote cookies.
+    return NextResponse.json({ ok: true, channel: 'phone', user: data.user })
   } catch (e: any) {
-    await supabase.commitCookies(res)
-    return sendJSONWithSetCookies(res, { ok: false, error: e?.message || 'server_error' }, 500)
+    console.error('phone/verify route 500:', e?.message || e)
+    return NextResponse.json({ ok: false, error: 'server_error' }, { status: 500 })
   }
 }
