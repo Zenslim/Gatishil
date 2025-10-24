@@ -6,46 +6,45 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createHmac, timingSafeEqual } from 'crypto';
 
 // === CONFIG =================================================================
-// Put the SAME value you see in Supabase’s "Secret" box (e.g., "v1,whsec_........").
 const HOOK_SECRET =
   (process.env.SUPABASE_SMS_HOOK_SECRET || process.env.SUPABASE_SMS_HOOK_TOKEN || '').trim();
-
-// Aakash bearer token
 const AAKASH_KEY = (process.env.AAKASH_SMS_API_KEY || '').trim();
 
-// Optional debug: set DEBUG_SMS_HOOK=1 in Vercel while testing
+// TEMP diagnostic bypass: set to "1" for a few minutes to capture what Supabase sends.
+const ALLOW_UNAUTH_HOOK = process.env.ALLOW_UNAUTH_HOOK === '1';
+
+// Optional debug noise in JSON
 const DEBUG = process.env.DEBUG_SMS_HOOK === '1';
 
-// === HELPERS ================================================================
 function J(status: number, body: Record<string, unknown>) {
   return NextResponse.json(body, { status });
 }
 
-function bearerCandidates(secretShown: string): string[] {
+// ---- Auth helpers ----------------------------------------------------------
+function bearerVariants(secretShown: string): string[] {
   const out = new Set<string>();
   const s = secretShown.trim();
   if (!s) return [];
-  out.add(s);                                // "v1,whsec_...."
+  out.add(s); // "v1,whsec_...."
   const noV1 = s.startsWith('v1,') ? s.slice(3) : s;
-  out.add(noV1);                              // "whsec_...."
+  out.add(noV1); // "whsec_...."
   const noWhsec = noV1.startsWith('whsec_') ? noV1.slice(6) : noV1;
-  out.add(noWhsec);                           // "<base64>"
-  return [...out].filter(Boolean);
+  out.add(noWhsec); // base64 only
+  return [...out];
 }
 
 function parseSigHeader(h: string | null) {
   if (!h) return { t: '', v1: '' };
-  if (/^[0-9a-f]{64}$/i.test(h)) return { t: '', v1: h }; // just hex
+  if (/^[0-9a-f]{64}$/i.test(h)) return { t: '', v1: h };
   let t = '', v1 = '';
-  for (const part of h.split(',').map(s => s.trim())) {
-    const [k, v] = part.split('=');
+  for (const p of h.split(',').map(s => s.trim())) {
+    const [k, v] = p.split('=');
     if (k === 't') t = v || '';
     if (k === 'v1' || k === 'sha256' || k === 's') v1 = v || '';
   }
   return { t, v1 };
 }
 
-// Supabase UI shows "v1,whsec_<base64>"; verify signature if present.
 function verifySignature(raw: string, secretShown: string, header: string | null): boolean {
   if (!secretShown || !header) return false;
   const cleaned = secretShown.startsWith('v1,') ? secretShown.slice(3) : secretShown;
@@ -64,6 +63,7 @@ function verifySignature(raw: string, secretShown: string, header: string | null
   }
 }
 
+// ---- Payload helpers -------------------------------------------------------
 function extractPayload(b: any): { recipient?: string; message?: string } {
   const phone =
     b?.user?.phone ??
@@ -95,25 +95,24 @@ function toE164Nepal(raw: string): string | null {
   return null;
 }
 
-// === GET: self-check so you know the right code is live =====================
+// ---- GET: self-check -------------------------------------------------------
 export async function GET() {
   return J(200, {
     ok: true,
-    version: 'v4-signature-or-bearer',
-    expects: 'X-Supabase-Webhook-Signature OR Authorization: Bearer',
+    version: 'v5-auth-diag',
+    expects: 'Signature or Bearer; diag bypass via ALLOW_UNAUTH_HOOK=1',
     runtime,
   });
 }
 
-// === POST: main handler =====================================================
+// ---- POST: handler ---------------------------------------------------------
 export async function POST(req: NextRequest) {
   if (!HOOK_SECRET) return J(500, { ok: false, error: 'Server missing SUPABASE_SMS_HOOK_SECRET/TOKEN' });
-  if (!AAKASH_KEY)  return J(500, { ok: false, error: 'AAKASH_SMS_AK missing' });
+  if (!AAKASH_KEY)  return J(500, { ok: false, error: 'AAKASH_SMS_API_KEY missing' });
 
-  // 1) Read RAW body (needed for signature verification)
   const raw = await req.text();
 
-  // 2) Prefer signature auth if header is present
+  // Prefer signature
   const sigHeader =
     req.headers.get('x-supabase-webhook-signature') ||
     req.headers.get('x-webhook-signature') ||
@@ -121,50 +120,67 @@ export async function POST(req: NextRequest) {
 
   const sigOk = verifySignature(raw, HOOK_SECRET, sigHeader);
 
-  // 3) Fallback: accept Authorization: Bearer with any canonical form of the secret
+  // Fallback: Authorization: Bearer
   let bearerOk = false;
-  if (!sigOk) {
-    const auth = (req.headers.get('authorization') || '').trim();
-    const token = auth.toLowerCase().startsWith('bearer ') ? auth.slice(7).trim() : '';
-    if (token) {
-      const candidates = bearerCandidates(HOOK_SECRET);
-      bearerOk = candidates.includes(token);
-    }
+  const auth = (req.headers.get('authorization') || '').trim();
+  const token = auth.toLowerCase().startsWith('bearer ') ? auth.slice(7).trim() : '';
+  if (!sigOk && token) {
+    const variants = bearerVariants(HOOK_SECRET);
+    bearerOk = variants.includes(token);
   }
 
-  if (!sigOk && !bearerOk) {
+  // TEMP bypass for diagnostics (very strict; switch off after test!)
+  let bypassOk = false;
+  if (!sigOk && !bearerOk && ALLOW_UNAUTH_HOOK) {
+    const ua = (req.headers.get('user-agent') || '').toLowerCase();
+    const ref = (req.headers.get('referer') || '').toLowerCase();
+    const host = (req.headers.get('host') || '').toLowerCase();
+    const looksSupabaseUA = ua.includes('got') || ua.includes('supabase') || ua.includes('node-fetch');
+    const looksOurHost = host.endsWith('gatishilnepal.org') || host.includes('vercel.app');
+    if (looksSupabaseUA && looksOurHost) bypassOk = true;
+  }
+
+  if (!sigOk && !bearerOk && !bypassOk) {
     return J(401, {
       ok: false,
       error: 'Unauthorized: invalid signature or bearer',
       ...(DEBUG ? {
         diag: {
           haveSigHeader: !!sigHeader,
-          haveAuthHeader: !!req.headers.get('authorization'),
-          acceptedBearer: bearerOk,
+          haveAuthHeader: !!auth,
+          bearerTokenLen: token.length,
+          note: 'Set ALLOW_UNAUTH_HOOK=1 temporarily to capture what Supabase sends.',
         }
       } : {}),
     });
   }
 
-  // 4) Parse JSON after auth
+  // Parse JSON after auth/bypass
   let body: any;
   try { body = JSON.parse(raw); }
   catch { return J(400, { ok: false, error: 'Invalid JSON body' }); }
 
-  // 5) Extract phone + message
   const { recipient: rawRecipient, message } = extractPayload(body);
   if (!rawRecipient || !message) {
     return J(400, { ok: false, error: 'Missing phone or message', shape_hint: Object.keys(body || {}) });
   }
 
-  // 6) Nepal +977 97/98 only
   const e164 = rawRecipient.startsWith('+977') ? rawRecipient : toE164Nepal(rawRecipient);
   if (!e164) return J(400, { ok: false, error: 'Recipient not Nepal +977 97/98', recipient: rawRecipient });
   if (!/^\+9779[78]\d{8}$/.test(e164)) {
     return J(400, { ok: false, error: 'Recipient must be +97797/98 followed by 8 digits', recipient: e164 });
   }
 
-  // 7) Send via Aakash
+  // If we’re bypassing, include what we saw in the response for one time inspection
+  const diag: Record<string, unknown> = {};
+  if (ALLOW_UNAUTH_HOOK && DEBUG && !sigOk && !bearerOk) {
+    diag['saw_headers'] = {
+      'x-supabase-webhook-signature': sigHeader || null,
+      authorization: auth || null,
+      'user-agent': req.headers.get('user-agent') || null,
+    };
+  }
+
   const local = e164.replace('+977', '');
   try {
     const res = await fetch('https://sms.aakashsms.com/sms/v3/send', {
@@ -177,12 +193,12 @@ export async function POST(req: NextRequest) {
     });
 
     const txt = await res.text().catch(() => '');
-    if (!res.ok) return J(502, { ok: false, error: `Aakash ${res.status}`, body: txt.slice(0, 300) });
+    if (!res.ok) return J(502, { ok: false, error: `Aakash ${res.status}`, body: txt.slice(0, 300), ...diag });
 
     let parsed: any = null;
     try { parsed = JSON.parse(txt); } catch {}
-    return J(200, { ok: true, aakash: parsed || txt.slice(0, 200) });
+    return J(200, { ok: true, aakash: parsed || txt.slice(0, 200), ...diag });
   } catch (e: any) {
-    return J(502, { ok: false, error: e?.message || 'Failed to reach Aakash' });
+    return J(502, { ok: false, error: e?.message || 'Failed to reach Aakash', ...diag });
   }
 }
