@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { createServerClient } from '@supabase/ssr';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
-import { derivePasswordFromPinSync } from '@/lib/crypto/pin';
+import crypto from 'crypto';
 
 const ENABLED = process.env.NEXT_PUBLIC_ENABLE_TRUST_PIN === 'true';
 
@@ -10,15 +10,36 @@ const ENABLED = process.env.NEXT_PUBLIC_ENABLE_TRUST_PIN === 'true';
 export function OPTIONS() { return new NextResponse(null, { status: 204 }); }
 export function GET() { return new NextResponse('Use POST for this endpoint', { status: 405 }); }
 
+// ---- helpers ----
 function normalizePhone(input: string): string {
   const raw = input.trim();
-  if (raw.startsWith('+')) return raw; // already E.164
+  if (raw.startsWith('+')) return raw; // E.164
   const digits = raw.replace(/\D/g, '');
-  // Nepali typical mobile shapes
   if (/^0(97|98|96|95)\d{7}$/.test(digits)) return '+977' + digits.slice(1);
   if (/^(97|98|96|95)\d{8}$/.test(digits)) return '+977' + digits;
-  // fallback: prefix plus
   return '+' + digits;
+}
+function b64u(buf: Buffer) {
+  return buf.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+}
+function parseKdf(kdf?: string) {
+  // examples: "scrypt-v1", "scrypt-v1(N=8192,r=8,p=1)"
+  const def = { N: 1 << 13, r: 8, p: 1 }; // our safe default
+  if (!kdf) return def;
+  const m = /N=(\d+),r=(\d+),p=(\d+)/.exec(kdf);
+  if (!m) return def;
+  const [ , Ns, rs, ps ] = m;
+  const N = parseInt(Ns, 10);
+  const r = parseInt(rs, 10);
+  const p = parseInt(ps, 10);
+  if (!Number.isFinite(N) || !Number.isFinite(r) || !Number.isFinite(p)) return def;
+  return { N, r, p };
+}
+function deriveSync(pin: string, userId: string, saltB64: string, pepper: string, N: number, r: number, p: number, len = 48) {
+  const salt = Buffer.from(saltB64, 'base64');
+  const material = Buffer.from(`${pin}:${userId}:${pepper}`, 'utf8');
+  const out = crypto.scryptSync(material, salt, len, { N, r, p }) as Buffer;
+  return b64u(out);
 }
 
 export async function POST(req: NextRequest) {
@@ -38,12 +59,15 @@ export async function POST(req: NextRequest) {
     if (method === 'phone') userInput = normalizePhone(userInput);
     else userInput = userInput.trim().toLowerCase();
 
-    const pepper = process.env.PIN_PEPPER;
-    if (!pepper || pepper.length < 16) return new NextResponse('Server missing PIN_PEPPER', { status: 500 });
+    // pepppers (support rotation without breaking existing PINs)
+    const primaryPepper = process.env.PIN_PEPPER || '';
+    const prevPepper = process.env.PIN_PEPPER_PREV || '';
+    if (primaryPepper.length < 16) return new NextResponse('Server missing PIN_PEPPER', { status: 500 });
+    const peppers = prevPepper && prevPepper !== primaryPepper ? [primaryPepper, prevPepper] : [primaryPepper];
 
     const admin = getSupabaseAdmin();
 
-    // -------- 1) Resolve user_id from profiles (single source of truth) --------
+    // ---- 1) Resolve user_id from profiles (single source of truth) ----
     let userId: string | null = null;
     let email: string | null = null;
     let phone: string | null = null;
@@ -75,86 +99,82 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Fallbacks only if profiles didn’t find it
+    // Fallbacks if profiles didn’t find it
     if (!userId && method === 'email') {
       const { data: list, error } = await admin.auth.admin.listUsers({ email: userInput, perPage: 1 });
       if (error) return new NextResponse(`Auth lookup failed: ${error.message}`, { status: 500 });
       const u = (list?.users || []).find(x => x.email?.toLowerCase() === userInput);
-      if (u?.id) {
-        userId = u.id; email = u.email ?? null; phone = u.phone ?? null;
-      }
+      if (u?.id) { userId = u.id; email = u.email ?? null; phone = u.phone ?? null; }
     } else if (!userId && method === 'phone') {
-      // As a last resort, try profiles LIKE (handles saved formats)
       const { data: profs, error: plike } = await admin
         .from('profiles')
         .select('user_id, email, phone')
         .ilike('phone', `%${userInput.slice(-8)}%`);
       if (plike) return new NextResponse(`Profile lookup failed: ${plike.message}`, { status: 500 });
       const hit = (profs || [])[0];
-      if (hit?.user_id) {
-        userId = hit.user_id; email = hit.email ?? null; phone = hit.phone ?? userInput;
-      }
+      if (hit?.user_id) { userId = hit.user_id; email = hit.email ?? null; phone = hit.phone ?? userInput; }
     }
 
     if (!userId) return new NextResponse('User not found', { status: 404 });
 
-    // -------- 2) Hydrate identities from Auth (by user_id) --------
+    // ---- 2) Hydrate identities from Auth (by user_id) ----
     const { data: byId, error: ge } = await admin.auth.admin.getUserById(userId);
     if (ge) return new NextResponse(`Auth lookup failed: ${ge.message}`, { status: 500 });
     email = byId.user?.email ?? email ?? null;
     phone = byId.user?.phone ?? phone ?? null;
 
-    // -------- 3) Read saved salt and derive same password --------
+    // ---- 3) Read salt + kdf; derive using EXACT params used at Trust ----
     const { data: pinMeta, error: mErr } = await admin
       .from('auth_local_pin')
-      .select('salt')
+      .select('salt,kdf')
       .eq('user_id', userId)
       .maybeSingle();
     if (mErr) return new NextResponse(`PIN meta read failed: ${mErr.message}`, { status: 500 });
     if (!pinMeta?.salt) return new NextResponse('PIN not set for account', { status: 400 });
 
-    const { derivedB64u } = derivePasswordFromPinSync({
-      pin,
-      userId,
-      saltB64: pinMeta.salt as string,
-      pepper,
-      length: 48,
-    });
+    const { N, r, p } = parseKdf(pinMeta.kdf as string | undefined);
 
-    // -------- 4) Server-side sign-in; write cookies into response --------
-    const jar = cookies();
+    // ---- 4) Try current pepper first, then previous (if provided) ----
+    const cookieJar = cookies();
     const response = new NextResponse(null, { status: 200 });
     const supabaseSSR = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
       {
         cookies: {
-          get: (name: string) => jar.get(name)?.value,
+          get: (name: string) => cookieJar.get(name)?.value,
           set: (name: string, value: string, options: any) => response.cookies.set({ name, value, ...options }),
           remove: (name: string, options: any) => response.cookies.set({ name, value: '', ...options }),
         },
       }
     );
 
-    // Prefer the same method used by the user; fall back to whichever identity exists
-    let signInError: any = null;
-    if (method === 'email' && email) {
-      const { error } = await supabaseSSR.auth.signInWithPassword({ email, password: derivedB64u });
-      signInError = error;
-    } else if (method === 'phone' && phone) {
-      const { error } = await supabaseSSR.auth.signInWithPassword({ phone, password: derivedB64u } as any);
-      signInError = error;
-    } else if (email) {
-      const { error } = await supabaseSSR.auth.signInWithPassword({ email, password: derivedB64u });
-      signInError = error;
-    } else if (phone) {
-      const { error } = await supabaseSSR.auth.signInWithPassword({ phone, password: derivedB64u } as any);
-      signInError = error;
-    } else {
-      return new NextResponse('No usable identity for this account', { status: 400 });
+    let signedIn = false;
+    for (const pepper of peppers) {
+      const derived = deriveSync(pin, userId, pinMeta.salt as string, pepper, N, r, p, 48);
+
+      // Prefer same method, then fall back to any available identity
+      let tryErr: any = null;
+      if (!signedIn && method === 'email' && email) {
+        const { error } = await supabaseSSR.auth.signInWithPassword({ email, password: derived });
+        tryErr = error; signedIn = !error;
+      }
+      if (!signedIn && method === 'phone' && phone) {
+        const { error } = await supabaseSSR.auth.signInWithPassword({ phone, password: derived } as any);
+        tryErr = error; signedIn = !error;
+      }
+      if (!signedIn && email) {
+        const { error } = await supabaseSSR.auth.signInWithPassword({ email, password: derived });
+        tryErr = error; signedIn = !error;
+      }
+      if (!signedIn && phone) {
+        const { error } = await supabaseSSR.auth.signInWithPassword({ phone, password: derived } as any);
+        tryErr = error; signedIn = !error;
+      }
+      if (signedIn) break;
     }
 
-    if (signInError) return new NextResponse('Invalid PIN for this account', { status: 401 });
+    if (!signedIn) return new NextResponse('Invalid PIN for this account', { status: 401 });
 
     return response; // cookies attached
   } catch (e: any) {
