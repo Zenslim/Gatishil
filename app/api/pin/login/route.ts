@@ -22,15 +22,26 @@ function normalizePhone(input: string): string {
 function b64u(buf: Buffer) {
   return buf.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
 }
-function parseKdf(kdf?: string) {
-  // examples: "scrypt-v1", "scrypt-v1(N=8192,r=8,p=1)"
-  const m = kdf ? /N=(\d+),r=(\d+),p=(\d+)/.exec(kdf) : null;
-  if (!m) return null;
-  return { N: parseInt(m[1], 10), r: parseInt(m[2], 10), p: parseInt(m[3], 10) };
+function clampKdf(kdf?: string) {
+  // Parse "scrypt-v1(N=8192,r=8,p=1)" and clamp to serverless-safe ceilings.
+  const safe = { N: 1 << 13, r: 8, p: 1 }; // 8192,8,1
+  if (!kdf) return safe;
+  const m = /N=(\d+),r=(\d+),p=(\d+)/.exec(kdf);
+  if (!m) return safe;
+  let N = parseInt(m[1], 10);
+  let r = parseInt(m[2], 10);
+  let p = parseInt(m[3], 10);
+  if (!Number.isFinite(N) || !Number.isFinite(r) || !Number.isFinite(p)) return safe;
+  // Clamp to safe ceilings
+  if (N > (1 << 13)) N = 1 << 13;
+  if (r > 8) r = 8;
+  if (p > 1) p = 1;
+  return { N, r, p };
 }
-function derive(pin: string, userId: string, saltB64: string, pepper: string, N: number, r: number, p: number, len = 48) {
+function deriveSafe(pin: string, userId: string, saltB64: string, pepper: string, N: number, r: number, p: number, len = 48) {
   const salt = Buffer.from(saltB64, 'base64');
   const material = Buffer.from(`${pin}:${userId}:${pepper}`, 'utf8');
+  // scryptSync may throw if params exceed OpenSSL memory policy — we catch at call site.
   const out = crypto.scryptSync(material, salt, len, { N, r, p }) as Buffer;
   return b64u(out);
 }
@@ -112,7 +123,7 @@ export async function POST(req: NextRequest) {
     email = byId.user?.email ?? email ?? null;
     phone = byId.user?.phone ?? phone ?? null;
 
-    // ---- 3) Read salt + kdf (if present) ----
+    // ---- 3) Read salt + kdf (clamp to safe) ----
     const { data: pinMeta, error: mErr } = await admin
       .from('auth_local_pin')
       .select('salt,kdf')
@@ -121,18 +132,20 @@ export async function POST(req: NextRequest) {
     if (mErr) return new NextResponse(`PIN meta read failed: ${mErr.message}`, { status: 500 });
     if (!pinMeta?.salt) return new NextResponse('PIN not set for account', { status: 400 });
 
-    // Build KDF candidates: exact from row (if any) then common ones
-    const candidates: Array<{N:number;r:number;p:number}> = [];
-    const fromRow = parseKdf(pinMeta.kdf as string | undefined);
-    if (fromRow) candidates.push(fromRow);
-    // Add common scrypt costs we may have used earlier
-    const seen = new Set<string>(fromRow ? [`${fromRow.N}-${fromRow.r}-${fromRow.p}`] : []);
-    const push = (N:number,r:number,p:number)=>{ const k=`${N}-${r}-${p}`; if(!seen.has(k)){ candidates.push({N,r,p}); seen.add(k);} };
-    push(1<<13,8,1);  // 8192
-    push(1<<14,8,1);  // 16384
-    push(1<<15,8,1);  // 32768
+    const fromRow = clampKdf(pinMeta.kdf as string | undefined);
+    const candidates = [
+      fromRow,                     // bounded by clamp
+      { N: 1 << 13, r: 8, p: 1 },  // 8192 as fallback
+    ];
+    // remove duplicates
+    const seen = new Set<string>();
+    const uniq: Array<{N:number;r:number;p:number}> = [];
+    for (const c of candidates) {
+      const k = `${c.N}-${c.r}-${c.p}`;
+      if (!seen.has(k)) { uniq.push(c); seen.add(k); }
+    }
 
-    // ---- 4) Try all (pepper x kdf) combos until one signs in ----
+    // ---- 4) Try all safe (pepper x kdf) combos; skip any that throw OSSL errors ----
     const jar = cookies();
     const response = new NextResponse(null, { status: 200 });
     const supabaseSSR = createServerClient(
@@ -148,30 +161,37 @@ export async function POST(req: NextRequest) {
     );
 
     let success = false;
-    outer: for (const pepper of peppers) {
-      for (const {N,r,p} of candidates) {
-        const derived = derive(pin, userId, pinMeta.salt as string, pepper, N, r, p, 48);
+    for (const pepper of peppers) {
+      for (const {N,r,p} of uniq) {
+        let derived: string | null = null;
+        try {
+          derived = deriveSafe(pin, userId, pinMeta.salt as string, pepper, N, r, p, 48);
+        } catch {
+          // memory limit exceeded or invalid params — skip this candidate
+          continue;
+        }
 
         // Prefer the same method used by the user; fall back to whichever exists
-        let err: any = null;
         if (method === 'email' && email && !success) {
           const { error } = await supabaseSSR.auth.signInWithPassword({ email, password: derived });
-          err = error; success = !error;
+          success = !error;
         }
         if (method === 'phone' && phone && !success) {
           const { error } = await supabaseSSR.auth.signInWithPassword({ phone, password: derived } as any);
-          err = error; success = !error;
+          success = !error;
         }
         if (email && !success) {
           const { error } = await supabaseSSR.auth.signInWithPassword({ email, password: derived });
-          err = error; success = !error;
+          success = !error;
         }
         if (phone && !success) {
           const { error } = await supabaseSSR.auth.signInWithPassword({ phone, password: derived } as any);
-          err = error; success = !error;
+          success = !error;
         }
-        if (success) break outer;
+
+        if (success) break;
       }
+      if (success) break;
     }
 
     if (!success) return new NextResponse('Invalid PIN for this account', { status: 401 });
