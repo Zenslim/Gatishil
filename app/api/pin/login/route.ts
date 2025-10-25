@@ -1,113 +1,125 @@
-export const runtime = 'nodejs';
+import { NextRequest, NextResponse } from 'next/server';
+import { cookies } from 'next/headers';
+import { createServerClient } from '@supabase/ssr';
+import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
+import crypto from 'crypto';
 
-import { NextResponse } from 'next/server';
-import { getSupabaseServer } from '@/lib/supabase/server';
-import { getSupabaseAdmin } from '@/lib/supabase/admin';
+const ENABLE_TRUST_PIN = process.env.NEXT_PUBLIC_ENABLE_TRUST_PIN === 'true';
 
-type Body = {
-  method: 'phone' | 'email';
-  user: string;
-  pin: string;
-  next?: string;
-};
-
-async function verifyPinArgon2(pin: string, hash: string): Promise<boolean> {
-  const { verify } = await import('@node-rs/argon2');
-  return await verify(hash, pin, { memoryCost: 19456, timeCost: 2, parallelism: 1 });
+/** base64url */
+function b64u(buf: Buffer): string {
+  return buf.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
 }
 
-function normalizeNepPhone(input: string) {
-  const digits = (input || '').replace(/\D/g, '');
-  if (digits.startsWith('977')) return '+' + digits;
-  if (digits.length === 10) return '+977' + digits;
-  return '+' + digits;
+/** Derive password from PIN + userId + salt + PEPPER (scrypt) */
+function derivePasswordFromPin(pin: string, userId: string, saltB64: string, pepper: string, len = 48): string {
+  const salt = Buffer.from(saltB64, 'base64');
+  const material = Buffer.from(`${pin}:${userId}:${pepper}`, 'utf8');
+  const out = crypto.scryptSync(material, salt, len, { N: 1 << 15, r: 8, p: 1 }) as Buffer;
+  return b64u(out);
 }
 
-export async function POST(req: Request) {
-  const body = (await req.json()) as Body;
-  const method = body?.method;
-  const user = (body?.user || '').trim().toLowerCase();
-  const pin = (body?.pin || '').trim();
-  const next = (body?.next && typeof body.next === 'string') ? body.next : '/dashboard';
-  if (!method || !user || !pin) return new NextResponse('Missing fields', { status: 400 });
-
+/**
+ * POST /api/pin/login
+ * Body: { user: string, method: 'email'|'phone', pin: string }
+ * - Resolves the auth user by email or phone (via admin if needed).
+ * - Reads salt from public.auth_local_pin (admin).
+ * - Derives the same Supabase password and performs server-side signInWithPassword.
+ * - Writes Supabase cookies to the response (no client setSession, no double-rotation).
+ */
+export async function POST(req: NextRequest) {
   try {
+    if (!ENABLE_TRUST_PIN) return new NextResponse('Trust PIN disabled', { status: 404 });
+
+    const body = await req.json().catch(() => ({}));
+    const method = String(body?.method || '');
+    const userInput = String(body?.user || '');
+    const pin = String(body?.pin || '');
+
+    if (!/^\d{4,8}$/.test(pin)) return new NextResponse('Invalid PIN', { status: 400 });
+    if (method !== 'email' && method !== 'phone') return new NextResponse('Invalid method', { status: 400 });
+    if (!userInput) return new NextResponse('Missing user', { status: 400 });
+
+    const pepper = process.env.PIN_PEPPER;
+    if (!pepper || pepper.length < 16) return new NextResponse('Server missing PIN_PEPPER', { status: 500 });
+
     const admin = getSupabaseAdmin();
-    const supa = getSupabaseServer();
 
-    // Identify user
+    // Resolve auth user by email or phone
     let authUserId: string | null = null;
-    let emailForSession: string | null = null;
+    let emailForAuth: string | null = null;
+
     if (method === 'email') {
-      const { data, error } = await admin.auth.admin.getUserByEmail(user);
-      if (error || !data?.user) return new NextResponse('User not found', { status: 404 });
-      authUserId = data.user.id;
-      emailForSession = data.user.email ?? null;
+      // Get user by email (admin)
+      const { data: usersByEmail, error: ue } = await admin.auth.admin.listUsers({ email: userInput, perPage: 1 });
+      if (ue) return new NextResponse(`Lookup failed: ${ue.message}`, { status: 500 });
+      const hit = (usersByEmail?.users || []).find(u => u.email?.toLowerCase() === userInput.toLowerCase());
+      if (!hit?.id || !hit.email) return new NextResponse('User not found', { status: 404 });
+      authUserId = hit.id;
+      emailForAuth = hit.email;
     } else {
-      const phone = normalizeNepPhone(user);
-      const list = await admin.auth.admin.listUsers({ phone });
-      const found = list?.data?.users?.find((u: any) => u.phone === phone);
-      if (!found) return new NextResponse('User not found', { status: 404 });
-      authUserId = found.id;
-      emailForSession = found.email ?? null;
-    }
-
-    // Load PIN factor
-    const { data: factor, error: factorErr } = await supa
-      .from('trusted_factors')
-      .select('pin_hash,failed_attempts,locked_until')
-      .eq('auth_user_id', authUserId)
-      .eq('factor_type', 'pin')
-      .maybeSingle();
-
-    if (factorErr || !factor) return new NextResponse('PIN not set', { status: 404 });
-    if (factor.locked_until && new Date(factor.locked_until) > new Date()) {
-      return new NextResponse('Too many attempts. Try later.', { status: 429 });
-    }
-
-    const ok = await verifyPinArgon2(pin, factor.pin_hash as string);
-    if (!ok) {
-      const attempts = (factor.failed_attempts ?? 0) + 1;
-      const updates: any = { failed_attempts: attempts };
-      if (attempts >= 5) {
-        updates.locked_until = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+      // method === 'phone'
+      // Try to find a profile row with this phone. Adjust table/column names to your schema if different.
+      const { data: profile, error: pe } = await admin
+        .from('profiles')
+        .select('user_id, email')
+        .eq('phone', userInput)
+        .maybeSingle();
+      if (pe) return new NextResponse(`Phone lookup failed: ${pe.message}`, { status: 500 });
+      if (!profile?.user_id) return new NextResponse('User not found', { status: 404 });
+      authUserId = profile.user_id;
+      // If your auth uses email identities, fetch email from auth admin
+      if (!profile.email) {
+        const { data: userById, error: ui } = await admin.auth.admin.getUserById(authUserId);
+        if (ui) return new NextResponse(`Auth lookup failed: ${ui.message}`, { status: 500 });
+        emailForAuth = userById.user?.email ?? null;
+      } else {
+        emailForAuth = profile.email;
       }
-      await supa.from('trusted_factors')
-        .update(updates)
-        .eq('auth_user_id', authUserId)
-        .eq('factor_type', 'pin');
-      return new NextResponse('Invalid PIN', { status: 401 });
+      if (!emailForAuth) return new NextResponse('No email identity for this account', { status: 400 });
     }
 
-    // reset attempts
-    await supa.from('trusted_factors')
-      .update({ failed_attempts: 0, locked_until: null })
-      .eq('auth_user_id', authUserId)
-      .eq('factor_type', 'pin');
+    // Pull the stored salt from auth_local_pin (admin read)
+    const { data: pinMeta, error: pmErr } = await admin
+      .from('auth_local_pin')
+      .select('salt')
+      .eq('user_id', authUserId)
+      .maybeSingle();
+    if (pmErr) return new NextResponse(`PIN meta read failed: ${pmErr.message}`, { status: 500 });
+    if (!pinMeta?.salt) return new NextResponse('PIN not set for account', { status: 400 });
 
-    // Mint session via server-side OTP exchange and immediately redirect (server-side)
-    const redirectTo = new URL(next, req.url);
-    const resp = NextResponse.redirect(redirectTo, 303);
-    const bound = getSupabaseServer(resp);
+    const derivedPassword = derivePasswordFromPin(pin, authUserId!, pinMeta.salt as string, pepper);
 
-    if (method === 'email') {
-      if (!emailForSession) return new NextResponse('No email on user', { status: 400 });
-      const gl = await admin.auth.admin.generateLink({ type: 'magiclink', email: emailForSession });
-      if (!gl?.data?.email_otp) return new NextResponse('Session mint failed', { status: 500 });
-      const verify = await bound.auth.verifyOtp({ type: 'email', email: emailForSession, token: gl.data.email_otp });
-      if (verify.error) return new NextResponse('Verify failed', { status: 500 });
-    } else {
-      const phone = normalizeNepPhone(user);
-      const gl = await admin.auth.admin.generateLink({ type: 'sms', phone } as any);
-      const smsOtp: string | null = (gl as any)?.data?.sms_otp ?? null;
-      if (!smsOtp) return new NextResponse('Session mint failed', { status: 500 });
-      const verify = await bound.auth.verifyOtp({ type: 'sms', phone, token: smsOtp } as any);
-      if (verify.error) return new NextResponse('Verify failed', { status: 500 });
-    }
+    // Create a server-bound Supabase client that can set cookies on the response
+    const cookieStore = cookies();
+    const response = new NextResponse(null, { status: 200 });
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          get(name: string) {
+            return cookieStore.get(name)?.value;
+          },
+          set(name: string, value: string, options: any) {
+            response.cookies.set({ name, value, ...options });
+          },
+          remove(name: string, options: any) {
+            response.cookies.set({ name, value: '', ...options });
+          },
+        },
+      }
+    );
 
-    bound.commitCookies(resp);
-    return resp;
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: emailForAuth!,
+      password: derivedPassword,
+    });
+    if (error) return new NextResponse(error.message, { status: 401 });
+
+    // Success: cookies already written into `response` by the Supabase SSR client
+    return response;
   } catch (e: any) {
-    return new NextResponse(e?.message || 'Login failed', { status: 500 });
+    return new NextResponse(e?.message || 'Error', { status: 500 });
   }
 }
