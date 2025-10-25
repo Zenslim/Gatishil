@@ -1,3 +1,4 @@
+
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
@@ -50,6 +51,7 @@ export async function POST(req: NextRequest) {
 
     // Derive strong secret from PIN
     const salt = genSalt(16);
+    const salt_b64 = salt.toString('base64');
     const { derivedB64u } = await derivePasswordFromPin({
       pin,
       userId: user.id,
@@ -60,12 +62,12 @@ export async function POST(req: NextRequest) {
 
     const admin = getSupabaseAdmin();
 
-    // 1) Upsert salt/KDF metadata
+    // 1) Upsert salt/KDF metadata (TEXT salt_b64; no BYTEA write)
     const { error: upsertErr } = await admin
       .from('auth_local_pin')
       .upsert({
         user_id: user.id,
-        salt: salt.toString('base64'),
+        salt_b64,
         kdf: 'scrypt-v1(N=8192,r=8,p=1)',
         pin_retries: 0,
         locked_until: null,
@@ -77,8 +79,7 @@ export async function POST(req: NextRequest) {
     const { error: updErr } = await admin.auth.admin.updateUserById(user.id, { password: derivedB64u });
     if (updErr) return new NextResponse(`Auth update failed: ${updErr.message}`, { status: 500 });
 
-    // 3) VERIFY the write: kill any old session, then sign in using the new secret
-    // (If this fails, we return 500 so the UI knows Trust didn't stick.)
+    // 3) VERIFY the write: sign out and sign back in with the new secret
     await supabaseSSR.auth.signOut();
 
     const { data: userRecord, error: fetchErr } = await admin.auth.admin.getUserById(user.id);
@@ -98,13 +99,11 @@ export async function POST(req: NextRequest) {
     }
     if (verifyErr) return new NextResponse(`PIN write verification failed: ${verifyErr.message}`, { status: 500 });
 
-    // 4) Ensure session cookies are present
     const { data: { session } } = await supabaseSSR.auth.getSession();
     if (!session?.access_token || !session?.refresh_token) {
       return new NextResponse('No session returned after re-sign-in', { status: 500 });
     }
 
-    // Return JSON from same response so Set-Cookie headers are preserved
     return NextResponse.json({ ok: true }, { headers: res.headers });
   } catch (e: any) {
     return new NextResponse(e?.message || 'Error', { status: 500 });
