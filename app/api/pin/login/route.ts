@@ -1,4 +1,3 @@
-// App Router: app/api/pin/login/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { createServerClient } from '@supabase/ssr';
@@ -7,19 +6,12 @@ import { derivePasswordFromPinSync } from '@/lib/crypto/pin';
 
 const ENABLED = process.env.NEXT_PUBLIC_ENABLE_TRUST_PIN === 'true';
 
-// Preflight
-export function OPTIONS() {
-  return new NextResponse(null, { status: 204 });
-}
-
-// Guard GETs
-export function GET() {
-  return new NextResponse('Use POST for this endpoint', { status: 405 });
-}
+export function OPTIONS() { return new NextResponse(null, { status: 204 }); }
+export function GET() { return new NextResponse('Use POST for this endpoint', { status: 405 }); }
 
 function normalizePhone(input: string): string {
   const raw = input.trim();
-  if (raw.startsWith('+')) return raw;                // already E.164
+  if (raw.startsWith('+')) return raw;
   const digits = raw.replace(/\D/g, '');
   if (/^0(97|98|96|95)\d{7}$/.test(digits)) return '+977' + digits.slice(1);
   if (/^(97|98|96|95)\d{8}$/.test(digits)) return '+977' + digits;
@@ -39,7 +31,7 @@ export async function POST(req: NextRequest) {
     if (method !== 'email' && method !== 'phone') return new NextResponse('Invalid method', { status: 400 });
     if (!userInput) return new NextResponse('Missing user', { status: 400 });
 
-    // Normalize input
+    // normalize input
     if (method === 'phone') userInput = normalizePhone(userInput);
     else userInput = userInput.trim().toLowerCase();
 
@@ -48,48 +40,71 @@ export async function POST(req: NextRequest) {
 
     const admin = getSupabaseAdmin();
 
-    // ---------- 1) Resolve user_id from profiles (single source of truth) ----------
+    // ---------- 1) Resolve user_id via auth.identities (source of truth) ----------
     let userId: string | null = null;
     let email: string | null = null;
     let phone: string | null = null;
 
     if (method === 'email') {
-      const { data: prof, error: pe } = await admin
-        .from('profiles')
-        .select('user_id, email, phone')
-        .eq('email', userInput)
-        .maybeSingle();
-      if (pe) return new NextResponse(`Profile lookup failed: ${pe.message}`, { status: 500 });
-      if (prof?.user_id) {
-        userId = prof.user_id;
-        email = prof.email ?? null;
-        phone = prof.phone ?? null;
+      const { data: idByEmail, error: ide } = await admin
+        .from('identities', { schema: 'auth' })
+        .select('user_id, identity_data')
+        .limit(1)
+        .ilike('identity_data->>email', userInput);
+      if (ide) return new NextResponse(`Identities lookup failed: ${ide.message}`, { status: 500 });
+      if (idByEmail && idByEmail.length > 0) {
+        userId = idByEmail[0].user_id;
+        email = JSON.parse(idByEmail[0].identity_data)?.email ?? userInput;
       }
     } else {
-      const zeroForm = userInput.replace('+977', '0');
-      const { data: prof, error: pe } = await admin
-        .from('profiles')
-        .select('user_id, email, phone')
-        .or(`phone.eq.${userInput},phone.eq.${zeroForm}`)
-        .maybeSingle();
-      if (pe) return new NextResponse(`Profile lookup failed: ${pe.message}`, { status: 500 });
-      if (prof?.user_id) {
-        userId = prof.user_id;
-        email = prof.email ?? null;
-        phone = prof.phone ?? userInput;
+      const zeroForm = userInput.replace('+977','0');
+      const { data: idByPhone, error: idp } = await admin
+        .from('identities', { schema: 'auth' })
+        .select('user_id, identity_data')
+        .or(`identity_data->>phone.eq.${userInput},identity_data->>phone.eq.${zeroForm}`)
+        .limit(1);
+      if (idp) return new NextResponse(`Identities lookup failed: ${idp.message}`, { status: 500 });
+      if (idByPhone && idByPhone.length > 0) {
+        userId = idByPhone[0].user_id;
+        phone = JSON.parse(idByPhone[0].identity_data)?.phone ?? userInput;
+      }
+    }
+
+    // ---------- 1b) Fallback to profiles if identities didn’t find it ----------
+    if (!userId) {
+      if (method === 'email') {
+        const { data: prof, error: pe } = await admin
+          .from('profiles')
+          .select('user_id, email, phone')
+          .eq('email', userInput)
+          .maybeSingle();
+        if (pe) return new NextResponse(`Profile lookup failed: ${pe.message}`, { status: 500 });
+        if (prof?.user_id) {
+          userId = prof.user_id; email = prof.email ?? email; phone = prof.phone ?? phone;
+        }
+      } else {
+        const zeroForm = userInput.replace('+977', '0');
+        const { data: prof, error: pp } = await admin
+          .from('profiles')
+          .select('user_id, email, phone')
+          .or(`phone.eq.${userInput},phone.eq.${zeroForm}`)
+          .maybeSingle();
+        if (pp) return new NextResponse(`Profile lookup failed: ${pp.message}`, { status: 500 });
+        if (prof?.user_id) {
+          userId = prof.user_id; email = prof.email ?? email; phone = prof.phone ?? phone ?? userInput;
+        }
       }
     }
 
     if (!userId) return new NextResponse('User not found', { status: 404 });
 
-    // ---------- 2) Hydrate identities from Auth (by user_id) ----------
+    // ---------- 2) Hydrate identities from Auth by user_id (more authoritative) ----------
     const { data: byId, error: ge } = await admin.auth.admin.getUserById(userId);
     if (ge) return new NextResponse(`Auth lookup failed: ${ge.message}`, { status: 500 });
-    // Prefer auth identities if present
     email = byId.user?.email ?? email ?? null;
     phone = byId.user?.phone ?? phone ?? null;
 
-    // ---------- 3) Read saved salt and derive the same password from PIN ----------
+    // ---------- 3) Read saved salt; derive same password ----------
     const { data: pinMeta, error: mErr } = await admin
       .from('auth_local_pin')
       .select('salt')
@@ -106,39 +121,45 @@ export async function POST(req: NextRequest) {
       length: 48,
     });
 
-    // ---------- 4) Server-side sign-in, write cookies into response ----------
-    const cookieStore = cookies();
+    // ---------- 4) Server-side sign-in; write cookies ----------
+    const jar = cookies();
     const response = new NextResponse(null, { status: 200 });
     const supabaseSSR = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
       {
         cookies: {
-          get: (name: string) => cookieStore.get(name)?.value,
+          get: (name: string) => jar.get(name)?.value,
           set: (name: string, value: string, options: any) => response.cookies.set({ name, value, ...options }),
           remove: (name: string, options: any) => response.cookies.set({ name, value: '', ...options }),
         },
       }
     );
 
-    // Use whichever identity exists
+    // Prefer using the same method user typed; fall back to the other if needed
     let signInError: any = null;
     if (method === 'email' && email) {
       const { error } = await supabaseSSR.auth.signInWithPassword({ email, password: derivedB64u });
       signInError = error;
-    } else if (phone) {
+    } else if (method === 'phone' && phone) {
       const { error } = await supabaseSSR.auth.signInWithPassword({ phone, password: derivedB64u } as any);
       signInError = error;
     } else if (email) {
       const { error } = await supabaseSSR.auth.signInWithPassword({ email, password: derivedB64u });
       signInError = error;
+    } else if (phone) {
+      const { error } = await supabaseSSR.auth.signInWithPassword({ phone, password: derivedB64u } as any);
+      signInError = error;
     } else {
       return new NextResponse('No usable identity for this account', { status: 400 });
     }
 
-    if (signInError) return new NextResponse(signInError.message, { status: 401 });
+    if (signInError) {
+      // If credentials were rotated after Trust (rare), surface a clear error
+      return new NextResponse(`Invalid PIN for this account`, { status: 401 });
+    }
 
-    return response; // cookies attached; client should navigate to /dashboard
+    return response; // cookies attached
   } catch (e: any) {
     return new NextResponse(e?.message || 'Error', { status: 500 });
   }
