@@ -50,24 +50,26 @@ export async function POST(req: NextRequest) {
     if (!pepper || pepper.length < 16) return new NextResponse('Server not configured (PIN_PEPPER)', { status: 500 });
 
     // Derive strong secret from PIN
-    const salt = genSalt(16);
-    const salt_b64 = salt.toString('base64');
+    const saltBuf = genSalt(16);
+    const salt_b64 = saltBuf.toString('base64');
     const { derivedB64u } = await derivePasswordFromPin({
       pin,
       userId: user.id,
-      salt,
+      salt: saltBuf,
       pepper,
       length: 48,
     });
 
     const admin = getSupabaseAdmin();
 
-    // 1) Upsert salt/KDF metadata (TEXT salt_b64; no BYTEA write)
+    // 1) Upsert salt (BYTEA via base64 string) + salt_b64 (TEXT) and KDF
+    //    NOTE: For BYTEA via PostgREST, passing base64 string is decoded into bytea server-side.
     const { error: upsertErr } = await admin
       .from('auth_local_pin')
       .upsert({
         user_id: user.id,
-        salt_b64,
+        salt: salt_b64,      // satisfies NOT NULL on legacy column
+        salt_b64,            // new TEXT column for clarity/compat
         kdf: 'scrypt-v1(N=8192,r=8,p=1)',
         pin_retries: 0,
         locked_until: null,
@@ -75,7 +77,7 @@ export async function POST(req: NextRequest) {
       .eq('user_id', user.id);
     if (upsertErr) return new NextResponse(`DB upsert failed: ${upsertErr.message}`, { status: 500 });
 
-    // 2) Update Supabase password via service role
+    // 2) Update Supabase auth password via service role
     const { error: updErr } = await admin.auth.admin.updateUserById(user.id, { password: derivedB64u });
     if (updErr) return new NextResponse(`Auth update failed: ${updErr.message}`, { status: 500 });
 

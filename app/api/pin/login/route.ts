@@ -22,7 +22,7 @@ function b64u(buf: Buffer) {
   return buf.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
 }
 function clampKdf(kdf?: string) {
-  const safe = { N: 1 << 13, r: 8, p: 1 }; // 8192,8,1
+  const safe = { N: 1 << 13, r: 8, p: 1 };
   if (!kdf) return safe;
   const m = /N=(\d+),r=(\d+),p=(\d+)/.exec(kdf);
   if (!m) return safe;
@@ -36,7 +36,7 @@ function clampKdf(kdf?: string) {
   return { N, r, p };
 }
 function deriveSafe(pin: string, userId: string, saltB64: string, pepper: string, N: number, r: number, p: number, len = 48) {
-  const salt = Buffer.from(saltB64, 'base64'); // NB: we now store/read TEXT base64
+  const salt = Buffer.from(saltB64, 'base64');
   const material = Buffer.from(`${pin}:${userId}:${pepper}`, 'utf8');
   const out = crypto.scryptSync(material, salt, len, { N, r, p }) as Buffer;
   return b64u(out);
@@ -96,19 +96,24 @@ export async function POST(req: NextRequest) {
     email = byId.user?.email ?? email ?? null;
     phone = byId.user?.phone ?? phone ?? null;
 
-    // Read TEXT base64 salt + kdf
+    // Read salt_b64 if present, else fallback to legacy salt (bytea encoded as base64)
     const { data: pinMeta, error: mErr } = await admin
       .from('auth_local_pin')
-      .select('salt_b64,kdf')
+      .select('salt_b64,salt,kdf')
       .eq('user_id', userId)
       .maybeSingle();
     if (mErr) return new NextResponse(`PIN meta read failed: ${mErr.message}`, { status: 500 });
-    const salt_b64 = (pinMeta as any)?.salt_b64 as string | null;
+
+    let salt_b64: string | null = (pinMeta as any)?.salt_b64 ?? null;
+    if (!salt_b64) {
+      const legacy = (pinMeta as any)?.salt as string | null;
+      // Supabase returns BYTEA as base64 string; we can use it directly.
+      salt_b64 = legacy ?? null;
+    }
     if (!salt_b64) return new NextResponse('PIN not set for account', { status: 400 });
 
     const { N, r, p } = clampKdf((pinMeta as any)?.kdf as string | undefined);
 
-    // Try peppers
     const jar = cookies();
     const response = new NextResponse(null, { status: 200 });
     const supabaseSSR = createServerClient(
@@ -127,9 +132,9 @@ export async function POST(req: NextRequest) {
     for (const pepper of peppers) {
       let derived: string | null = null;
       try {
-        derived = deriveSafe(pin, userId, salt_b64, pepper, N, r, p, 48);
+        derived = deriveSafe(pin, userId, salt_b64!, pepper, N, r, p, 48);
       } catch {
-        continue; // skip bad params
+        continue;
       }
 
       if (method === 'email' && email && !success) {
