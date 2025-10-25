@@ -31,7 +31,7 @@ export async function POST(req: NextRequest) {
     const pin = String(body?.pin || '');
 
     if (!/^\d{4,8}$/.test(pin)) return new NextResponse('Invalid PIN', { status: 400 });
-    if (method !== 'email' && method !== 'phone')) return new NextResponse('Invalid method', { status: 400 });
+    if (method !== 'email' && method !== 'phone') return new NextResponse('Invalid method', { status: 400 });
     if (!userInput) return new NextResponse('Missing user', { status: 400 });
 
     // normalize input
@@ -77,7 +77,6 @@ export async function POST(req: NextRequest) {
 
     // Fallbacks only if profiles didn’t find it
     if (!userId && method === 'email') {
-      // Try auth admin search by email (works reliably)
       const { data: list, error } = await admin.auth.admin.listUsers({ email: userInput, perPage: 1 });
       if (error) return new NextResponse(`Auth lookup failed: ${error.message}`, { status: 500 });
       const u = (list?.users || []).find(x => x.email?.toLowerCase() === userInput);
