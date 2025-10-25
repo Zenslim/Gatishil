@@ -1,35 +1,25 @@
+
 import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { createServerClient } from '@supabase/ssr';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
-import crypto from 'crypto';
+import { derivePasswordFromPinSync } from '@/lib/crypto/pin';
 
-const ENABLE_TRUST_PIN = process.env.NEXT_PUBLIC_ENABLE_TRUST_PIN === 'true';
+const ENABLED = process.env.NEXT_PUBLIC_ENABLE_TRUST_PIN === 'true';
 
-/** base64url */
-function b64u(buf: Buffer): string {
-  return buf.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+// Handle OPTIONS for safety
+export function OPTIONS() {
+  return new NextResponse(null, { status: 204 });
 }
 
-/** Derive password from PIN + userId + salt + PEPPER (scrypt) */
-function derivePasswordFromPin(pin: string, userId: string, saltB64: string, pepper: string, len = 48): string {
-  const salt = Buffer.from(saltB64, 'base64');
-  const material = Buffer.from(`${pin}:${userId}:${pepper}`, 'utf8');
-  const out = crypto.scryptSync(material, salt, len, { N: 1 << 15, r: 8, p: 1 }) as Buffer;
-  return b64u(out);
+// Friendly message for accidental GETs
+export function GET() {
+  return new NextResponse('Use POST for this endpoint', { status: 405 });
 }
 
-/**
- * POST /api/pin/login
- * Body: { user: string, method: 'email'|'phone', pin: string }
- * - Resolves the auth user by email or phone (via admin if needed).
- * - Reads salt from public.auth_local_pin (admin).
- * - Derives the same Supabase password and performs server-side signInWithPassword.
- * - Writes Supabase cookies to the response (no client setSession, no double-rotation).
- */
 export async function POST(req: NextRequest) {
   try {
-    if (!ENABLE_TRUST_PIN) return new NextResponse('Trust PIN disabled', { status: 404 });
+    if (!ENABLED) return new NextResponse('Trust PIN disabled', { status: 404 });
 
     const body = await req.json().catch(() => ({}));
     const method = String(body?.method || '');
@@ -45,80 +35,83 @@ export async function POST(req: NextRequest) {
 
     const admin = getSupabaseAdmin();
 
-    // Resolve auth user by email or phone
+    // Resolve auth user by email or phone (with profile fallback for phone)
     let authUserId: string | null = null;
-    let emailForAuth: string | null = null;
+    let email: string | null = null;
+    let phone: string | null = null;
 
     if (method === 'email') {
-      // Get user by email (admin)
-      const { data: usersByEmail, error: ue } = await admin.auth.admin.listUsers({ email: userInput, perPage: 1 });
-      if (ue) return new NextResponse(`Lookup failed: ${ue.message}`, { status: 500 });
-      const hit = (usersByEmail?.users || []).find(u => u.email?.toLowerCase() === userInput.toLowerCase());
-      if (!hit?.id || !hit.email) return new NextResponse('User not found', { status: 404 });
-      authUserId = hit.id;
-      emailForAuth = hit.email;
+      const { data: list, error } = await admin.auth.admin.listUsers({ email: userInput, perPage: 1 });
+      if (error) return new NextResponse(`Lookup failed: ${error.message}`, { status: 500 });
+      const u = (list?.users || []).find(x => x.email?.toLowerCase() === userInput.toLowerCase());
+      if (!u?.id) return new NextResponse('User not found', { status: 404 });
+      authUserId = u.id; email = u.email ?? null; phone = u.phone ?? null;
     } else {
-      // method === 'phone'
-      // Try to find a profile row with this phone. Adjust table/column names to your schema if different.
-      const { data: profile, error: pe } = await admin
-        .from('profiles')
-        .select('user_id, email')
-        .eq('phone', userInput)
-        .maybeSingle();
-      if (pe) return new NextResponse(`Phone lookup failed: ${pe.message}`, { status: 500 });
-      if (!profile?.user_id) return new NextResponse('User not found', { status: 404 });
-      authUserId = profile.user_id;
-      // If your auth uses email identities, fetch email from auth admin
-      if (!profile.email) {
-        const { data: userById, error: ui } = await admin.auth.admin.getUserById(authUserId);
-        if (ui) return new NextResponse(`Auth lookup failed: ${ui.message}`, { status: 500 });
-        emailForAuth = userById.user?.email ?? null;
+      const { data: list, error } = await admin.auth.admin.listUsers({ phone: userInput, perPage: 1 } as any);
+      if (error) return new NextResponse(`Phone lookup failed: ${error.message}`, { status: 500 });
+      const u = (list?.users || []).find(x => x.phone === userInput);
+      if (u?.id) {
+        authUserId = u.id; email = u.email ?? null; phone = u.phone ?? null;
       } else {
-        emailForAuth = profile.email;
+        const { data: prof, error: pe } = await admin.from('profiles').select('user_id').eq('phone', userInput).maybeSingle();
+        if (pe) return new NextResponse(`Profile lookup failed: ${pe.message}`, { status: 500 });
+        if (!prof?.user_id) return new NextResponse('User not found', { status: 404 });
+        authUserId = prof.user_id;
+        const { data: byId, error: ge } = await admin.auth.admin.getUserById(authUserId);
+        if (ge) return new NextResponse(`Auth lookup failed: ${ge.message}`, { status: 500 });
+        email = byId.user?.email ?? null;
+        phone = byId.user?.phone ?? null;
       }
-      if (!emailForAuth) return new NextResponse('No email identity for this account', { status: 400 });
     }
 
-    // Pull the stored salt from auth_local_pin (admin read)
-    const { data: pinMeta, error: pmErr } = await admin
+    if (!authUserId) return new NextResponse('User not found', { status: 404 });
+
+    // Read salt
+    const { data: pinMeta, error: mErr } = await admin
       .from('auth_local_pin')
       .select('salt')
       .eq('user_id', authUserId)
       .maybeSingle();
-    if (pmErr) return new NextResponse(`PIN meta read failed: ${pmErr.message}`, { status: 500 });
+    if (mErr) return new NextResponse(`PIN meta read failed: ${mErr.message}`, { status: 500 });
     if (!pinMeta?.salt) return new NextResponse('PIN not set for account', { status: 400 });
 
-    const derivedPassword = derivePasswordFromPin(pin, authUserId!, pinMeta.salt as string, pepper);
+    // Derive same Supabase password
+    const { derivedB64u } = derivePasswordFromPinSync({
+      pin,
+      userId: authUserId,
+      saltB64: pinMeta.salt as string,
+      pepper,
+      length: 48,
+    });
 
-    // Create a server-bound Supabase client that can set cookies on the response
+    // Server-side sign-in and write cookies in the response
     const cookieStore = cookies();
     const response = new NextResponse(null, { status: 200 });
-    const supabase = createServerClient(
+    const supabaseSSR = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
       {
         cookies: {
-          get(name: string) {
-            return cookieStore.get(name)?.value;
-          },
-          set(name: string, value: string, options: any) {
-            response.cookies.set({ name, value, ...options });
-          },
-          remove(name: string, options: any) {
-            response.cookies.set({ name, value: '', ...options });
-          },
+          get: (name: string) => cookieStore.get(name)?.value,
+          set: (name: string, value: string, options: any) => response.cookies.set({ name, value, ...options }),
+          remove: (name: string, options: any) => response.cookies.set({ name, value: '', ...options }),
         },
       }
     );
 
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email: emailForAuth!,
-      password: derivedPassword,
-    });
-    if (error) return new NextResponse(error.message, { status: 401 });
+    let signInError: any = null;
+    if (email) {
+      const { error } = await supabaseSSR.auth.signInWithPassword({ email, password: derivedB64u });
+      signInError = error;
+    } else if (phone) {
+      const { error } = await supabaseSSR.auth.signInWithPassword({ phone, password: derivedB64u } as any);
+      signInError = error;
+    } else {
+      return new NextResponse('No email or phone identity for this account', { status: 400 });
+    }
+    if (signInError) return new NextResponse(signInError.message, { status: 401 });
 
-    // Success: cookies already written into `response` by the Supabase SSR client
-    return response;
+    return response; // cookies attached
   } catch (e: any) {
     return new NextResponse(e?.message || 'Error', { status: 500 });
   }

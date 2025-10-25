@@ -1,10 +1,11 @@
+
 import crypto from 'crypto';
 import { promisify } from 'util';
 
 const scryptAsync = promisify(crypto.scrypt);
 
 /** Base64url encode a Buffer. */
-function b64u(buf: Buffer): string {
+export function b64u(buf: Buffer): string {
   return buf.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
 }
 
@@ -14,8 +15,7 @@ export function genSalt(bytes = 16): Buffer {
 }
 
 /**
- * Derive a strong password from PIN + user_id + salt + PEPPER using scrypt (async).
- * Tuned for serverless memory: N=2^13 (~8MB), r=8, p=1, length=32–48 bytes.
+ * Async derivation using scrypt with serverless-safe params: N=2^13, r=8, p=1.
  */
 export async function derivePasswordFromPin(opts: {
   pin: string;
@@ -24,13 +24,28 @@ export async function derivePasswordFromPin(opts: {
   pepper: string;
   length?: number; // bytes
 }): Promise<{ derivedB64u: string }> {
-  const { pin, userId, salt, pepper, length = 32 } = opts;
+  const { pin, userId, salt, pepper, length = 48 } = opts;
   const material = Buffer.from(`${pin}:${userId}:${pepper}`, 'utf8');
-  // ~8 MiB memory usage
-  const N = 1 << 13; // 8192
+  const N = 1 << 13; // 8192 (~8MiB)
   const r = 8;
   const p = 1;
-
   const out = (await scryptAsync(material, salt, length, { N, r, p })) as Buffer;
+  return { derivedB64u: b64u(out) };
+}
+
+/**
+ * Sync derivation variant for short tasks (same params).
+ */
+export function derivePasswordFromPinSync(opts: {
+  pin: string;
+  userId: string;
+  saltB64: string;
+  pepper: string;
+  length?: number;
+}): { derivedB64u: string } {
+  const { pin, userId, saltB64, pepper, length = 48 } = opts;
+  const salt = Buffer.from(saltB64, 'base64');
+  const material = Buffer.from(`${pin}:${userId}:${pepper}`, 'utf8');
+  const out = crypto.scryptSync(material, salt, length, { N: 1 << 13, r: 8, p: 1 }) as Buffer;
   return { derivedB64u: b64u(out) };
 }
