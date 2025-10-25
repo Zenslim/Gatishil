@@ -24,18 +24,11 @@ function b64u(buf: Buffer) {
 }
 function parseKdf(kdf?: string) {
   // examples: "scrypt-v1", "scrypt-v1(N=8192,r=8,p=1)"
-  const def = { N: 1 << 13, r: 8, p: 1 }; // our safe default
-  if (!kdf) return def;
-  const m = /N=(\d+),r=(\d+),p=(\d+)/.exec(kdf);
-  if (!m) return def;
-  const [ , Ns, rs, ps ] = m;
-  const N = parseInt(Ns, 10);
-  const r = parseInt(rs, 10);
-  const p = parseInt(ps, 10);
-  if (!Number.isFinite(N) || !Number.isFinite(r) || !Number.isFinite(p)) return def;
-  return { N, r, p };
+  const m = kdf ? /N=(\d+),r=(\d+),p=(\d+)/.exec(kdf) : null;
+  if (!m) return null;
+  return { N: parseInt(m[1], 10), r: parseInt(m[2], 10), p: parseInt(m[3], 10) };
 }
-function deriveSync(pin: string, userId: string, saltB64: string, pepper: string, N: number, r: number, p: number, len = 48) {
+function derive(pin: string, userId: string, saltB64: string, pepper: string, N: number, r: number, p: number, len = 48) {
   const salt = Buffer.from(saltB64, 'base64');
   const material = Buffer.from(`${pin}:${userId}:${pepper}`, 'utf8');
   const out = crypto.scryptSync(material, salt, len, { N, r, p }) as Buffer;
@@ -59,7 +52,7 @@ export async function POST(req: NextRequest) {
     if (method === 'phone') userInput = normalizePhone(userInput);
     else userInput = userInput.trim().toLowerCase();
 
-    // pepppers (support rotation without breaking existing PINs)
+    // peppers (support rotation without breaking existing PINs)
     const primaryPepper = process.env.PIN_PEPPER || '';
     const prevPepper = process.env.PIN_PEPPER_PREV || '';
     if (primaryPepper.length < 16) return new NextResponse('Server missing PIN_PEPPER', { status: 500 });
@@ -80,9 +73,7 @@ export async function POST(req: NextRequest) {
         .maybeSingle();
       if (pe) return new NextResponse(`Profile lookup failed: ${pe.message}`, { status: 500 });
       if (prof?.user_id) {
-        userId = prof.user_id;
-        email = prof.email ?? null;
-        phone = prof.phone ?? null;
+        userId = prof.user_id; email = prof.email ?? null; phone = prof.phone ?? null;
       }
     } else {
       const zeroForm = userInput.replace('+977', '0');
@@ -93,13 +84,11 @@ export async function POST(req: NextRequest) {
         .maybeSingle();
       if (pp) return new NextResponse(`Profile lookup failed: ${pp.message}`, { status: 500 });
       if (prof?.user_id) {
-        userId = prof.user_id;
-        email = prof.email ?? null;
-        phone = prof.phone ?? userInput;
+        userId = prof.user_id; email = prof.email ?? null; phone = prof.phone ?? userInput;
       }
     }
 
-    // Fallbacks if profiles didn’t find it
+    // Last-resort fallbacks if profiles didn’t find it
     if (!userId && method === 'email') {
       const { data: list, error } = await admin.auth.admin.listUsers({ email: userInput, perPage: 1 });
       if (error) return new NextResponse(`Auth lookup failed: ${error.message}`, { status: 500 });
@@ -123,7 +112,7 @@ export async function POST(req: NextRequest) {
     email = byId.user?.email ?? email ?? null;
     phone = byId.user?.phone ?? phone ?? null;
 
-    // ---- 3) Read salt + kdf; derive using EXACT params used at Trust ----
+    // ---- 3) Read salt + kdf (if present) ----
     const { data: pinMeta, error: mErr } = await admin
       .from('auth_local_pin')
       .select('salt,kdf')
@@ -132,49 +121,60 @@ export async function POST(req: NextRequest) {
     if (mErr) return new NextResponse(`PIN meta read failed: ${mErr.message}`, { status: 500 });
     if (!pinMeta?.salt) return new NextResponse('PIN not set for account', { status: 400 });
 
-    const { N, r, p } = parseKdf(pinMeta.kdf as string | undefined);
+    // Build KDF candidates: exact from row (if any) then common ones
+    const candidates: Array<{N:number;r:number;p:number}> = [];
+    const fromRow = parseKdf(pinMeta.kdf as string | undefined);
+    if (fromRow) candidates.push(fromRow);
+    // Add common scrypt costs we may have used earlier
+    const seen = new Set<string>(fromRow ? [`${fromRow.N}-${fromRow.r}-${fromRow.p}`] : []);
+    const push = (N:number,r:number,p:number)=>{ const k=`${N}-${r}-${p}`; if(!seen.has(k)){ candidates.push({N,r,p}); seen.add(k);} };
+    push(1<<13,8,1);  // 8192
+    push(1<<14,8,1);  // 16384
+    push(1<<15,8,1);  // 32768
 
-    // ---- 4) Try current pepper first, then previous (if provided) ----
-    const cookieJar = cookies();
+    // ---- 4) Try all (pepper x kdf) combos until one signs in ----
+    const jar = cookies();
     const response = new NextResponse(null, { status: 200 });
     const supabaseSSR = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
       {
         cookies: {
-          get: (name: string) => cookieJar.get(name)?.value,
+          get: (name: string) => jar.get(name)?.value,
           set: (name: string, value: string, options: any) => response.cookies.set({ name, value, ...options }),
           remove: (name: string, options: any) => response.cookies.set({ name, value: '', ...options }),
         },
       }
     );
 
-    let signedIn = false;
-    for (const pepper of peppers) {
-      const derived = deriveSync(pin, userId, pinMeta.salt as string, pepper, N, r, p, 48);
+    let success = false;
+    outer: for (const pepper of peppers) {
+      for (const {N,r,p} of candidates) {
+        const derived = derive(pin, userId, pinMeta.salt as string, pepper, N, r, p, 48);
 
-      // Prefer same method, then fall back to any available identity
-      let tryErr: any = null;
-      if (!signedIn && method === 'email' && email) {
-        const { error } = await supabaseSSR.auth.signInWithPassword({ email, password: derived });
-        tryErr = error; signedIn = !error;
+        // Prefer the same method used by the user; fall back to whichever exists
+        let err: any = null;
+        if (method === 'email' && email && !success) {
+          const { error } = await supabaseSSR.auth.signInWithPassword({ email, password: derived });
+          err = error; success = !error;
+        }
+        if (method === 'phone' && phone && !success) {
+          const { error } = await supabaseSSR.auth.signInWithPassword({ phone, password: derived } as any);
+          err = error; success = !error;
+        }
+        if (email && !success) {
+          const { error } = await supabaseSSR.auth.signInWithPassword({ email, password: derived });
+          err = error; success = !error;
+        }
+        if (phone && !success) {
+          const { error } = await supabaseSSR.auth.signInWithPassword({ phone, password: derived } as any);
+          err = error; success = !error;
+        }
+        if (success) break outer;
       }
-      if (!signedIn && method === 'phone' && phone) {
-        const { error } = await supabaseSSR.auth.signInWithPassword({ phone, password: derived } as any);
-        tryErr = error; signedIn = !error;
-      }
-      if (!signedIn && email) {
-        const { error } = await supabaseSSR.auth.signInWithPassword({ email, password: derived });
-        tryErr = error; signedIn = !error;
-      }
-      if (!signedIn && phone) {
-        const { error } = await supabaseSSR.auth.signInWithPassword({ phone, password: derived } as any);
-        tryErr = error; signedIn = !error;
-      }
-      if (signedIn) break;
     }
 
-    if (!signedIn) return new NextResponse('Invalid PIN for this account', { status: 401 });
+    if (!success) return new NextResponse('Invalid PIN for this account', { status: 401 });
 
     return response; // cookies attached
   } catch (e: any) {
