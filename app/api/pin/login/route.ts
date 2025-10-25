@@ -1,3 +1,4 @@
+// App Router: app/api/pin/login/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { createServerClient } from '@supabase/ssr';
@@ -6,12 +7,12 @@ import { derivePasswordFromPinSync } from '@/lib/crypto/pin';
 
 const ENABLED = process.env.NEXT_PUBLIC_ENABLE_TRUST_PIN === 'true';
 
-// CORS/preflight
+// Preflight
 export function OPTIONS() {
   return new NextResponse(null, { status: 204 });
 }
 
-// Guard accidental GETs
+// Guard GETs
 export function GET() {
   return new NextResponse('Use POST for this endpoint', { status: 405 });
 }
@@ -38,6 +39,7 @@ export async function POST(req: NextRequest) {
     if (method !== 'email' && method !== 'phone') return new NextResponse('Invalid method', { status: 400 });
     if (!userInput) return new NextResponse('Missing user', { status: 400 });
 
+    // Normalize input
     if (method === 'phone') userInput = normalizePhone(userInput);
     else userInput = userInput.trim().toLowerCase();
 
@@ -46,34 +48,24 @@ export async function POST(req: NextRequest) {
 
     const admin = getSupabaseAdmin();
 
-    // Resolve the auth user id + identities
-    let authUserId: string | null = null;
+    // ---------- 1) Resolve user_id from profiles (single source of truth) ----------
+    let userId: string | null = null;
     let email: string | null = null;
     let phone: string | null = null;
 
     if (method === 'email') {
-      const { data: list, error } = await admin.auth.admin.listUsers({ email: userInput, perPage: 1 });
-      if (error) return new NextResponse(`Lookup failed: ${error.message}`, { status: 500 });
-      const hit = (list?.users || []).find(u => u.email?.toLowerCase() === userInput);
-      if (hit?.id) {
-        authUserId = hit.id; email = hit.email ?? null; phone = hit.phone ?? null;
-      } else {
-        const { data: prof, error: pe } = await admin
-          .from('profiles')
-          .select('user_id, email')
-          .eq('email', userInput)
-          .maybeSingle();
-        if (pe) return new NextResponse(`Profile lookup failed: ${pe.message}`, { status: 500 });
-        if (prof?.user_id) {
-          authUserId = prof.user_id;
-          const { data: byId, error: ge } = await admin.auth.admin.getUserById(authUserId);
-          if (ge) return new NextResponse(`Auth lookup failed: ${ge.message}`, { status: 500 });
-          email = byId.user?.email ?? null;
-          phone = byId.user?.phone ?? null;
-        }
+      const { data: prof, error: pe } = await admin
+        .from('profiles')
+        .select('user_id, email, phone')
+        .eq('email', userInput)
+        .maybeSingle();
+      if (pe) return new NextResponse(`Profile lookup failed: ${pe.message}`, { status: 500 });
+      if (prof?.user_id) {
+        userId = prof.user_id;
+        email = prof.email ?? null;
+        phone = prof.phone ?? null;
       }
     } else {
-      // method === 'phone' — profiles first
       const zeroForm = userInput.replace('+977', '0');
       const { data: prof, error: pe } = await admin
         .from('profiles')
@@ -81,49 +73,40 @@ export async function POST(req: NextRequest) {
         .or(`phone.eq.${userInput},phone.eq.${zeroForm}`)
         .maybeSingle();
       if (pe) return new NextResponse(`Profile lookup failed: ${pe.message}`, { status: 500 });
-
       if (prof?.user_id) {
-        authUserId = prof.user_id;
-        const { data: byId, error: ge } = await admin.auth.admin.getUserById(authUserId);
-        if (!ge && byId?.user) {
-          email = byId.user.email ?? prof.email ?? null;
-          phone = byId.user.phone ?? prof.phone ?? userInput;
-        } else {
-          email = prof.email ?? null;
-          phone = prof.phone ?? userInput;
-        }
-      } else {
-        // Fallback: auth admin by phone (SDK supports phone filtering in newer versions)
-        const { data: list, error } = await admin.auth.admin.listUsers({ phone: userInput, perPage: 1 } as any);
-        if (error) return new NextResponse(`Phone lookup failed: ${error.message}`, { status: 500 });
-        const hit = (list?.users || []).find(u => u.phone === userInput || u.phone === zeroForm);
-        if (hit?.id) {
-          authUserId = hit.id; email = hit.email ?? null; phone = hit.phone ?? userInput;
-        }
+        userId = prof.user_id;
+        email = prof.email ?? null;
+        phone = prof.phone ?? userInput;
       }
     }
 
-    if (!authUserId) return new NextResponse('User not found', { status: 404 });
+    if (!userId) return new NextResponse('User not found', { status: 404 });
 
-    // Read salt saved during Trust
+    // ---------- 2) Hydrate identities from Auth (by user_id) ----------
+    const { data: byId, error: ge } = await admin.auth.admin.getUserById(userId);
+    if (ge) return new NextResponse(`Auth lookup failed: ${ge.message}`, { status: 500 });
+    // Prefer auth identities if present
+    email = byId.user?.email ?? email ?? null;
+    phone = byId.user?.phone ?? phone ?? null;
+
+    // ---------- 3) Read saved salt and derive the same password from PIN ----------
     const { data: pinMeta, error: mErr } = await admin
       .from('auth_local_pin')
       .select('salt')
-      .eq('user_id', authUserId)
+      .eq('user_id', userId)
       .maybeSingle();
     if (mErr) return new NextResponse(`PIN meta read failed: ${mErr.message}`, { status: 500 });
     if (!pinMeta?.salt) return new NextResponse('PIN not set for account', { status: 400 });
 
-    // Derive the same Supabase password
     const { derivedB64u } = derivePasswordFromPinSync({
       pin,
-      userId: authUserId,
+      userId,
       saltB64: pinMeta.salt as string,
       pepper,
       length: 48,
     });
 
-    // Server-side sign-in and write cookies
+    // ---------- 4) Server-side sign-in, write cookies into response ----------
     const cookieStore = cookies();
     const response = new NextResponse(null, { status: 200 });
     const supabaseSSR = createServerClient(
@@ -138,12 +121,16 @@ export async function POST(req: NextRequest) {
       }
     );
 
+    // Use whichever identity exists
     let signInError: any = null;
-    if (email) {
+    if (method === 'email' && email) {
       const { error } = await supabaseSSR.auth.signInWithPassword({ email, password: derivedB64u });
       signInError = error;
     } else if (phone) {
       const { error } = await supabaseSSR.auth.signInWithPassword({ phone, password: derivedB64u } as any);
+      signInError = error;
+    } else if (email) {
+      const { error } = await supabaseSSR.auth.signInWithPassword({ email, password: derivedB64u });
       signInError = error;
     } else {
       return new NextResponse('No usable identity for this account', { status: 400 });
@@ -151,7 +138,7 @@ export async function POST(req: NextRequest) {
 
     if (signInError) return new NextResponse(signInError.message, { status: 401 });
 
-    return response; // cookies attached
+    return response; // cookies attached; client should navigate to /dashboard
   } catch (e: any) {
     return new NextResponse(e?.message || 'Error', { status: 500 });
   }
