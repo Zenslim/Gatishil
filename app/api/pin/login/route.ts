@@ -4,9 +4,9 @@ import { createServerClient } from '@supabase/ssr';
 import { createClient as createServiceClient, PostgrestError } from '@supabase/supabase-js';
 import crypto from 'crypto';
 
-/** Feature flags */
+/** Flags */
 const ENABLED = process.env.NEXT_PUBLIC_ENABLE_TRUST_PIN === 'true';
-const DEBUG_PIN = process.env.NEXT_PUBLIC_DEBUG_PIN === 'true'; // set true temporarily to see real DB errors
+const DEBUG_PIN = process.env.NEXT_PUBLIC_DEBUG_PIN === 'true';
 
 /** Env */
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
@@ -14,7 +14,7 @@ const SUPABASE_ANON = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 const PIN_PEPPER = process.env.PIN_PEPPER || '';
 
-/* ----------------------- helpers ----------------------- */
+/* ---------- helpers ---------- */
 const b64url = (buf: Buffer) =>
   buf.toString('base64').replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
 
@@ -43,17 +43,10 @@ async function readBodyAny(req: NextRequest): Promise<any> {
   const ct = (req.headers.get('content-type') || '').toLowerCase();
   if (ct.includes('application/json')) { try { return await req.json(); } catch {} }
   if (ct.includes('multipart/form-data')) {
-    try {
-      const fd = await req.formData(); const o: any = {};
-      for (const [k, v] of fd.entries()) o[k] = typeof v === 'string' ? v : '';
-      return o;
-    } catch {}
+    try { const fd = await req.formData(); const o: any = {}; for (const [k, v] of fd.entries()) o[k] = typeof v === 'string' ? v : ''; return o; } catch {}
   }
   if (ct.includes('application/x-www-form-urlencoded')) {
-    try {
-      const txt = await req.text(); const p = new URLSearchParams(txt); const o: any = {};
-      p.forEach((v,k)=>o[k]=v); return o;
-    } catch {}
+    try { const txt = await req.text(); const p = new URLSearchParams(txt); const o: any = {}; p.forEach((v,k)=>o[k]=v); return o; } catch {}
   }
   try {
     const txt = await req.text(); if (!txt) return {};
@@ -78,7 +71,7 @@ function extractFields(raw: any): { email?: string; phone?: string; pin?: string
   for (const b of bags) {
     const identifier = pickFirst(b, ['identifier','login','user','username']);
     const maybeEmail = pickFirst(b, ['email','userEmail','mail']);
-    const maybePhone = pickFirst(b, ['phone','phone_e164','mobile','msisdn','number','contact']);
+    const maybePhone = pickFirst(b, ['phone','mobile','msisdn','number','contact']); // ← no phone_e164
     const maybePin   = pickFirst(b, ['pin','pincode','pin_code','code','otp','password','passcode']);
 
     if (!email && (maybeEmail || (identifier && identifier.includes('@'))))
@@ -93,14 +86,12 @@ function extractFields(raw: any): { email?: string; phone?: string; pin?: string
   return { email, phone, pin };
 }
 
-function err(res: NextResponse, code: number, msg: string, extra?: any) {
-  if (DEBUG_PIN && extra) {
-    return NextResponse.json({ error: msg, debug: extra }, { status: code });
-  }
+function err(code: number, msg: string, extra?: any) {
+  if (DEBUG_PIN && extra) return NextResponse.json({ error: msg, debug: extra }, { status: code });
   return NextResponse.json({ error: msg }, { status: code });
 }
 
-/* ----------------------- handlers ----------------------- */
+/* ---------- handlers ---------- */
 export function OPTIONS() { return new NextResponse(null, { status: 204 }); }
 export function GET() { return new NextResponse('Use POST', { status: 405 }); }
 
@@ -108,9 +99,8 @@ export async function POST(req: NextRequest) {
   try {
     if (!ENABLED) return new NextResponse('Trust PIN disabled', { status: 404 });
 
-    // Validate env early and loudly
     if (!SUPABASE_URL || !SUPABASE_ANON || !SUPABASE_SERVICE_ROLE_KEY || !PIN_PEPPER) {
-      return err(NextResponse.next(), 500, 'Server misconfigured', {
+      return err(500, 'Server misconfigured', {
         SUPABASE_URL: !!SUPABASE_URL,
         SUPABASE_ANON: !!SUPABASE_ANON,
         SUPABASE_SERVICE_ROLE_KEY: !!SUPABASE_SERVICE_ROLE_KEY,
@@ -118,14 +108,12 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // Parse body (be permissive)
     const raw = await readBodyAny(req);
     const { email, phone, pin } = extractFields(raw);
     const provided = [!!email, !!phone].filter(Boolean).length;
 
-    // Quiet no-op if empty call from page mount
     if (!pin && provided === 0) return new NextResponse(null, { status: 204 });
-    if (!pin || provided !== 1) return err(NextResponse.next(), 400, 'Provide exactly one of {email|phone} and a pin');
+    if (!pin || provided !== 1) return err(400, 'Provide exactly one of {email|phone} and a pin');
 
     // SSR client for cookie stamping
     const cookieStore = cookies();
@@ -136,113 +124,89 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    // SERVICE ROLE client: bypass RLS
+    // Service Role client (bypass RLS)
     const svc = createServiceClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
 
-    // ---------- HEALTH PROBE: can the service-role query anything? ----------
+    // Health probe
     const health = await svc.from('profiles').select('id').limit(1);
     if (health.error) {
-      // Typical if SERVICE_ROLE_KEY is missing/invalid, or table name is wrong
       const e = health.error as PostgrestError;
-      return err(NextResponse.next(), 500, 'DB error resolving user', {
-        phase: 'health_probe_profiles',
-        code: e.code, message: e.message, details: e.details, hint: e.hint,
-      });
+      return err(500, 'DB error resolving user', { phase: 'health_probe_profiles', code: e.code, message: e.message, details: e.details, hint: e.hint });
     }
 
-    // ---------- Resolve profile by email or phone variants ----------
-    let profile: { id: string; email: string | null; phone: string | null; phone_e164?: string | null } | null = null;
+    // Lookup profile
+    let profile: { id: string; email: string | null; phone: string | null } | null = null;
 
     if (email) {
       const { data, error } = await svc
         .from('profiles')
-        .select('id, email, phone, phone_e164')
+        .select('id, email, phone') // ← no phone_e164
         .eq('email', email)
         .maybeSingle();
-
       if (error) {
         const e = error as PostgrestError;
-        return err(NextResponse.next(), 500, 'DB error resolving user', {
-          phase: 'lookup_by_email',
-          code: e.code, message: e.message, details: e.details, hint: e.hint,
-        });
+        return err(500, 'DB error resolving user', { phase: 'lookup_by_email', code: e.code, message: e.message, details: e.details, hint: e.hint });
       }
       profile = data ?? null;
     } else {
       const e164 = toE164NP(phone!)!;
+      // exact
       let resp = await svc
         .from('profiles')
-        .select('id, email, phone, phone_e164')
-        .or(`phone.eq.${e164},phone_e164.eq.${e164}`)
+        .select('id, email, phone') // ← no phone_e164
+        .eq('phone', e164)
         .maybeSingle();
 
       if (resp.error) {
         const e = resp.error as PostgrestError;
-        return err(NextResponse.next(), 500, 'DB error resolving user', {
-          phase: 'lookup_by_phone_exact',
-          code: e.code, message: e.message, details: e.details, hint: e.hint,
-        });
+        return err(500, 'DB error resolving user', { phase: 'lookup_by_phone_exact', code: e.code, message: e.message, details: e.details, hint: e.hint });
       }
 
       if (!resp.data) {
+        // loose variants
         const digits = e164.replace(/\D/g, '');
         const zeroLead = digits.startsWith('977') ? `0${digits.slice(3)}` : `0${digits}`;
         const local = digits.startsWith('977') ? digits.slice(3) : digits;
+
         const loose = await svc
           .from('profiles')
-          .select('id, email, phone, phone_e164')
-          .or(
-            [
-              `phone.eq.${e164}`,
-              `phone.eq.${zeroLead}`,
-              `phone.eq.${local}`,
-              `phone_e164.eq.${e164}`,
-            ].join(',')
-          )
+          .select('id, email, phone') // ← no phone_e164
+          .or([`phone.eq.${e164}`, `phone.eq.${zeroLead}`, `phone.eq.${local}`].join(','))
           .maybeSingle();
 
         if (loose.error) {
           const e = loose.error as PostgrestError;
-          return err(NextResponse.next(), 500, 'DB error resolving user', {
-            phase: 'lookup_by_phone_loose',
-            code: e.code, message: e.message, details: e.details, hint: e.hint,
-          });
+          return err(500, 'DB error resolving user', { phase: 'lookup_by_phone_loose', code: e.code, message: e.message, details: e.details, hint: e.hint });
         }
         resp = { data: loose.data, error: null } as any;
       }
       profile = resp.data ?? null;
     }
 
-    if (!profile?.id) return err(NextResponse.next(), 404, 'User not found');
-
+    if (!profile?.id) return err(404, 'User not found');
     const userId = profile.id;
 
-    // ---------- Fetch PIN salt ----------
+    // Fetch PIN salt
     const pinQ = await svc.from('auth_local_pin').select('salt').eq('user_id', userId).maybeSingle();
     if (pinQ.error) {
       const e = pinQ.error as PostgrestError;
-      return err(NextResponse.next(), 500, 'DB error reading PIN', {
-        phase: 'read_pin_salt',
-        code: e.code, message: e.message, details: e.details, hint: e.hint,
-      });
+      return err(500, 'DB error reading PIN', { phase: 'read_pin_salt', code: e.code, message: e.message, details: e.details, hint: e.hint });
     }
-    if (!pinQ.data?.salt) return err(NextResponse.next(), 409, 'No PIN set for this account');
+    if (!pinQ.data?.salt) return err(409, 'No PIN set for this account');
 
     const derivedPassword = derivePinPassword(pin, userId, pinQ.data.salt, PIN_PEPPER);
 
-    // ---------- Sign in (server-side) ----------
+    // Sign in server-side using profile.email (canonical email)
     const authEmail = (profile.email || '').trim();
-    if (!authEmail) return err(NextResponse.next(), 500, 'Account email missing');
+    if (!authEmail) return err(500, 'Account email missing');
 
     const signIn = await supabaseSSR.auth.signInWithPassword({ email: authEmail, password: derivedPassword });
     if (signIn.error) {
-      return err(NextResponse.next(), 401, 'Invalid PIN for this account', {
-        phase: 'sign_in', message: signIn.error.message,
-      });
+      return err(401, 'Invalid PIN for this account', { phase: 'sign_in', message: signIn.error.message });
     }
 
     return new NextResponse(null, { status: 204 });
   } catch (e: any) {
-    return err(NextResponse.next(), 500, 'Unexpected error', { message: e?.message, stack: e?.stack });
+    return err(500, 'Unexpected error', { message: e?.message, stack: e?.stack });
   }
 }
