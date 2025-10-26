@@ -81,23 +81,31 @@ export async function POST(req: NextRequest) {
       return json({ error: 'Provide userId and 4–8 digit pin' }, 400);
     }
 
-    // Service Role for admin ops
+    // Admin client
     const svc = createServiceClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
 
-    // 1) Ensure canonical email on GoTrue
+    // 1) Ensure canonical email exists; if missing → set {userId}@gn.local
     const { data: u, error: userErr } = await svc.auth.admin.getUserById(userId);
     if (userErr) return json({ error: 'User read failed', message: userErr.message }, 500);
 
     let email = u?.user?.email || '';
+    let emailConfirmedAt: string | null | undefined = (u as any)?.user?.email_confirmed_at;
+
     if (!email) {
       const synthetic = `${userId}@gn.local`;
-      const { error: updEmailErr } = await svc.auth.admin.updateUserById(userId, { email: synthetic });
+      const { error: updEmailErr } = await svc.auth.admin.updateUserById(userId, { email: synthetic, email_confirm: true });
       if (updEmailErr) return json({ error: 'Failed to assign canonical email', message: updEmailErr.message }, 500);
       email = synthetic;
+      emailConfirmedAt = new Date().toISOString();
       await svc.from('profiles').upsert({ id: userId, email: synthetic }, { onConflict: 'id' });
+    } else if (!emailConfirmedAt) {
+      // Email exists but is unconfirmed → confirm it so password sign-in is allowed
+      const { error: confirmErr } = await svc.auth.admin.updateUserById(userId, { email_confirm: true });
+      if (confirmErr) return json({ error: 'Failed to confirm email', message: confirmErr.message }, 500);
+      emailConfirmedAt = new Date().toISOString();
     }
 
-    // 2) Upsert salt + update GoTrue password
+    // 2) Upsert salt + update GoTrue password from PIN
     const salt = b64url((crypto as any).randomBytes(16));
     const derivedPassword = derive(pin, userId, salt, PIN_PEPPER);
 
@@ -107,7 +115,7 @@ export async function POST(req: NextRequest) {
     const upd = await svc.auth.admin.updateUserById(userId, { password: derivedPassword });
     if (upd.error) return json({ error: 'Failed to sync auth password', message: upd.error.message }, 500);
 
-    // 3) SELF-VERIFY against the SAME project (catches env/email mismatches immediately)
+    // 3) SELF-VERIFY against the SAME project
     const anon = createServiceClient(SUPABASE_URL, SUPABASE_ANON, { auth: { persistSession: false } });
     const signIn = await anon.auth.signInWithPassword({ email, password: derivedPassword });
     if (signIn.error) {
@@ -116,7 +124,7 @@ export async function POST(req: NextRequest) {
         details: {
           email_used: email,
           message: signIn.error.message,
-          hint: 'This usually means NEXT_PUBLIC_SUPABASE_URL/ANON or PIN_PEPPER differ from what your login route uses.',
+          hint: 'This usually means env mismatch (URL/ANON) or a different PIN_PEPPER on the login route.',
         },
       }, 500);
     }
