@@ -63,17 +63,25 @@ function pickFirst(obj: any, keys: string[]): string | undefined {
   }
   return undefined;
 }
+
 function extractFields(raw: any): { email?: string; phone?: string; pin?: string } {
   const bags = [raw, raw?.values, raw?.data, raw?.form, raw?.form?.values, raw?.payload, raw?.input, raw?.body].filter(Boolean);
   let email: string|undefined, phone: string|undefined, pin: string|undefined;
+
   for (const b of bags) {
     const identifier = pickFirst(b, ['identifier','login','user','username']);
     const maybeEmail = pickFirst(b, ['email','userEmail','mail']);
     const maybePhone = pickFirst(b, ['phone','mobile','msisdn','number','contact']); // no phone_e164
     const maybePin   = pickFirst(b, ['pin','pincode','pin_code','code','otp','password','passcode']);
-    if (!email && (maybeEmail || (identifier && identifier.includes('@')))) email = (maybeEmail || identifier)!.toLowerCase();
-    if (!phone && (maybePhone || (identifier && !identifier.includes('@')))) phone = toE164NP(maybePhone || identifier);
-    if (!pin && maybePin && /^\d{4,8}$/.test(maybePin)) pin = maybePin;
+
+    if (!email && (maybeEmail || (identifier && identifier.includes('@'))))
+      email = (maybeEmail || identifier)!.toLowerCase();
+
+    if (!phone && (maybePhone || (identifier && !identifier.includes('@'))))
+      phone = toE164NP(maybePhone || identifier);
+
+    if (!pin && maybePin && /^\d{4,8}$/.test(maybePin))
+      pin = maybePin;
   }
   return { email, phone, pin };
 }
@@ -99,12 +107,10 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // tolerant parse
     const raw = await readBodyAny(req);
     const { email, phone, pin } = extractFields(raw);
     const provided = [!!email, !!phone].filter(Boolean).length;
 
-    // ignore empty mount calls
     if (!pin && provided === 0) return new NextResponse(null, { status: 204 });
     if (!pin || provided !== 1) return jerr(400, 'Provide exactly one of {email|phone} and a pin');
 
@@ -117,7 +123,7 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    // Service Role for public.* table reads (bypass RLS)
+    // Service Role for public.* reads (bypass RLS)
     const svc = createServiceClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
 
     // -------- resolve user_id from public.profiles only (no phone_e164) --------
@@ -132,26 +138,21 @@ export async function POST(req: NextRequest) {
       userId = q.data?.id ?? null;
     } else {
       const e164 = toE164NP(phone!)!;
-      // Try exact phone match then local variants
-      let resp = await svc.from('profiles').select('id').eq('phone', e164).maybeSingle();
+      const digits = e164.replace(/\D/g, '');
+      const zeroLead = digits.startsWith('977') ? `0${digits.slice(3)}` : `0${digits}`;
+      const local = digits.startsWith('977') ? digits.slice(3) : digits;
+      const plain977 = digits; // <-- covers DB rows like "97798xxxxxxx" (no '+')
+
+      // Try all variants, including "977..." without plus
+      const resp = await svc
+        .from('profiles')
+        .select('id')
+        .or([`phone.eq.${e164}`, `phone.eq.${plain977}`, `phone.eq.${zeroLead}`, `phone.eq.${local}`].join(','))
+        .maybeSingle();
+
       if (resp.error) {
         const e = resp.error as PostgrestError;
-        return jerr(500, 'DB error resolving user', { phase: 'profiles_lookup_phone_exact', code: e.code, message: e.message, details: e.details, hint: e.hint });
-      }
-      if (!resp.data) {
-        const digits = e164.replace(/\D/g, '');
-        const zeroLead = digits.startsWith('977') ? `0${digits.slice(3)}` : `0${digits}`;
-        const local = digits.startsWith('977') ? digits.slice(3) : digits;
-        const loose = await svc
-          .from('profiles')
-          .select('id')
-          .or([`phone.eq.${e164}`, `phone.eq.${zeroLead}`, `phone.eq.${local}`].join(','))
-          .maybeSingle();
-        if (loose.error) {
-          const e = loose.error as PostgrestError;
-          return jerr(500, 'DB error resolving user', { phase: 'profiles_lookup_phone_loose', code: e.code, message: e.message, details: e.details, hint: e.hint });
-        }
-        resp = { data: loose.data, error: null } as any;
+        return jerr(500, 'DB error resolving user', { phase: 'profiles_lookup_phone', code: e.code, message: e.message, details: e.details, hint: e.hint });
       }
       userId = resp.data?.id ?? null;
     }
@@ -166,14 +167,14 @@ export async function POST(req: NextRequest) {
     }
     if (!pinQ.data?.salt) return jerr(409, 'No PIN set for this account');
 
-    // -------- fetch canonical email via Admin API (GoTrue), not PostgREST --------
+    // -------- fetch canonical email via Admin API (GoTrue) --------
     const admin = createServiceClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
     const { data: adminUser, error: adminErr } = await admin.auth.admin.getUserById(userId);
     if (adminErr) {
       return jerr(500, 'Failed to read account', { phase: 'admin_get_user', message: adminErr.message });
     }
     const authEmail = adminUser?.user?.email || null;
-    if (!authEmail) return jerr(500, 'Account email missing'); // PIN signin uses email+password on GoTrue
+    if (!authEmail) return jerr(500, 'Account email missing');
 
     // derive + server-side sign-in (stamps cookies)
     const derivedPassword = derivePinPassword(pin, userId, pinQ.data.salt, PIN_PEPPER);
