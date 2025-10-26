@@ -1,39 +1,75 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { createServerClient } from '@supabase/ssr';
-import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
+import { createClient as createAdminClient } from '@supabase/supabase-js';
 import crypto from 'crypto';
 
-/** Feature flag for Trust PIN gate */
+/** Feature flag */
 const ENABLED = process.env.NEXT_PUBLIC_ENABLE_TRUST_PIN === 'true';
 
-/** Env needed */
+/** Required env */
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const SUPABASE_ANON = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 const PIN_PEPPER = process.env.PIN_PEPPER!;
 
 /** Helpers */
 const b64url = (buf: Buffer) =>
   buf.toString('base64').replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
 
-const e164 = (raw: string) => {
-  const s = raw.trim();
+const toE164NP = (raw: string) => {
+  if (!raw) return undefined;
+  let s = raw.trim();
+  // Remove spaces, hyphens, parentheses
+  s = s.replace(/[()\s-]/g, '');
+  // Already E.164?
   if (s.startsWith('+')) return s;
+  // Strip non-digits
   const digits = s.replace(/\D/g, '');
-  // Nepal-only policy: +977 + 10 digits (mobile usually starts 97/98/96)
+  // Handle common Nepal phone variants: 98xxxxxxxx, 97xxxxxxxx, 96xxxxxxxx, 0xxxxxxxxx
   if (digits.startsWith('977')) return `+${digits}`;
-  return `+977${digits}`;
+  if (digits.startsWith('0') && digits.length >= 10) return `+977${digits.slice(1)}`;
+  if (digits.length >= 9) return `+977${digits}`;
+  return `+977${digits}`; // best-effort
 };
 
 const derivePinPassword = (pin: string, userId: string, saltB64url: string, pepper: string) => {
-  // salt is stored in base64url; convert back to std base64 then to Buffer
   const saltStd = saltB64url.replace(/-/g, '+').replace(/_/g, '/');
   const salt = Buffer.from(saltStd, 'base64');
   const material = Buffer.from(`${pin}:${userId}:${pepper}`, 'utf8');
-  // Parameters must match /api/pin/set exactly
   const dk = crypto.scryptSync(material, salt, 32, { N: 8192, r: 8, p: 1 }) as Buffer;
   return b64url(dk);
 };
+
+async function readBody(req: NextRequest): Promise<{ email?: string; phone?: string; identifier?: string; pin?: string }> {
+  const ct = req.headers.get('content-type') || '';
+  // 1) JSON
+  if (ct.includes('application/json')) {
+    try {
+      return (await req.json()) as any;
+    } catch { /* fallthrough */ }
+  }
+  // 2) FormData (multipart or urlencoded)
+  if (ct.includes('multipart/form-data') || ct.includes('application/x-www-form-urlencoded')) {
+    try {
+      const fd = await req.formData();
+      const obj: any = {};
+      for (const [k, v] of fd.entries()) obj[k] = typeof v === 'string' ? v : '';
+      return obj;
+    } catch { /* fallthrough */ }
+  }
+  // 3) Last-ditch: try to parse as URLSearchParams
+  try {
+    const text = await req.text();
+    const params = new URLSearchParams(text);
+    if ([...params.keys()].length) {
+      const obj: any = {};
+      params.forEach((v, k) => (obj[k] = v));
+      return obj;
+    }
+  } catch { /* ignore */ }
+  return {};
+}
 
 /** CORS / method guards */
 export function OPTIONS() {
@@ -46,24 +82,29 @@ export function GET() {
 export async function POST(req: NextRequest) {
   try {
     if (!ENABLED) return new NextResponse('Trust PIN disabled', { status: 404 });
-    if (!SUPABASE_URL || !SUPABASE_ANON || !PIN_PEPPER) {
+    if (!SUPABASE_URL || !SUPABASE_ANON || !SUPABASE_SERVICE_ROLE_KEY || !PIN_PEPPER) {
       return NextResponse.json({ error: 'Server misconfigured' }, { status: 500 });
     }
 
-    const { email: rawEmail, phone: rawPhone, pin } = (await req.json().catch(() => ({}))) as {
-      email?: string;
-      phone?: string;
-      pin?: string;
-    };
+    const body = await readBody(req);
 
-    // Validate inputs: exactly one of email | phone, and a PIN
-    const email = (rawEmail ?? '').trim() || undefined;
-    const phone = rawPhone ? e164(rawPhone) : undefined;
-    if (!pin || (!email && !phone) || (email && phone)) {
-      return NextResponse.json(
-        { error: 'Provide exactly one of {email|phone} and a pin' },
-        { status: 400 }
-      );
+    // Accept identifier OR email/phone
+    let email = (body.email ?? '').trim() || undefined;
+    let phone = (body.phone ?? '').trim() || undefined;
+    const identifier = (body.identifier ?? '').trim() || undefined;
+    const pin = (body.pin ?? '').trim() || undefined;
+
+    if (identifier && !email && !phone) {
+      if (identifier.includes('@')) email = identifier.toLowerCase();
+      else phone = identifier;
+    }
+    if (email) email = email.toLowerCase();
+    if (phone) phone = toE164NP(phone);
+
+    // Validate
+    const provided = [!!email, !!phone].filter(Boolean).length;
+    if (!pin || provided !== 1) {
+      return NextResponse.json({ error: 'Provide exactly one of {email|phone} and a pin' }, { status: 400 });
     }
 
     // Bind SSR client to response cookies
@@ -77,21 +118,68 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    // 1) Resolve user via public.profiles (id == auth.users.id)
-    const whereCol = email ? 'email' : 'phone';
-    const whereVal = (email ?? phone)!;
-    const { data: profile, error: profErr } = await supabaseSSR
-      .from('profiles')
-      .select('id, email, phone')
-      .eq(whereCol, whereVal)
-      .maybeSingle();
+    // Resolve user via public.profiles with robust fallback
+    // Try by email or by multiple phone columns
+    let profile: { id: string; email: string | null; phone: string | null } | null = null;
 
-    if (profErr) return NextResponse.json({ error: 'DB error resolving user' }, { status: 500 });
-    if (!profile?.id) return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    if (email) {
+      const { data, error } = await supabaseSSR
+        .from('profiles')
+        .select('id, email, phone')
+        .eq('email', email)
+        .maybeSingle();
+      if (error) return NextResponse.json({ error: 'DB error resolving user' }, { status: 500 });
+      profile = data ?? null;
+    } else if (phone) {
+      // Try 'phone' exact
+      let resp = await supabaseSSR
+        .from('profiles')
+        .select('id, email, phone')
+        .eq('phone', phone)
+        .maybeSingle();
 
-    const userId: string = profile.id;
+      // If not found, try 'phone_e164'
+      if (!resp.data) {
+        resp = await supabaseSSR
+          .from('profiles')
+          .select('id, email, phone')
+          .eq('phone_e164', phone)
+          .maybeSingle();
+      }
 
-    // 2) Load PIN salt (must exist and be non-null)
+      // Final attempt: try a loose OR on common variants
+      if (!resp.data) {
+        const digits = phone.replace(/\D/g, '');
+        const zeroLead = digits.startsWith('977') ? `0${digits.slice(3)}` : `0${digits}`;
+        const local = digits.startsWith('977') ? digits.slice(3) : digits;
+
+        const { data, error } = await supabaseSSR
+          .from('profiles')
+          .select('id, email, phone')
+          .or(
+            [
+              `phone.eq.${phone}`,
+              `phone.eq.${zeroLead}`,
+              `phone.eq.${local}`,
+              `phone_e164.eq.${phone}`,
+            ].join(',')
+          )
+          .maybeSingle();
+
+        if (error) return NextResponse.json({ error: 'DB error resolving user' }, { status: 500 });
+        resp = { data, error: null } as any;
+      }
+
+      profile = resp.data ?? null;
+    }
+
+    if (!profile?.id) {
+      return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    }
+
+    const userId = profile.id;
+
+    // Load PIN salt
     const { data: pinRow, error: pinErr } = await supabaseSSR
       .from('auth_local_pin')
       .select('salt')
@@ -99,36 +187,31 @@ export async function POST(req: NextRequest) {
       .maybeSingle();
 
     if (pinErr) return NextResponse.json({ error: 'DB error reading PIN' }, { status: 500 });
-    if (!pinRow?.salt) {
-      // Legacy/buggy records from earlier null-salt write show up here
-      return NextResponse.json({ error: 'No PIN set for this account' }, { status: 409 });
-    }
+    if (!pinRow?.salt) return NextResponse.json({ error: 'No PIN set for this account' }, { status: 409 });
 
-    // 3) Derive the password exactly like we did in /api/pin/set
     const derivedPassword = derivePinPassword(pin, userId, pinRow.salt, PIN_PEPPER);
 
-    // 4) Always sign in with the auth user’s PRIMARY EMAIL
-    //    (phone users often have a synthetic email in GoTrue; admin fetch is source of truth)
-    const admin = getSupabaseAdmin();
-    const { data: user, error: userErr } = await admin.auth.admin.getUserById(userId);
-    if (userErr || !user?.user?.email) {
-      // Fallback to profile.email only if admin email is missing
-      if (!profile.email) return NextResponse.json({ error: 'Account email missing' }, { status: 500 });
-    }
-    const authEmail = (user?.user?.email ?? profile.email) as string;
+    // Fetch the canonical auth email via Admin (source of truth for signInWithPassword)
+    const admin = createAdminClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+      auth: { persistSession: false },
+    });
+    const { data: adminUser, error: adminErr } = await admin.auth.admin.getUserById(userId);
+    if (adminErr) return NextResponse.json({ error: 'Failed to read account' }, { status: 500 });
 
-    // 5) Server-side sign in (this writes secure HTTP-only cookies to the response)
+    const authEmail = adminUser?.user?.email || profile.email;
+    if (!authEmail) return NextResponse.json({ error: 'Account email missing' }, { status: 500 });
+
+    // Server-side sign-in (writes secure HTTP-only cookies on this response)
     const { error: signInErr } = await supabaseSSR.auth.signInWithPassword({
       email: authEmail,
       password: derivedPassword,
     });
 
     if (signInErr) {
-      // If this hits, it almost always means /api/pin/set never synced the derived password into GoTrue
+      // Most often: /api/pin/set never synced the derived password into GoTrue
       return NextResponse.json({ error: 'Invalid PIN for this account' }, { status: 401 });
     }
 
-    // 6) Done: cookies are set. Client should redirect on 204.
     return new NextResponse(null, { status: 204 });
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || 'Unexpected error' }, { status: 500 });
