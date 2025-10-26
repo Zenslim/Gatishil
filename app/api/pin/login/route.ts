@@ -35,7 +35,7 @@ const derivePinPassword = (pin: string, userId: string, saltB64url: string, pepp
   const saltStd = saltB64url.replace(/-/g, '+').replace(/_/g, '/');
   const salt = Buffer.from(saltStd, 'base64');
   const material = Buffer.from(`${pin}:${userId}:${pepper}`, 'utf8');
-  const dk = crypto.scryptSync(material, salt, 32, { N: 8192, r: 8, p: 1 }) as Buffer;
+  const dk = (crypto as any).scryptSync(material, salt, 32, { N: 8192, r: 8, p: 1 }) as Buffer;
   return b64url(dk);
 };
 
@@ -71,7 +71,7 @@ function extractFields(raw: any): { email?: string; phone?: string; pin?: string
   for (const b of bags) {
     const identifier = pickFirst(b, ['identifier','login','user','username']);
     const maybeEmail = pickFirst(b, ['email','userEmail','mail']);
-    const maybePhone = pickFirst(b, ['phone','mobile','msisdn','number','contact']); // no phone_e164
+    const maybePhone = pickFirst(b, ['phone','mobile','msisdn','number','contact']);
     const maybePin   = pickFirst(b, ['pin','pincode','pin_code','code','otp','password','passcode']);
 
     if (!email && (maybeEmail || (identifier && identifier.includes('@'))))
@@ -126,7 +126,7 @@ export async function POST(req: NextRequest) {
     // Service Role for public.* reads (bypass RLS)
     const svc = createServiceClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
 
-    // -------- resolve user_id from public.profiles only (no phone_e164) --------
+    // Resolve user_id via public.profiles
     let userId: string | null = null;
 
     if (email) {
@@ -141,15 +141,13 @@ export async function POST(req: NextRequest) {
       const digits = e164.replace(/\D/g, '');
       const zeroLead = digits.startsWith('977') ? `0${digits.slice(3)}` : `0${digits}`;
       const local = digits.startsWith('977') ? digits.slice(3) : digits;
-      const plain977 = digits; // <-- covers DB rows like "97798xxxxxxx" (no '+')
+      const plain977 = digits;
 
-      // Try all variants, including "977..." without plus
       const resp = await svc
         .from('profiles')
         .select('id')
         .or([`phone.eq.${e164}`, `phone.eq.${plain977}`, `phone.eq.${zeroLead}`, `phone.eq.${local}`].join(','))
         .maybeSingle();
-
       if (resp.error) {
         const e = resp.error as PostgrestError;
         return jerr(500, 'DB error resolving user', { phase: 'profiles_lookup_phone', code: e.code, message: e.message, details: e.details, hint: e.hint });
@@ -159,7 +157,7 @@ export async function POST(req: NextRequest) {
 
     if (!userId) return jerr(404, 'User not found');
 
-    // -------- read PIN salt from public.auth_local_pin --------
+    // Read PIN salt
     const pinQ = await svc.from('auth_local_pin').select('salt').eq('user_id', userId).maybeSingle();
     if (pinQ.error) {
       const e = pinQ.error as PostgrestError;
@@ -167,16 +165,14 @@ export async function POST(req: NextRequest) {
     }
     if (!pinQ.data?.salt) return jerr(409, 'No PIN set for this account');
 
-    // -------- fetch canonical email via Admin API (GoTrue) --------
+    // Canonical email via Admin API (ensured by /api/pin/set)
     const admin = createServiceClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
     const { data: adminUser, error: adminErr } = await admin.auth.admin.getUserById(userId);
-    if (adminErr) {
-      return jerr(500, 'Failed to read account', { phase: 'admin_get_user', message: adminErr.message });
-    }
+    if (adminErr) return jerr(500, 'Failed to read account', { phase: 'admin_get_user', message: adminErr.message });
     const authEmail = adminUser?.user?.email || null;
-    if (!authEmail) return jerr(500, 'Account email missing');
+    if (!authEmail) return jerr(500, 'Account email missing'); // should not happen after pin/set
 
-    // derive + server-side sign-in (stamps cookies)
+    // derive + server-side sign-in
     const derivedPassword = derivePinPassword(pin, userId, pinQ.data.salt, PIN_PEPPER);
     const signIn = await supabaseSSR.auth.signInWithPassword({ email: authEmail, password: derivedPassword });
     if (signIn.error) {
