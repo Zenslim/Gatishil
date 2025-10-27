@@ -1,57 +1,68 @@
+// app/api/otp/verify/route.ts
+import { NextRequest, NextResponse } from 'next/server';
+import { createServerClient } from '@supabase/ssr';
+
 export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
 
-import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const SUPABASE_ANON = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
-type VerifyBody = {
-  phone?: string;
-  token?: string;
+const normalizePhone = (raw: string) => {
+  const trimmed = (raw ?? '').trim();
+  if (!trimmed) return '';
+  if (trimmed.startsWith('+')) return trimmed;
+  const digits = trimmed.replace(/\D/g, '');
+  if (digits.startsWith('977')) return `+${digits}`;
+  return `+977${digits}`;
 };
 
-function normalizeNp(raw?: string | null): string | null {
-  if (!raw) return null;
-  const s = String(raw).trim();
-  if (s.startsWith('+977') && /(\+977)9[78]\d{8}$/.test(s)) return s;
-  const digits = s.replace(/\D/g, '');
-  if (/^9[78]\d{8}$/.test(digits)) return `+977${digits}`;
-  if (/^9779[78]\d{8}$/.test(digits)) return `+${digits}`;
-  return null;
+const getSupabaseSSR = (req: NextRequest, res: NextResponse) =>
+  createServerClient(SUPABASE_URL, SUPABASE_ANON, {
+    cookies: {
+      get: (name: string) => req.cookies.get(name)?.value,
+      set: (name: string, value: string, options: any) => {
+        res.cookies.set({ name, value, ...options });
+      },
+      remove: (name: string, options: any) => {
+        res.cookies.set({ name, value: '', ...options });
+      },
+    },
+  });
+
+export function OPTIONS() {
+  return new NextResponse(null, { status: 204 });
 }
 
-export async function POST(req: Request) {
-  const cookieStore = cookies();
-  const supabase = createRouteHandlerClient({ cookies: cookieStore });
+export function GET() {
+  return new NextResponse('Use POST', { status: 405 });
+}
 
-  let body: VerifyBody | null = null;
+export async function POST(req: NextRequest) {
   try {
-    body = await req.json();
-  } catch {
-    body = null;
-  }
+    const body = (await req.json().catch(() => ({}))) as { phone?: string; token?: string };
+    const phoneInput = (body.phone ?? '').trim();
+    const token = String(body.token ?? '').trim();
 
-  const phone = normalizeNp(body?.phone ?? null);
-  const token = (body?.token ?? '').toString().trim();
+    const phone = normalizePhone(phoneInput);
+    if (!phone || !token) {
+      return NextResponse.json({ error: 'Invalid phone or token' }, { status: 400 });
+    }
 
-  if (!phone || !token) {
-    return NextResponse.json({ ok: false, error: 'Missing phone or token' });
-  }
+    const res = new NextResponse(null, { status: 204 });
+    const supabase = getSupabaseSSR(req, res);
 
-  try {
-    const { data, error } = await supabase.auth.verifyOtp({
+    const { error } = await supabase.auth.verifyOtp({
       phone,
       token,
       type: 'sms',
     });
 
     if (error) {
-      return NextResponse.json({ ok: false, error: error.message });
+      return NextResponse.json({ error: 'Invalid or expired OTP' }, { status: 401 });
     }
 
-    // Cookies are set by the helper on success
-    return NextResponse.json({ ok: true });
+    return res; // 204 and cookies set on response
   } catch (e: any) {
-    return NextResponse.json({ ok: false, error: e?.message ?? 'verify failed' });
+    return NextResponse.json({ error: e?.message || 'Server error' }, { status: 500 });
   }
 }

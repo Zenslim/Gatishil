@@ -1,59 +1,64 @@
+// app/api/otp/send/route.ts
+import { NextRequest, NextResponse } from 'next/server';
+import { createServerClient } from '@supabase/ssr';
+
 export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
 
-import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const SUPABASE_ANON = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
-type SendBody = {
-  email?: string;
-  phone?: string;
+const normalizePhone = (raw: string) => {
+  const trimmed = (raw ?? '').trim();
+  if (!trimmed) return '';
+  if (trimmed.startsWith('+')) return trimmed;
+  const digits = trimmed.replace(/\D/g, '');
+  if (digits.startsWith('977')) return `+${digits}`;
+  return `+977${digits}`;
 };
 
-function normalizeNp(raw?: string | null): string | null {
-  if (!raw) return null;
-  const s = String(raw).trim();
-  if (s.startsWith('+977') && /(\+977)9[78]\d{8}$/.test(s)) return s;
-  const digits = s.replace(/\D/g, '');
-  if (/^9[78]\d{8}$/.test(digits)) return `+977${digits}`;
-  if (/^9779[78]\d{8}$/.test(digits)) return `+${digits}`;
-  return null;
+const getSupabaseSSR = (req: NextRequest, res: NextResponse) =>
+  createServerClient(SUPABASE_URL, SUPABASE_ANON, {
+    cookies: {
+      get: (name: string) => req.cookies.get(name)?.value,
+      set: (name: string, value: string, options: any) => {
+        res.cookies.set({ name, value, ...options });
+      },
+      remove: (name: string, options: any) => {
+        res.cookies.set({ name, value: '', ...options });
+      },
+    },
+  });
+
+export function OPTIONS() {
+  return new NextResponse(null, { status: 204 });
 }
 
-export async function POST(req: Request) {
-  const cookieStore = cookies();
-  const supabase = createRouteHandlerClient({ cookies: cookieStore });
+export function GET() {
+  return new NextResponse('Use POST', { status: 405 });
+}
 
-  let body: SendBody | null = null;
+export async function POST(req: NextRequest) {
   try {
-    body = await req.json();
-  } catch {
-    body = null;
-  }
-
-  const email = body?.email?.trim();
-  const np = normalizeNp(body?.phone ?? null);
-
-  try {
-    if (email) {
-      const site = process.env.NEXT_PUBLIC_SITE_URL ?? '';
-      await supabase.auth.signInWithOtp({
-        email,
-        options: { emailRedirectTo: `${site}/auth/callback` },
-      });
-      return NextResponse.json({ ok: true, email });
+    const body = (await req.json().catch(() => ({}))) as { phone?: string };
+    const phoneInput = (body.phone ?? '').trim();
+    const phone = normalizePhone(phoneInput);
+    if (!phone) {
+      return NextResponse.json({ error: 'Invalid phone' }, { status: 400 });
     }
 
-    if (np) {
-      await supabase.auth.signInWithOtp({
-        phone: np,
-        options: { channel: 'sms', shouldCreateUser: true },
-      });
-      return NextResponse.json({ ok: true, phone: np });
+    const res = new NextResponse(null, { status: 204 });
+    const supabase = getSupabaseSSR(req, res);
+
+    const { error } = await supabase.auth.signInWithOtp({ phone });
+    if (error) {
+      // Common: rate limits or invalid phone -> 400/429 style mapping
+      const msg = String(error.message || 'OTP send failed');
+      const status = /rate|limit/i.test(msg) ? 429 : 400;
+      return NextResponse.json({ error: msg }, { status });
     }
 
-    return NextResponse.json({ ok: false, error: 'Provide email or phone (+977…)' });
+    return res; // 204
   } catch (e: any) {
-    return NextResponse.json({ ok: false, error: e?.message ?? 'send failed' });
+    return NextResponse.json({ error: e?.message || 'Server error' }, { status: 500 });
   }
 }
