@@ -5,7 +5,7 @@ import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { derivePasswordFromPinSync } from '@/lib/crypto/pin';
 import { randomBytes } from 'crypto';
 
-export const runtime = 'nodejs'; // use Node crypto + SSR cookie adapter
+export const runtime = 'nodejs'; // Node crypto + SSR cookie adapter
 
 const ENABLED = process.env.NEXT_PUBLIC_ENABLE_TRUST_PIN === 'true';
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -51,16 +51,19 @@ export async function POST(req: NextRequest) {
     const supabaseSSR = getSupabaseSSR(req, res);
 
     // Must be signed in to set a PIN
-    const { data: userData, error: userErr } = await supabaseSSR.auth.getUser();
-    if (userErr || !userData?.user?.id) {
+    const { data: me, error: meErr } = await supabaseSSR.auth.getUser();
+    if (meErr || !me?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
-    const userId = userData.user.id;
+    const userId = me.user.id;
+    const currentEmail = me.user.email ?? null;
+    // Supabase JS user doesn't include phone reliably; fetch from profiles if needed
+    let currentPhone: string | null = null;
 
     // Generate 16-byte salt; prepare both encodings
     const saltBytes = randomBytes(16);
     const saltB64 = saltBytes.toString('base64');
-    const saltPgBytea = '\\x' + saltBytes.toString('hex'); // PostgREST bytea format
+    const saltPgBytea = '\\x' + saltBytes.toString('hex'); // bytea format for Postgres
 
     // Derive password exactly like /api/pin/login
     const { derivedB64u } = derivePasswordFromPinSync({
@@ -72,21 +75,26 @@ export async function POST(req: NextRequest) {
 
     const admin = getSupabaseAdmin();
 
+    // Try to get phone from profiles for re-login fallback
+    const { data: prof } = await admin
+      .from('profiles')
+      .select('phone')
+      .eq('id', userId)
+      .maybeSingle();
+    currentPhone = (prof?.phone as string | undefined) ?? null;
+
     // Write BOTH columns so legacy NOT NULL(salt) is satisfied
     const { error: upsertErr } = await admin
       .from('auth_local_pin')
       .upsert(
         {
           user_id: userId,
-          salt_b64: saltB64,   // human-friendly
-          salt: saltPgBytea,   // bytea, satisfies NOT NULL "salt"
+          salt_b64: saltB64, // human-friendly
+          salt: saltPgBytea, // bytea, satisfies NOT NULL "salt"
         },
         { onConflict: 'user_id' },
       );
-
     if (upsertErr) {
-      // Uncomment to see exact DB error during debugging:
-      // return NextResponse.json({ error: upsertErr.message }, { status: 500 });
       return NextResponse.json({ error: 'Failed to save PIN salt' }, { status: 500 });
     }
 
@@ -98,7 +106,42 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Failed to sync password' }, { status: 500 });
     }
 
-    // Success → client redirects on 204
+    // IMPORTANT: Updating password can invalidate the current session.
+    // Re-authenticate server-side now so cookies are fresh and the client can go to /dashboard.
+    // Prefer email if present; otherwise try phone (password login supports both).
+    let relogErr: any = null;
+    if (currentEmail) {
+      const r = await supabaseSSR.auth.signInWithPassword({
+        email: currentEmail,
+        password: derivedB64u,
+      });
+      relogErr = r.error;
+    } else if (currentPhone) {
+      // Ensure E.164 form: +977…
+      const normalizePhone = (raw: string) => {
+        const t = (raw ?? '').trim();
+        if (!t) return '';
+        if (t.startsWith('+')) return t;
+        const d = t.replace(/\D/g, '');
+        if (d.startsWith('977')) return `+${d}`;
+        return `+977${d}`;
+      };
+      const phone = normalizePhone(currentPhone);
+      const r = await supabaseSSR.auth.signInWithPassword({
+        phone,
+        password: derivedB64u,
+      });
+      relogErr = r.error;
+    }
+
+    if (relogErr) {
+      // Even if re-login fails, return 204 and let UI handle a follow-up login;
+      // but in practice this should succeed and preserve the session.
+      // Uncomment the next line to surface the message during debugging:
+      // return NextResponse.json({ error: `Re-login failed: ${relogErr.message}` }, { status: 500 });
+    }
+
+    // Success → client should redirect to /dashboard on 204
     return res;
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || 'Server error' }, { status: 500 });
