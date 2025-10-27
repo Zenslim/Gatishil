@@ -1,7 +1,35 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
+
+/* ---------- small SVG icon set (no extra deps) ---------- */
+const Icon = {
+  Fingerprint: (props: React.SVGProps<SVGSVGElement>) => (
+    <svg viewBox="0 0 24 24" aria-hidden="true" {...props}>
+      <path
+        d="M12 2a7 7 0 0 1 7 7v1a1 1 0 1 1-2 0V9a5 5 0 0 0-10 0v1a1 1 0 1 1-2 0V9a7 7 0 0 1 7-7zm0 5a4 4 0 0 1 4 4v1.5a1 1 0 1 1-2 0V11a2 2 0 0 0-4 0v.5a1 1 0 1 1-2 0V11a4 4 0 0 1 4-4zm0 5.5a1.5 1.5 0 0 1 1.5 1.5v3.25a1 1 0 1 1-2 0V14a.5.5 0 0 0-1 0v1.25a1 1 0 1 1-2 0V14a2.5 2.5 0 0 1 5 0zm-6 2.75a1 1 0 1 1 2 0v1.25a3 3 0 1 0 6 0V15a1 1 0 1 1 2 0v1.5a5 5 0 1 1-10 0V13.25z"
+        fill="currentColor"
+      />
+    </svg>
+  ),
+  FaceId: (props: React.SVGProps<SVGSVGElement>) => (
+    <svg viewBox="0 0 24 24" aria-hidden="true" {...props}>
+      <path
+        d="M5 3h3a1 1 0 1 1 0 2H6v2a1 1 0 1 1-2 0V4a1 1 0 0 1 1-1zm13 0a1 1 0 0 1 1 1v3a1 1 0 1 1-2 0V5h-2a1 1 0 1 1 0-2h3zM5 17a1 1 0 1 1 2 0v2h2a1 1 0 1 1 0 2H6a1 1 0 0 1-1-1v-3zm12 0a1 1 0 1 1 2 0v3a1 1 0 0 1-1 1h-3a1 1 0 1 1 0-2h2v-2zM9 9.5a1 1 0 1 1-2 0c0-.83.67-1.5 1.5-1.5S10 8.67 10 9.5a1 1 0 1 1-2 0zm8 0a1 1 0 1 1-2 0c0-.83.67-1.5 1.5-1.5s1.5.67 1.5 1.5zm-5 5.5a4 4 0 0 1-3.464-2 1 1 0 0 1 1.732-1A2 2 0 0 0 12 13a2 2 0 0 0 1.732-1 1 1 0 1 1 1.732 1A4 4 0 0 1 12 15z"
+        fill="currentColor"
+      />
+    </svg>
+  ),
+  WindowsHello: (props: React.SVGProps<SVGSVGElement>) => (
+    <svg viewBox="0 0 24 24" aria-hidden="true" {...props}>
+      <path
+        d="M7 8a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm10 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM5 16c1.5 1.8 3.9 3 7 3s5.5-1.2 7-3a1 1 0 0 0-1.5-1.3C16.4 16.1 14.4 17 12 17s-4.4-.9-5.5-2.3A1 1 0 0 0 5 16z"
+        fill="currentColor"
+      />
+    </svg>
+  ),
+};
 
 /* ---------- helpers ---------- */
 function detectMethod(input: string): 'email' | 'phone' {
@@ -9,15 +37,24 @@ function detectMethod(input: string): 'email' | 'phone' {
   return v.includes('@') ? 'email' : 'phone';
 }
 
-/** Try to obtain a Supabase browser client from your project.
- *  If not found, create a local one via @supabase/supabase-js using env vars.
- *  This keeps biometrics working without changing your repo structure.
- */
+/** Very light UA-based hint for which icon to emphasize. */
+function pickBiometricFlavor() {
+  const ua = typeof navigator !== 'undefined' ? navigator.userAgent : '';
+  const isWindows = /Windows NT/i.test(ua);
+  const isAndroid = /Android/i.test(ua);
+  const isIOS = /iPhone|iPad|iPod/i.test(ua);
+
+  if (isWindows) return 'hello';
+  if (isAndroid) return 'fingerprint';
+  if (isIOS) return 'face';
+  return 'combo';
+}
+
+/** Try to obtain a Supabase client from project code; if not present, build one. */
 async function getSupabaseClient() {
-  // 1) Try your project module with many common export shapes
+  // 1) Try your module in multiple export shapes
   try {
     const mod: any = await import('@/lib/supabase/client');
-    // common patterns we often see across repos
     const candidates = [
       mod.createClient,
       mod.default,
@@ -27,41 +64,31 @@ async function getSupabaseClient() {
       mod.sb,
       mod.supabase,
     ].filter(Boolean);
-
     for (const c of candidates) {
-      if (typeof c === 'function') return c(); // factory function
-      if (typeof c === 'object' && c !== null && c.auth) return c; // instance
+      if (typeof c === 'function') return c();
+      if (typeof c === 'object' && c?.auth) return c;
     }
-    // If your module exports a function named makeClient or buildClient, try those too
     if (typeof mod?.makeClient === 'function') return mod.makeClient();
     if (typeof mod?.buildClient === 'function') return mod.buildClient();
   } catch {
-    // ignore; we'll fall back to a local client below
+    /* ignore and fall back */
   }
 
-  // 2) Fallback: build a browser client locally
+  // 2) Fallback to local client
   const { createClient } = await import('@supabase/supabase-js');
-
   const url =
     process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() ||
-    (globalThis as any).__SUPABASE_URL__; // ultra-safe fallback hook
+    (globalThis as any).__SUPABASE_URL__;
   const anon =
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim() ||
     (globalThis as any).__SUPABASE_ANON__;
-
   if (!url || !anon) {
     throw new Error(
       'Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY for fallback client.'
     );
   }
-
-  // NOTE: Browser client is fine for passkeys; server cookies are mirrored via /api/auth/sync
   return createClient(url, anon, {
-    auth: {
-      persistSession: true,
-      autoRefreshToken: true,
-      detectSessionInUrl: true,
-    },
+    auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
   });
 }
 
@@ -77,6 +104,8 @@ export default function LoginClient() {
 
   const webAuthnAvailable =
     typeof window !== 'undefined' && 'PublicKeyCredential' in window;
+
+  const flavor = useMemo(() => pickBiometricFlavor(), []);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -102,7 +131,6 @@ export default function LoginClient() {
       });
 
       if (res.status === 204) {
-        // Server set session cookies; safe to redirect.
         window.location.replace(next || '/dashboard');
         return;
       }
@@ -122,7 +150,6 @@ export default function LoginClient() {
           if (text) message = text;
         }
       }
-
       setErr(message);
     } catch (e: any) {
       setErr(e?.message || 'Could not sign in with PIN');
@@ -135,26 +162,25 @@ export default function LoginClient() {
   async function onBiometricLogin() {
     if (busy) return;
     const identifier = user.trim();
-    if (!identifier) {
-      setErr('Enter your email or phone first.');
-      return;
-    }
-    if (!webAuthnAvailable) {
-      setErr('This device/browser does not support biometrics here.');
-      return;
-    }
+    if (!identifier) return setErr('Enter your email or phone first.');
+    if (!webAuthnAvailable) return setErr('This device/browser does not support biometrics here.');
 
     setBusy(true);
     setErr(null);
     try {
       const supabase = await getSupabaseClient();
 
-      // WebAuthn ceremony via Supabase (works for email or E.164 phone)
+      // IMPORTANT: Ensure your supabase-js is >= 2.76.x to have signInWithPasskey.
+      const fn = (supabase as any)?.auth?.signInWithPasskey;
+      if (typeof fn !== 'function') {
+        throw new Error('Biometric login not available in current Supabase SDK. Update @supabase/supabase-js.');
+      }
+
       const { data, error } = await supabase.auth.signInWithPasskey({ identifier });
       if (error) throw error;
       if (!data?.session) throw new Error('No active session after biometrics.');
 
-      // Mirror SSR cookies like other auth paths
+      // Mirror SSR cookies for middleware/SSR
       const sync = await fetch('/api/auth/sync', { method: 'POST', credentials: 'include' });
       if (!sync.ok) throw new Error('Session sync failed.');
 
@@ -163,11 +189,7 @@ export default function LoginClient() {
       const name = e?.name || '';
       if (name === 'NotAllowedError') {
         setErr('Biometric prompt was cancelled. You can try again or use your PIN.');
-      } else if (
-        /no passkey/i.test(e?.message) ||
-        /not registered/i.test(e?.message) ||
-        /unsupported/i.test(e?.message)
-      ) {
+      } else if (/(no passkey|not registered|unsupported)/i.test(e?.message)) {
         setErr('No passkey found on this device for that account. Use your PIN.');
       } else {
         setErr(e?.message || 'Biometric sign-in failed. Use your PIN.');
@@ -176,6 +198,29 @@ export default function LoginClient() {
       setBusy(false);
     }
   }
+
+  const IconSet = () => {
+    const base = 'h-5 w-5';
+    if (flavor === 'fingerprint') return <Icon.Fingerprint className={base} />;
+    if (flavor === 'face') return <Icon.FaceId className={base} />;
+    if (flavor === 'hello') return <Icon.WindowsHello className={base} />;
+    return (
+      <span className="flex items-center gap-2">
+        <Icon.FaceId className={base} />
+        <Icon.Fingerprint className={base} />
+        <Icon.WindowsHello className={base} />
+      </span>
+    );
+  };
+
+  const label =
+    flavor === 'fingerprint'
+      ? 'Use fingerprint'
+      : flavor === 'face'
+      ? 'Use Face ID'
+      : flavor === 'hello'
+      ? 'Use Windows Hello'
+      : 'Use biometrics (Face/Touch/Hello)';
 
   return (
     <div className="min-h-[80vh] grid place-items-center bg-neutral-950 text-white p-6">
@@ -226,10 +271,11 @@ export default function LoginClient() {
             type="button"
             onClick={onBiometricLogin}
             disabled={busy || !user.trim() || !webAuthnAvailable}
-            className="w-full py-3 rounded-xl border border-white/20 hover:bg-white/5 disabled:opacity-50"
-            title={!webAuthnAvailable ? 'Biometrics not supported on this device' : 'Use biometrics'}
+            className="w-full py-3 rounded-xl border border-white/20 hover:bg-white/5 disabled:opacity-50 flex items-center justify-center gap-2"
+            title={!webAuthnAvailable ? 'Biometrics not supported on this device' : label}
           >
-            {busy ? 'Checking biometrics…' : 'Use biometrics (Face/Touch/Hello)'}
+            <IconSet />
+            <span>{busy ? 'Checking…' : label}</span>
           </button>
 
           {!webAuthnAvailable && (
