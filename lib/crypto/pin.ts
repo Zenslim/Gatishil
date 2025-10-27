@@ -24,7 +24,7 @@ export async function derivePasswordFromPin(opts: {
   pepper: string;
   length?: number; // bytes
 }): Promise<{ derivedB64u: string }> {
-  const { pin, userId, salt, pepper, length = 48 } = opts;
+  const { pin, userId, salt, pepper, length = 32 } = opts;
   const material = Buffer.from(`${pin}:${userId}:${pepper}`, 'utf8');
   const N = 1 << 13; // 8192 (~8MiB)
   const r = 8;
@@ -43,7 +43,7 @@ export function derivePasswordFromPinSync(opts: {
   pepper: string;
   length?: number;
 }): { derivedB64u: string } {
-  const { pin, userId, saltB64, pepper, length = 48 } = opts;
+  const { pin, userId, saltB64, pepper, length = 32 } = opts;
   const salt = Buffer.from(saltB64, 'base64');
   const material = Buffer.from(`${pin}:${userId}:${pepper}`, 'utf8');
   const out = crypto.scryptSync(material, salt, length, { N: 1 << 13, r: 8, p: 1 }) as Buffer;

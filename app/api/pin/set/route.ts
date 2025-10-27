@@ -52,12 +52,11 @@ export async function POST(req: NextRequest) {
     // Derive strong secret from PIN
     const saltBuf = genSalt(16);
     const salt_b64 = saltBuf.toString('base64');
-    const { derivedB64u } = await derivePasswordFromPin({
+    const { derivedB64u: derivedPassword } = await derivePasswordFromPin({
       pin,
       userId: user.id,
       salt: saltBuf,
       pepper,
-      length: 48,
     });
 
     const admin = getSupabaseAdmin();
@@ -78,7 +77,7 @@ export async function POST(req: NextRequest) {
     if (upsertErr) return new NextResponse(`DB upsert failed: ${upsertErr.message}`, { status: 500 });
 
     // 2) Update Supabase auth password via service role
-    const { error: updErr } = await admin.auth.admin.updateUserById(user.id, { password: derivedB64u });
+    const { error: updErr } = await admin.auth.admin.updateUserById(user.id, { password: derivedPassword });
     if (updErr) return new NextResponse(`Auth update failed: ${updErr.message}`, { status: 500 });
 
     // 3) VERIFY the write: sign out and sign back in with the new secret
@@ -93,10 +92,10 @@ export async function POST(req: NextRequest) {
 
     let verifyErr: any = null;
     if (email) {
-      const { error } = await supabaseSSR.auth.signInWithPassword({ email, password: derivedB64u });
+      const { error } = await supabaseSSR.auth.signInWithPassword({ email, password: derivedPassword });
       verifyErr = error;
     } else {
-      const { error } = await supabaseSSR.auth.signInWithPassword({ phone: phone!, password: derivedB64u } as any);
+      const { error } = await supabaseSSR.auth.signInWithPassword({ phone: phone!, password: derivedPassword } as any);
       verifyErr = error;
     }
     if (verifyErr) return new NextResponse(`PIN write verification failed: ${verifyErr.message}`, { status: 500 });
