@@ -1,64 +1,50 @@
 // app/api/auth/sync/route.ts
-import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
+import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 
-export const dynamic = 'force-dynamic'; // ensure no caching interferes
+export const runtime = 'nodejs'; // stable SSR + cookie adapter
 
-// Accept raw tokens from the client and persist official Supabase HttpOnly cookies.
-export async function POST(req: Request) {
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const SUPABASE_ANON = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+
+/**
+ * Session presence probe:
+ * - 204 if Supabase auth cookies yield a valid session
+ * - 401 if not
+ * No request body. No token passthrough. No setSession.
+ */
+const getSupabaseSSR = (req: NextRequest, res: NextResponse) =>
+  createServerClient(SUPABASE_URL, SUPABASE_ANON, {
+    cookies: {
+      get: (name: string) => req.cookies.get(name)?.value,
+      set: (name: string, value: string, options: any) => {
+        res.cookies.set({ name, value, ...options });
+      },
+      remove: (name: string, options: any) => {
+        res.cookies.set({ name, value: '', ...options });
+      },
+    },
+  });
+
+export function OPTIONS() {
+  return new NextResponse(null, { status: 204 });
+}
+
+export function GET() {
+  return new NextResponse('Use POST', { status: 405 });
+}
+
+export async function POST(req: NextRequest) {
   try {
-    const { access_token, refresh_token } = await req.json();
+    const res = new NextResponse(null, { status: 204 });
+    const supabase = getSupabaseSSR(req, res);
 
-    if (!access_token || !refresh_token) {
-      return NextResponse.json(
-        { error: 'Missing access_token or refresh_token' },
-        { status: 400 }
-      );
-    }
+    const { data, error } = await supabase.auth.getSession();
+    if (error) return NextResponse.json({ error: 'Auth read failed' }, { status: 500 });
+    if (!data?.session) return NextResponse.json({ error: 'No session' }, { status: 401 });
 
-    const cookieStore = cookies();
-
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        // Use getAll/setAll — required by @supabase/ssr cookie adapter
-        cookies: {
-          getAll: () => cookieStore.getAll(),
-          setAll: (cookiesToSet) => {
-            for (const cookie of cookiesToSet) {
-              cookieStore.set(cookie);
-            }
-          },
-        },
-      }
-    );
-
-    // Setting the session here rotates/validates tokens and writes sb-* cookies.
-    const { error } = await supabase.auth.setSession({
-      access_token,
-      refresh_token,
-    });
-
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 400 });
-    }
-
-    // Optional sanity check — forces cookie write-through on some edge cases
-    const { data, error: getErr } = await supabase.auth.getSession();
-    if (getErr || !data.session) {
-      return NextResponse.json(
-        { error: getErr?.message ?? 'Session not available after setSession' },
-        { status: 400 }
-      );
-    }
-
-    return NextResponse.json({ ok: true });
-  } catch (err: any) {
-    return NextResponse.json(
-      { error: err?.message ?? 'sync failed' },
-      { status: 400 }
-    );
+    return res; // 204, cookies already on response
+  } catch (e: any) {
+    return NextResponse.json({ error: e?.message || 'Server error' }, { status: 500 });
   }
 }
