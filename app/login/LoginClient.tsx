@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 
 /* ---------- small SVG icon set (no extra deps) ---------- */
@@ -31,14 +31,14 @@ const Icon = {
   ),
 };
 
-/* ---------- helpers ---------- */
+/* ---------- helpers (SSR-safe) ---------- */
 function detectMethod(input: string): 'email' | 'phone' {
   const v = input.trim();
   return v.includes('@') ? 'email' : 'phone';
 }
 
-/** Very light UA-based hint for which icon to emphasize. */
-function pickBiometricFlavor() {
+/** UA-based hint, runs **after mount** only */
+function pickBiometricFlavor(): 'hello' | 'fingerprint' | 'face' | 'combo' {
   const ua = typeof navigator !== 'undefined' ? navigator.userAgent : '';
   const isWindows = /Windows NT/i.test(ua);
   const isAndroid = /Android/i.test(ua);
@@ -52,7 +52,6 @@ function pickBiometricFlavor() {
 
 /** Try to obtain a Supabase client from project code; if not present, build one. */
 async function getSupabaseClient() {
-  // 1) Try your module in multiple export shapes
   try {
     const mod: any = await import('@/lib/supabase/client');
     const candidates = [
@@ -71,10 +70,8 @@ async function getSupabaseClient() {
     if (typeof mod?.makeClient === 'function') return mod.makeClient();
     if (typeof mod?.buildClient === 'function') return mod.buildClient();
   } catch {
-    /* ignore and fall back */
+    /* fall through */
   }
-
-  // 2) Fallback to local client
   const { createClient } = await import('@supabase/supabase-js');
   const url =
     process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() ||
@@ -102,10 +99,18 @@ export default function LoginClient() {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
-  const webAuthnAvailable =
-    typeof window !== 'undefined' && 'PublicKeyCredential' in window;
+  // SSR-safe flags
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
-  const flavor = useMemo(() => pickBiometricFlavor(), []);
+  const webAuthnAvailable =
+    mounted && typeof window !== 'undefined' && 'PublicKeyCredential' in window;
+
+  // Render-neutral flavor on SSR, specialize **after mount** to avoid hydration mismatch
+  const [flavor, setFlavor] = useState<'hello' | 'fingerprint' | 'face' | 'combo'>('combo');
+  useEffect(() => {
+    setFlavor(pickBiometricFlavor());
+  }, []);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -170,7 +175,6 @@ export default function LoginClient() {
     try {
       const supabase = await getSupabaseClient();
 
-      // IMPORTANT: Ensure your supabase-js is >= 2.76.x to have signInWithPasskey.
       const fn = (supabase as any)?.auth?.signInWithPasskey;
       if (typeof fn !== 'function') {
         throw new Error('Biometric login not available in current Supabase SDK. Update @supabase/supabase-js.');
@@ -199,7 +203,7 @@ export default function LoginClient() {
     }
   }
 
-  const IconSet = () => {
+  const IconSet = useMemo(() => {
     const base = 'h-5 w-5';
     if (flavor === 'fingerprint') return <Icon.Fingerprint className={base} />;
     if (flavor === 'face') return <Icon.FaceId className={base} />;
@@ -211,7 +215,7 @@ export default function LoginClient() {
         <Icon.WindowsHello className={base} />
       </span>
     );
-  };
+  }, [flavor]);
 
   const label =
     flavor === 'fingerprint'
@@ -274,7 +278,7 @@ export default function LoginClient() {
             className="w-full py-3 rounded-xl border border-white/20 hover:bg-white/5 disabled:opacity-50 flex items-center justify-center gap-2"
             title={!webAuthnAvailable ? 'Biometrics not supported on this device' : label}
           >
-            <IconSet />
+            {IconSet}
             <span>{busy ? 'Checking…' : label}</span>
           </button>
 
