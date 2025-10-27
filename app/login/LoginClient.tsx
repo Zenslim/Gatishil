@@ -3,22 +3,69 @@
 import React, { useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 
+/* ---------- helpers ---------- */
 function detectMethod(input: string): 'email' | 'phone' {
   const v = input.trim();
   return v.includes('@') ? 'email' : 'phone';
 }
 
-/** Resolve the project’s Supabase browser client factory safely. */
+/** Try to obtain a Supabase browser client from your project.
+ *  If not found, create a local one via @supabase/supabase-js using env vars.
+ *  This keeps biometrics working without changing your repo structure.
+ */
 async function getSupabaseClient() {
-  // Lazy import prevents render-time crashes and supports any export style.
-  const mod: any = await import('@/lib/supabase/client');
-  const factory = mod.createClient ?? mod.default ?? mod.createBrowserClient;
-  if (typeof factory !== 'function') {
-    throw new Error('Supabase client factory not found in "@/lib/supabase/client".');
+  // 1) Try your project module with many common export shapes
+  try {
+    const mod: any = await import('@/lib/supabase/client');
+    // common patterns we often see across repos
+    const candidates = [
+      mod.createClient,
+      mod.default,
+      mod.createBrowserClient,
+      mod.getClient,
+      mod.client,
+      mod.sb,
+      mod.supabase,
+    ].filter(Boolean);
+
+    for (const c of candidates) {
+      if (typeof c === 'function') return c(); // factory function
+      if (typeof c === 'object' && c !== null && c.auth) return c; // instance
+    }
+    // If your module exports a function named makeClient or buildClient, try those too
+    if (typeof mod?.makeClient === 'function') return mod.makeClient();
+    if (typeof mod?.buildClient === 'function') return mod.buildClient();
+  } catch {
+    // ignore; we'll fall back to a local client below
   }
-  return factory();
+
+  // 2) Fallback: build a browser client locally
+  const { createClient } = await import('@supabase/supabase-js');
+
+  const url =
+    process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() ||
+    (globalThis as any).__SUPABASE_URL__; // ultra-safe fallback hook
+  const anon =
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim() ||
+    (globalThis as any).__SUPABASE_ANON__;
+
+  if (!url || !anon) {
+    throw new Error(
+      'Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY for fallback client.'
+    );
+  }
+
+  // NOTE: Browser client is fine for passkeys; server cookies are mirrored via /api/auth/sync
+  return createClient(url, anon, {
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true,
+      detectSessionInUrl: true,
+    },
+  });
 }
 
+/* ---------- component ---------- */
 export default function LoginClient() {
   const q = useSearchParams();
   const next = q.get('next') || '/dashboard';
