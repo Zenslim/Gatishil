@@ -21,6 +21,7 @@ const getSupabaseSSR = (req: NextRequest, res: NextResponse) =>
     cookies: {
       get: (name: string) => req.cookies.get(name)?.value,
       set: (name: string, value: string, options: any) => {
+        // write Set-Cookie onto the SAME response we will return
         res.cookies.set({ name, value, ...options });
       },
       remove: (name: string, options: any) => {
@@ -39,29 +40,46 @@ export function GET() {
 
 export async function POST(req: NextRequest) {
   try {
-    const body = (await req.json().catch(() => ({}))) as { phone?: string; token?: string };
-    const phoneInput = (body.phone ?? '').trim();
+    const body = (await req.json().catch(() => ({}))) as {
+      phone?: string;
+      token?: string; // 6-digit OTP
+    };
+
+    const phone = normalizePhone(body.phone ?? '');
     const token = String(body.token ?? '').trim();
 
-    const phone = normalizePhone(phoneInput);
-    if (!phone || !token) {
+    if (!phone || !/^\d{4,8}$/.test(token)) {
       return NextResponse.json({ error: 'Invalid phone or token' }, { status: 400 });
     }
 
+    // Attach cookies to THIS response instance
     const res = new NextResponse(null, { status: 204 });
     const supabase = getSupabaseSSR(req, res);
 
-    const { error } = await supabase.auth.verifyOtp({
+    // 1) Verify OTP on the server (should return a session)
+    const { data, error } = await supabase.auth.verifyOtp({
       phone,
       token,
       type: 'sms',
     });
 
+    // 2) Hard check: ensure a session exists before returning 204
     if (error) {
       return NextResponse.json({ error: 'Invalid or expired OTP' }, { status: 401 });
     }
 
-    return res; // 204 and cookies set on response
+    // Some SDK versions don’t finalize cookies until a read; force it:
+    const { data: sessionProbe, error: sessionErr } = await supabase.auth.getSession();
+    if (sessionErr) {
+      return NextResponse.json({ error: 'Auth read failed' }, { status: 500 });
+    }
+    if (!data?.session && !sessionProbe?.session) {
+      // No session realized => treat as invalid OTP
+      return NextResponse.json({ error: 'No session after verify' }, { status: 401 });
+    }
+
+    // Success: cookies are now on `res`, client should redirect on 204
+    return res;
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || 'Server error' }, { status: 500 });
   }
