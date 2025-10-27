@@ -1,19 +1,30 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
+export const dynamic = 'force-dynamic'; // never cache; challenge must be fresh
 
 const ENABLE_WEBAUTHN = process.env.ENABLE_WEBAUTHN === 'true';
 
-// RP ID must match the effective cookie origin (apex without scheme).
-// If not provided, we try to derive from NEXT_PUBLIC_SITE_URL.
+/**
+ * RP ID resolution (single source of truth)
+ * Priority:
+ * 1) WEBAUTHN_RP_ID (explicit override)
+ * 2) NEXT_PUBLIC_APP_ORIGIN → hostname
+ * 3) ORIGIN → hostname
+ *
+ * This mirrors your current env contract and avoids accidental use of NEXT_PUBLIC_SITE_URL.
+ * RP ID must equal the effective domain of the webauthn origin or its registrable parent
+ * (e.g., origin https://www.gatishilnepal.org → rpId either "www.gatishilnepal.org" or "gatishilnepal.org" depending on how you registered credentials).
+ */
 const RP_ID =
   process.env.WEBAUTHN_RP_ID ||
- (process.env.NEXT_PUBLIC_APP_ORIGIN
+  (process.env.NEXT_PUBLIC_APP_ORIGIN
     ? new URL(process.env.NEXT_PUBLIC_APP_ORIGIN).hostname
-    : (process.env.ORIGIN ? new URL(process.env.ORIGIN).hostname : undefined));;
+    : process.env.ORIGIN
+    ? new URL(process.env.ORIGIN).hostname
+    : undefined);
 
-// ---- small helpers ----
+// --- helpers ---
 function randomChallenge(bytes = 32): Uint8Array {
   const buf = new Uint8Array(bytes);
   crypto.getRandomValues(buf);
@@ -26,7 +37,7 @@ function toBase64Url(u8: Uint8Array): string {
   return b64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
 }
 
-// ---- handlers ----
+// --- handlers ---
 export async function POST(_req: NextRequest) {
   if (!ENABLE_WEBAUTHN) {
     return NextResponse.json(
@@ -36,29 +47,34 @@ export async function POST(_req: NextRequest) {
   }
   if (!RP_ID) {
     return NextResponse.json(
-      { error: 'WEBAUTHN_RP_ID or NEXT_PUBLIC_SITE_URL is required.' },
+      {
+        error:
+          'RP ID unresolved. Set WEBAUTHN_RP_ID or NEXT_PUBLIC_APP_ORIGIN (or ORIGIN).',
+      },
       { status: 500, headers: { 'Cache-Control': 'no-store' } }
     );
   }
 
-  // Discoverable (resident) credentials: allowCredentials left empty so the authenticator can pick.
   const challenge = randomChallenge(32);
   const challengeB64u = toBase64Url(challenge);
 
-  const publicKey = {
-    challenge: challengeB64u,         // client converts b64url → ArrayBuffer before navigator.credentials.get
+  // Login (assertion) options — note: no credProps here (create-only).
+  const publicKey: Omit<PublicKeyCredentialRequestOptions, 'challenge'> & {
+    // we ship challenge as base64url for transport; client must b64url→ArrayBuffer before navigator.credentials.get(...)
+    challenge: string;
+  } = {
+    challenge: challengeB64u,
     rpId: RP_ID,
     timeout: 60_000,
     userVerification: 'preferred',
-    allowCredentials: [] as Array<never>,
-    extensions: { credProps: true },
+    // Keep empty to allow discoverable credentials; populate if you require specific credential IDs.
+    allowCredentials: [],
   };
 
   const res = NextResponse.json({ publicKey }, { status: 200 });
   res.headers.set('Cache-Control', 'no-store');
 
-  // Bind the challenge to the browser for later /api/webauthn/login/verify
-  // (httpOnly so JS can’t read it; short TTL).
+  // Bind challenge for /api/webauthn/login/verify (httpOnly; short TTL).
   res.cookies.set('webauthn_login_challenge', challengeB64u, {
     httpOnly: true,
     secure: true,
