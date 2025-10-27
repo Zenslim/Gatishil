@@ -5,7 +5,7 @@ import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { derivePasswordFromPinSync } from '@/lib/crypto/pin';
 import { randomBytes } from 'crypto';
 
-export const runtime = 'nodejs'; // stable Node crypto + SSR cookie adapter
+export const runtime = 'nodejs'; // use Node crypto + SSR cookie adapter
 
 const ENABLED = process.env.NEXT_PUBLIC_ENABLE_TRUST_PIN === 'true';
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -17,7 +17,6 @@ const getSupabaseSSR = (req: NextRequest, res: NextResponse) =>
     cookies: {
       get: (name: string) => req.cookies.get(name)?.value,
       set: (name: string, value: string, options: any) => {
-        // ensure any auth cookie writes (rare on this route) still attach to the response
         res.cookies.set({ name, value, ...options });
       },
       remove: (name: string, options: any) => {
@@ -43,26 +42,27 @@ export async function POST(req: NextRequest) {
 
     const { pin } = (await req.json().catch(() => ({}))) as { pin?: string };
     const pinStr = String(pin ?? '').trim();
-
     if (!pinStr || !/^\d{4,8}$/.test(pinStr)) {
       return NextResponse.json({ error: 'Invalid PIN' }, { status: 400 });
     }
 
-    // Bind SSR client to request/response cookies (no "this.context.cookies" anywhere)
+    // Bind SSR client to request/response cookies
     const res = new NextResponse(null, { status: 204 });
     const supabaseSSR = getSupabaseSSR(req, res);
 
-    // Require an authenticated user to set a PIN
+    // Must be signed in to set a PIN
     const { data: userData, error: userErr } = await supabaseSSR.auth.getUser();
     if (userErr || !userData?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
     const userId = userData.user.id;
 
-    // Generate a new 16-byte salt (base64) — single source of truth is our table
-    const saltB64 = randomBytes(16).toString('base64');
+    // Generate 16-byte salt; prepare both encodings
+    const saltBytes = randomBytes(16);
+    const saltB64 = saltBytes.toString('base64');
+    const saltPgBytea = '\\x' + saltBytes.toString('hex'); // PostgREST bytea format
 
-    // Deterministically derive the GoTrue password from PIN + userId + pepper + salt
+    // Derive password exactly like /api/pin/login
     const { derivedB64u } = derivePasswordFromPinSync({
       pin: pinStr,
       userId,
@@ -72,18 +72,25 @@ export async function POST(req: NextRequest) {
 
     const admin = getSupabaseAdmin();
 
-    // Upsert salt metadata (store as base64 to avoid bytea vs text mismatches)
+    // Write BOTH columns so legacy NOT NULL(salt) is satisfied
     const { error: upsertErr } = await admin
       .from('auth_local_pin')
       .upsert(
-        { user_id: userId, salt_b64: saltB64 },
+        {
+          user_id: userId,
+          salt_b64: saltB64,   // human-friendly
+          salt: saltPgBytea,   // bytea, satisfies NOT NULL "salt"
+        },
         { onConflict: 'user_id' },
       );
+
     if (upsertErr) {
+      // Uncomment to see exact DB error during debugging:
+      // return NextResponse.json({ error: upsertErr.message }, { status: 500 });
       return NextResponse.json({ error: 'Failed to save PIN salt' }, { status: 500 });
     }
 
-    // Sync the derived password into GoTrue so password login matches our derivation
+    // Sync derived PIN-password into GoTrue
     const { error: adminErr } = await admin.auth.admin.updateUserById(userId, {
       password: derivedB64u,
     });
@@ -91,7 +98,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Failed to sync password' }, { status: 500 });
     }
 
-    // Success: client should hard-redirect on 204
+    // Success → client redirects on 204
     return res;
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || 'Server error' }, { status: 500 });
