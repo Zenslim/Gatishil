@@ -1,122 +1,152 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
-import { createServerClient } from '@supabase/ssr';
+import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
 import { createClient as createServiceClient } from '@supabase/supabase-js';
-import crypto from 'crypto';
+import { derivePasswordFromPin, genSalt } from '@/lib/crypto/pin';
 
-/**
- * Server-only PIN writer
- * - Requires authenticated session (current user only)
- * - Stores NON-NULL salt in public.auth_local_pin
- * - Derives password = scrypt(pin:userId:PIN_PEPPER)
- * - Updates GoTrue password via Service Role
- * - Ensures a canonical email exists for phone-only accounts: {userId}@gn.local
- */
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const SUPABASE_ANON = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-const PIN_PEPPER = process.env.PIN_PEPPER!;
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const SUPABASE_ANON = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+const SERVICE_ROLE = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_ROLE;
+const PIN_PEPPER = process.env.PIN_PEPPER;
 const ENABLED = process.env.NEXT_PUBLIC_ENABLE_TRUST_PIN === 'true';
 
-const b64url = (buf: Buffer) =>
-  buf.toString('base64').replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
-
-const derive = (pin: string, userId: string, saltB64url: string, pepper: string) => {
-  const saltStd = saltB64url.replace(/-/g, '+').replace(/_/g, '/');
-  const salt = Buffer.from(saltStd, 'base64');
-  const material = Buffer.from(`${pin}:${userId}:${pepper}`, 'utf8');
-  const dk = (crypto as any).scryptSync(material, salt, 32, { N: 8192, r: 8, p: 1 }) as Buffer;
-  return b64url(dk);
+type PinRequest = {
+  pin?: string;
 };
+
+const respond = (body: Record<string, unknown>, status = 500) =>
+  NextResponse.json(body, { status });
 
 export async function POST(req: NextRequest) {
   try {
-    if (!ENABLED) return new NextResponse('Trust PIN disabled', { status: 404 });
-    if (!SUPABASE_URL || !SUPABASE_ANON || !SUPABASE_SERVICE_ROLE_KEY || !PIN_PEPPER) {
-      return NextResponse.json({ error: 'Server misconfigured' }, { status: 500 });
+    if (!ENABLED) {
+      return new NextResponse('Trust PIN disabled', { status: 404 });
     }
 
-    const { pin } = (await req.json().catch(() => ({}))) as { pin?: string };
+    if (!SUPABASE_URL || !SUPABASE_ANON || !SERVICE_ROLE || !PIN_PEPPER) {
+      return respond({ error: 'Server misconfigured' });
+    }
+
+    const { pin } = (await req.json().catch(() => ({} as PinRequest))) as PinRequest;
     if (!pin || !/^\d{4,8}$/.test(String(pin))) {
-      return NextResponse.json({ error: 'PIN must be 4–8 digits' }, { status: 400 });
+      return respond({ error: 'PIN must be 4–8 digits' }, 400);
     }
 
-    // Derive strong secret from PIN
-    const saltBuf = genSalt(16);
-    const salt_b64 = saltBuf.toString('base64');
-    const { derivedB64u: derivedPassword } = await derivePasswordFromPin({
-      pin,
-      userId: user.id,
-      salt: saltBuf,
-      pepper,
+    const cookieStore = cookies();
+    const supabase = createRouteHandlerClient({ cookies: cookieStore });
+
+    const {
+      data: { user },
+      error: sessionErr,
+    } = await supabase.auth.getUser();
+
+    if (sessionErr) {
+      return respond({ error: 'Failed to read session' });
+    }
+
+    if (!user?.id) {
+      return respond({ error: 'Not authenticated' }, 401);
+    }
+
+    const userId = user.id;
+
+    const svc = createServiceClient(SUPABASE_URL, SERVICE_ROLE, {
+      auth: { persistSession: false },
     });
-    const { data: auth } = await supabaseSSR.auth.getUser();
-    const userId = auth?.user?.id;
-    const currentEmail = auth?.user?.email ?? null;
-    if (!userId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
 
-    // Service role client
-    const svc = createServiceClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
+    const { data: adminUser, error: adminUserErr } = await svc.auth.admin.getUserById(userId);
+    if (adminUserErr) {
+      return respond({ error: 'Failed to load account identity', details: adminUserErr.message });
+    }
 
-    // Ensure canonical email on auth.users if missing
-    let email = currentEmail;
+    let email = adminUser.user?.email ?? user.email ?? '';
+    const emailConfirmed = Boolean(adminUser.user?.email_confirmed_at);
+
     if (!email) {
-      const synthetic = `${userId}@gn.local`;
-      const { error: updEmailErr } = await svc.auth.admin.updateUserById(userId, { email: synthetic });
-      if (updEmailErr) return NextResponse.json({ error: 'Failed to assign canonical email' }, { status: 500 });
-      email = synthetic;
-      // also reflect into profiles so future lookups have email
-      await svc.from('profiles').upsert({ id: userId, email: synthetic }, { onConflict: 'id' });
+      email = `${userId}@gn.local`;
+      const { error: assignErr } = await svc.auth.admin.updateUserById(userId, {
+        email,
+        email_confirm: true,
+      });
+      if (assignErr) {
+        return respond({ error: 'Failed to assign canonical email', details: assignErr.message });
+      }
+    } else if (!emailConfirmed) {
+      const { error: confirmErr } = await svc.auth.admin.updateUserById(userId, {
+        email_confirm: true,
+      });
+      if (confirmErr) {
+        return respond({ error: 'Failed to confirm email', details: confirmErr.message });
+      }
     }
 
-    const admin = getSupabaseAdmin();
-
-    // 1) Upsert salt (BYTEA via base64 string) + salt_b64 (TEXT) and KDF
-    //    NOTE: For BYTEA via PostgREST, passing base64 string is decoded into bytea server-side.
-    const { error: upsertErr } = await admin
-      .from('auth_local_pin')
-      .upsert({
-        user_id: user.id,
-        salt: salt_b64,      // satisfies NOT NULL on legacy column
-        salt_b64,            // new TEXT column for clarity/compat
-        kdf: 'scrypt-v1(N=8192,r=8,p=1)',
-        pin_retries: 0,
-        locked_until: null,
-      })
-      .eq('user_id', user.id);
-    if (upsertErr) return new NextResponse(`DB upsert failed: ${upsertErr.message}`, { status: 500 });
-
-    // 2) Update Supabase auth password via service role
-    const { error: updErr } = await admin.auth.admin.updateUserById(user.id, { password: derivedPassword });
-    if (updErr) return new NextResponse(`Auth update failed: ${updErr.message}`, { status: 500 });
-
-    // 3) VERIFY the write: sign out and sign back in with the new secret
-    await supabaseSSR.auth.signOut();
-
-    const { data: userRecord, error: fetchErr } = await admin.auth.admin.getUserById(user.id);
-    if (fetchErr) return new NextResponse(`Auth lookup failed: ${fetchErr.message}`, { status: 500 });
-
-    // Upsert salt
-    const { error: upErr } = await svc.from('auth_local_pin').upsert({ user_id: userId, salt }, { onConflict: 'user_id' });
-    if (upErr) return NextResponse.json({ error: 'Failed to store PIN' }, { status: 500 });
-
-    let verifyErr: any = null;
     if (email) {
-      const { error } = await supabaseSSR.auth.signInWithPassword({ email, password: derivedPassword });
-      verifyErr = error;
-    } else {
-      const { error } = await supabaseSSR.auth.signInWithPassword({ phone: phone!, password: derivedPassword } as any);
-      verifyErr = error;
+      await svc.from('profiles').upsert({ id: userId, email }, { onConflict: 'id' });
     }
-    if (verifyErr) return new NextResponse(`PIN write verification failed: ${verifyErr.message}`, { status: 500 });
 
-    const { data: { session } } = await supabaseSSR.auth.getSession();
+    const saltBuf = genSalt(16);
+    const saltB64 = saltBuf.toString('base64');
+
+    const { derivedB64u } = await derivePasswordFromPin({
+      pin,
+      userId,
+      salt: saltBuf,
+      pepper: PIN_PEPPER,
+    });
+
+    const pinPayload = {
+      user_id: userId,
+      salt: saltB64,
+      salt_b64: saltB64,
+      kdf: 'scrypt-v1(N=8192,r=8,p=1)',
+      pin_retries: 0,
+      locked_until: null,
+    } as Record<string, unknown>;
+
+    let { error: upsertErr } = await svc
+      .from('auth_local_pin')
+      .upsert(pinPayload, { onConflict: 'user_id' });
+
+    if (upsertErr && /column "salt_b64"/i.test(upsertErr.message ?? '')) {
+      const fallbackPayload = { ...pinPayload };
+      delete fallbackPayload.salt_b64;
+      const fallback = await svc.from('auth_local_pin').upsert(fallbackPayload, { onConflict: 'user_id' });
+      upsertErr = fallback.error;
+    }
+
+    if (upsertErr) {
+      return respond({ error: 'Failed to store PIN', details: upsertErr.message });
+    }
+
+    const { error: passwordErr } = await svc.auth.admin.updateUserById(userId, {
+      password: derivedB64u,
+    });
+
+    if (passwordErr) {
+      return respond({ error: 'Failed to sync auth password', details: passwordErr.message });
+    }
+
+    await supabase.auth.signOut();
+
+    const { error: signInErr } = await supabase.auth.signInWithPassword({
+      email,
+      password: derivedB64u,
+    });
+
+    if (signInErr) {
+      return respond({ error: 'PIN write verification failed', details: signInErr.message });
+    }
+
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
     if (!session?.access_token || !session?.refresh_token) {
-      return new NextResponse('No session returned after re-sign-in', { status: 500 });
+      return respond({ error: 'No session returned after re-sign-in' });
     }
 
     return new NextResponse(null, { status: 204 });
   } catch (e: any) {
-    return NextResponse.json({ error: e?.message || 'Unexpected error' }, { status: 500 });
+    return respond({ error: e?.message || 'Unexpected error' });
   }
 }

@@ -2,20 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { derivePasswordFromPinSync } from '@/lib/crypto/pin';
+import { normalizeNepalToDB } from '@/lib/phone/nepal';
 
 const ENABLED = process.env.NEXT_PUBLIC_ENABLE_TRUST_PIN === 'true';
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_ANON = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const PIN_PEPPER = process.env.PIN_PEPPER;
-
-const normalizePhone = (raw: string) => {
-  const trimmed = raw.trim();
-  if (!trimmed) return '';
-  if (trimmed.startsWith('+')) return trimmed;
-  const digits = trimmed.replace(/\D/g, '');
-  if (digits.startsWith('977')) return `+${digits}`;
-  return `+977${digits}`;
-};
 
 const getSupabaseSSR = (req: NextRequest, res: NextResponse) =>
   createServerClient(SUPABASE_URL!, SUPABASE_ANON!, {
@@ -71,19 +63,24 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const identifierColumn = hasEmail ? 'email' : 'phone';
-    const identifierValue = hasEmail ? emailInput : normalizePhone(phoneInput);
-    if (!identifierValue) {
-      return NextResponse.json({ error: 'Invalid identifier' }, { status: 400 });
-    }
-
     const admin = getSupabaseAdmin();
 
-    const { data: profile, error: profileErr } = await admin
-      .from('profiles')
-      .select('id, email, phone')
-      .eq(identifierColumn, identifierValue)
-      .maybeSingle();
+    let identifierValue = '';
+    let profileQuery = admin.from('profiles').select('id, email, phone');
+
+    if (hasEmail) {
+      identifierValue = emailInput;
+      profileQuery = profileQuery.eq('email', identifierValue);
+    } else {
+      const normalized = normalizeNepalToDB(phoneInput);
+      if (!normalized) {
+        return NextResponse.json({ error: 'Invalid phone number' }, { status: 400 });
+      }
+      identifierValue = normalized;
+      profileQuery = profileQuery.in('phone', [normalized, `+${normalized}`]);
+    }
+
+    const { data: profile, error: profileErr } = await profileQuery.maybeSingle();
 
     if (profileErr) {
       return NextResponse.json({ error: 'Failed to lookup account' }, { status: 500 });
@@ -134,13 +131,31 @@ export async function POST(req: NextRequest) {
     const res = new NextResponse(null, { status: 204 });
     const supabaseSSR = getSupabaseSSR(req, res);
 
-    const { error: signInErr } = await supabaseSSR.auth.signInWithPassword({
+    let { error: signInErr } = await supabaseSSR.auth.signInWithPassword({
       email: authEmail,
       password: derivedPassword,
     });
 
     if (signInErr) {
-      return NextResponse.json({ error: 'Invalid PIN' }, { status: 401 });
+      const message = String(signInErr.message || '').toLowerCase();
+
+      if (message.includes('email not confirmed')) {
+        const { error: confirmErr } = await admin.auth.admin.updateUserById(userId, {
+          email_confirm: true,
+        });
+
+        if (!confirmErr) {
+          const retry = await supabaseSSR.auth.signInWithPassword({
+            email: authEmail,
+            password: derivedPassword,
+          });
+          signInErr = retry.error;
+        }
+      }
+
+      if (signInErr) {
+        return NextResponse.json({ error: 'Invalid PIN' }, { status: 401 });
+      }
     }
 
     return res;
