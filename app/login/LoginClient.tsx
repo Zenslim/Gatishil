@@ -3,7 +3,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 
-/* ---------- small SVG icon set (no extra deps) ---------- */
+/* ---------- minimal SVG icons (no extra deps) ---------- */
 const Icon = {
   Fingerprint: (props: React.SVGProps<SVGSVGElement>) => (
     <svg viewBox="0 0 24 24" aria-hidden="true" {...props}>
@@ -37,7 +37,7 @@ function detectMethod(input: string): 'email' | 'phone' {
   return v.includes('@') ? 'email' : 'phone';
 }
 
-/** UA-based hint, runs **after mount** only */
+/** UA hint AFTER mount (prevents hydration mismatch) */
 function pickBiometricFlavor(): 'hello' | 'fingerprint' | 'face' | 'combo' {
   const ua = typeof navigator !== 'undefined' ? navigator.userAgent : '';
   const isWindows = /Windows NT/i.test(ua);
@@ -50,43 +50,52 @@ function pickBiometricFlavor(): 'hello' | 'fingerprint' | 'face' | 'combo' {
   return 'combo';
 }
 
-/** Try to obtain a Supabase client from project code; if not present, build one. */
-async function getSupabaseClient() {
-  try {
-    const mod: any = await import('@/lib/supabase/client');
-    const candidates = [
-      mod.createClient,
-      mod.default,
-      mod.createBrowserClient,
-      mod.getClient,
-      mod.client,
-      mod.sb,
-      mod.supabase,
-    ].filter(Boolean);
-    for (const c of candidates) {
-      if (typeof c === 'function') return c();
-      if (typeof c === 'object' && c?.auth) return c;
-    }
-    if (typeof mod?.makeClient === 'function') return mod.makeClient();
-    if (typeof mod?.buildClient === 'function') return mod.buildClient();
-  } catch {
-    /* fall through */
+/* Base64URL helpers for WebAuthn */
+const b64 = {
+  toArrayBuffer: (value: string) => {
+    const pad = '='.repeat((4 - (value.length % 4)) % 4);
+    const base64 = (value + pad).replace(/-/g, '+').replace(/_/g, '/');
+    const raw = typeof window !== 'undefined' ? atob(base64) : Buffer.from(base64, 'base64').toString('binary');
+    const arr = new Uint8Array(raw.length);
+    for (let i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i);
+    return arr.buffer;
+  },
+  fromArrayBuffer: (buffer: ArrayBuffer) => {
+    const bytes = new Uint8Array(buffer);
+    let binary = '';
+    for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
+    const base64 = typeof window !== 'undefined' ? btoa(binary) : Buffer.from(binary, 'binary').toString('base64');
+    return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+  },
+};
+
+/* Normalize server options into ArrayBuffers for navigator.credentials.get */
+function normalizeRequestOptions(opts: any): PublicKeyCredentialRequestOptions {
+  const out: any = { ...opts };
+  if (typeof out.challenge === 'string') out.challenge = b64.toArrayBuffer(out.challenge);
+  if (Array.isArray(out.allowCredentials)) {
+    out.allowCredentials = out.allowCredentials.map((c: any) => ({
+      ...c,
+      id: typeof c.id === 'string' ? b64.toArrayBuffer(c.id) : c.id,
+    }));
   }
-  const { createClient } = await import('@supabase/supabase-js');
-  const url =
-    process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() ||
-    (globalThis as any).__SUPABASE_URL__;
-  const anon =
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim() ||
-    (globalThis as any).__SUPABASE_ANON__;
-  if (!url || !anon) {
-    throw new Error(
-      'Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY for fallback client.'
-    );
-  }
-  return createClient(url, anon, {
-    auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
-  });
+  return out as PublicKeyCredentialRequestOptions;
+}
+
+/* Pack PublicKeyCredential into JSON your server can verify */
+function packAssertionResponse(cred: any) {
+  const { id, type, rawId, response } = cred;
+  return {
+    id,
+    type,
+    rawId: b64.fromArrayBuffer(rawId),
+    response: {
+      clientDataJSON: b64.fromArrayBuffer(response.clientDataJSON),
+      authenticatorData: b64.fromArrayBuffer(response.authenticatorData),
+      signature: b64.fromArrayBuffer(response.signature),
+      userHandle: response.userHandle ? b64.fromArrayBuffer(response.userHandle) : null,
+    },
+  };
 }
 
 /* ---------- component ---------- */
@@ -99,14 +108,13 @@ export default function LoginClient() {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
-  // SSR-safe flags
+  // hydration-safe flags
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
-
   const webAuthnAvailable =
     mounted && typeof window !== 'undefined' && 'PublicKeyCredential' in window;
 
-  // Render-neutral flavor on SSR, specialize **after mount** to avoid hydration mismatch
+  // neutral on SSR, specialize icon after mount
   const [flavor, setFlavor] = useState<'hello' | 'fingerprint' | 'face' | 'combo'>('combo');
   useEffect(() => {
     setFlavor(pickBiometricFlavor());
@@ -163,7 +171,7 @@ export default function LoginClient() {
     }
   }
 
-  // Biometric / Passkey sign-in (substitutes for entering PIN)
+  /** Biometrics (WebAuthn) using YOUR existing API routes (no SDK dependency) */
   async function onBiometricLogin() {
     if (busy) return;
     const identifier = user.trim();
@@ -173,21 +181,43 @@ export default function LoginClient() {
     setBusy(true);
     setErr(null);
     try {
-      const supabase = await getSupabaseClient();
+      // 1) Get assertion challenge from server
+      const challengeRes = await fetch('/api/webauthn/login/challenge', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ identifier }),
+      });
+      if (!challengeRes.ok) {
+        const t = await challengeRes.text().catch(() => '');
+        throw new Error(t || 'Could not start biometric login.');
+      }
+      const options = await challengeRes.json(); // may be { publicKey: {...} } or raw options
 
-      const fn = (supabase as any)?.auth?.signInWithPasskey;
-      if (typeof fn !== 'function') {
-        throw new Error('Biometric login not available in current Supabase SDK. Update @supabase/supabase-js.');
+      // 2) WebAuthn ceremony in browser
+      const publicKey = normalizeRequestOptions(options?.publicKey ?? options);
+      const cred = (await navigator.credentials.get({ publicKey })) as PublicKeyCredential;
+
+      // 3) Send assertion to server for verification
+      const verifyRes = await fetch('/api/webauthn/login/verify', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          identifier,
+          credential: packAssertionResponse(cred),
+        }),
+      });
+      if (!verifyRes.ok) {
+        const t = await verifyRes.text().catch(() => '');
+        throw new Error(t || 'Biometric verification failed.');
       }
 
-      const { data, error } = await supabase.auth.signInWithPasskey({ identifier });
-      if (error) throw error;
-      if (!data?.session) throw new Error('No active session after biometrics.');
-
-      // Mirror SSR cookies for middleware/SSR
+      // 4) Mirror SSR cookies so middleware/SSR see the session
       const sync = await fetch('/api/auth/sync', { method: 'POST', credentials: 'include' });
       if (!sync.ok) throw new Error('Session sync failed.');
 
+      // 5) Redirect just like a correct PIN
       window.location.replace(next || '/dashboard');
     } catch (e: any) {
       const name = e?.name || '';
