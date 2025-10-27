@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
+import { createClient } from '@/lib/supabase/client';
 
 function detectMethod(input: string): 'email' | 'phone' {
   const v = input.trim();
@@ -16,6 +17,10 @@ export default function LoginClient() {
   const [pin, setPin] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+
+  const supabase = useMemo(() => createClient(), []);
+  const webAuthnAvailable =
+    typeof window !== 'undefined' && 'PublicKeyCredential' in window;
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -41,13 +46,15 @@ export default function LoginClient() {
       });
 
       if (res.status === 204) {
+        // Session cookies already set by server; safe to redirect.
         window.location.replace(next || '/dashboard');
         return;
       }
 
       let message = 'Could not sign in with PIN';
       if (res.status === 401) message = 'Wrong PIN. Try again.';
-      else if (res.status === 404) message = 'We could not find an account with that email or phone.';
+      else if (res.status === 404)
+        message = 'We could not find an account with that email or phone.';
       else if (res.status === 409) message = 'This account does not have a PIN yet.';
       else {
         try {
@@ -63,6 +70,51 @@ export default function LoginClient() {
       setErr(message);
     } catch (e: any) {
       setErr(e?.message || 'Could not sign in with PIN');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // NEW: Biometric / Passkey sign-in (substitutes for entering PIN)
+  async function onBiometricLogin() {
+    if (busy) return;
+    const identifier = user.trim();
+    if (!identifier) {
+      setErr('Enter your email or phone first.');
+      return;
+    }
+    if (!webAuthnAvailable) {
+      setErr('This device/browser does not support biometrics here.');
+      return;
+    }
+
+    setBusy(true);
+    setErr(null);
+    try {
+      // WebAuthn ceremony via Supabase (works for email or E.164 phone)
+      const { data, error } = await supabase.auth.signInWithPasskey({ identifier });
+      if (error) throw error;
+      if (!data?.session) throw new Error('No active session after biometrics.');
+
+      // Mirror SSR cookies like other auth paths
+      const sync = await fetch('/api/auth/sync', { method: 'POST', credentials: 'include' });
+      if (!sync.ok) throw new Error('Session sync failed.');
+
+      window.location.replace(next || '/dashboard');
+    } catch (e: any) {
+      // Graceful UX for common WebAuthn aborts/cancellations
+      const name = e?.name || '';
+      if (name === 'NotAllowedError') {
+        setErr('Biometric prompt was cancelled. You can try again or use your PIN.');
+      } else if (
+        /no passkey/i.test(e?.message) ||
+        /not registered/i.test(e?.message) ||
+        /unsupported/i.test(e?.message)
+      ) {
+        setErr('No passkey found on this device for that account. Use your PIN.');
+      } else {
+        setErr(e?.message || 'Biometric sign-in failed. Use your PIN.');
+      }
     } finally {
       setBusy(false);
     }
@@ -110,6 +162,24 @@ export default function LoginClient() {
           >
             {busy ? 'Signing in…' : 'Sign in'}
           </button>
+
+          {/* NEW: Divider + Biometrics button */}
+          <div className="my-2 text-center text-xs text-white/50 select-none">or</div>
+          <button
+            type="button"
+            onClick={onBiometricLogin}
+            disabled={busy || !user.trim() || !webAuthnAvailable}
+            className="w-full py-3 rounded-xl border border-white/20 hover:bg-white/5 disabled:opacity-50"
+            title={!webAuthnAvailable ? 'Biometrics not supported on this device' : 'Use biometrics'}
+          >
+            {busy ? 'Checking biometrics…' : 'Use biometrics (Face/Touch/Hello)'}
+          </button>
+
+          {!webAuthnAvailable && (
+            <p className="text-[11px] text-white/40 mt-1">
+              Biometrics requires a modern browser/device with passkeys (WebAuthn).
+            </p>
+          )}
         </form>
       </div>
     </div>
