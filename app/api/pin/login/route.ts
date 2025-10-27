@@ -14,6 +14,8 @@ const normalizePhone = (raw: string) => {
   if (trimmed.startsWith('+')) return trimmed;
   const digits = trimmed.replace(/\D/g, '');
   if (digits.startsWith('977')) return `+${digits}`;
+  if (digits.startsWith('0') && digits.length >= 10) return `+977${digits.slice(1)}`;
+  if (digits.length >= 9) return `+977${digits}`;
   return `+977${digits}`;
 };
 
@@ -38,11 +40,20 @@ export function GET() {
   return new NextResponse('Use POST', { status: 405 });
 }
 
+/* ---------- handlers ---------- */
+export function OPTIONS() { return new NextResponse(null, { status: 204 }); }
+export function GET() { return new NextResponse('Use POST', { status: 405 }); }
+
 export async function POST(req: NextRequest) {
   try {
     if (!ENABLED) return new NextResponse('Trust PIN disabled', { status: 404 });
-    if (!SUPABASE_URL || !SUPABASE_ANON || !PIN_PEPPER) {
-      return NextResponse.json({ error: 'Server misconfigured' }, { status: 500 });
+    if (!SUPABASE_URL || !SUPABASE_ANON || !SUPABASE_SERVICE_ROLE_KEY || !PIN_PEPPER) {
+      return jerr(500, 'Server misconfigured', {
+        SUPABASE_URL: !!SUPABASE_URL,
+        SUPABASE_ANON: !!SUPABASE_ANON,
+        SUPABASE_SERVICE_ROLE_KEY: !!SUPABASE_SERVICE_ROLE_KEY,
+        PIN_PEPPER: !!PIN_PEPPER,
+      });
     }
 
     const body = (await req.json().catch(() => ({}))) as {
@@ -144,6 +155,6 @@ export async function POST(req: NextRequest) {
 
     return res;
   } catch (e: any) {
-    return NextResponse.json({ error: e?.message || 'Unexpected error' }, { status: 500 });
+    return jerr(500, 'Unexpected error', { message: e?.message, stack: e?.stack });
   }
 }
