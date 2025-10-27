@@ -9,9 +9,9 @@ const ENABLE_WEBAUTHN = process.env.ENABLE_WEBAUTHN === 'true';
 // If not provided, we try to derive from NEXT_PUBLIC_SITE_URL.
 const RP_ID =
   process.env.WEBAUTHN_RP_ID ||
-  (process.env.NEXT_PUBLIC_SITE_URL
-    ? new URL(process.env.NEXT_PUBLIC_SITE_URL).hostname
-    : undefined);
+ (process.env.NEXT_PUBLIC_APP_ORIGIN
+    ? new URL(process.env.NEXT_PUBLIC_APP_ORIGIN).hostname
+    : (process.env.ORIGIN ? new URL(process.env.ORIGIN).hostname : undefined));;
 
 // ---- small helpers ----
 function randomChallenge(bytes = 32): Uint8Array {
