@@ -1,12 +1,22 @@
 'use client';
 
-import React, { useMemo, useState } from 'react';
+import React, { useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { createClient } from '@/lib/supabase/client';
 
 function detectMethod(input: string): 'email' | 'phone' {
   const v = input.trim();
   return v.includes('@') ? 'email' : 'phone';
+}
+
+/** Resolve the project’s Supabase browser client factory safely. */
+async function getSupabaseClient() {
+  // Lazy import prevents render-time crashes and supports any export style.
+  const mod: any = await import('@/lib/supabase/client');
+  const factory = mod.createClient ?? mod.default ?? mod.createBrowserClient;
+  if (typeof factory !== 'function') {
+    throw new Error('Supabase client factory not found in "@/lib/supabase/client".');
+  }
+  return factory();
 }
 
 export default function LoginClient() {
@@ -18,7 +28,6 @@ export default function LoginClient() {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
-  const supabase = useMemo(() => createClient(), []);
   const webAuthnAvailable =
     typeof window !== 'undefined' && 'PublicKeyCredential' in window;
 
@@ -27,7 +36,7 @@ export default function LoginClient() {
     if (busy) return;
 
     const method = detectMethod(user);
-    if (!user) return setErr('Enter your email or phone.');
+    if (!user.trim()) return setErr('Enter your email or phone.');
     if (!/^\d{4,8}$/.test(pin)) return setErr('Enter a 4–8 digit PIN.');
 
     setBusy(true);
@@ -46,7 +55,7 @@ export default function LoginClient() {
       });
 
       if (res.status === 204) {
-        // Session cookies already set by server; safe to redirect.
+        // Server set session cookies; safe to redirect.
         window.location.replace(next || '/dashboard');
         return;
       }
@@ -75,7 +84,7 @@ export default function LoginClient() {
     }
   }
 
-  // NEW: Biometric / Passkey sign-in (substitutes for entering PIN)
+  // Biometric / Passkey sign-in (substitutes for entering PIN)
   async function onBiometricLogin() {
     if (busy) return;
     const identifier = user.trim();
@@ -91,6 +100,8 @@ export default function LoginClient() {
     setBusy(true);
     setErr(null);
     try {
+      const supabase = await getSupabaseClient();
+
       // WebAuthn ceremony via Supabase (works for email or E.164 phone)
       const { data, error } = await supabase.auth.signInWithPasskey({ identifier });
       if (error) throw error;
@@ -102,7 +113,6 @@ export default function LoginClient() {
 
       window.location.replace(next || '/dashboard');
     } catch (e: any) {
-      // Graceful UX for common WebAuthn aborts/cancellations
       const name = e?.name || '';
       if (name === 'NotAllowedError') {
         setErr('Biometric prompt was cancelled. You can try again or use your PIN.');
@@ -163,8 +173,8 @@ export default function LoginClient() {
             {busy ? 'Signing in…' : 'Sign in'}
           </button>
 
-          {/* NEW: Divider + Biometrics button */}
           <div className="my-2 text-center text-xs text-white/50 select-none">or</div>
+
           <button
             type="button"
             onClick={onBiometricLogin}
