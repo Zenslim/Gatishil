@@ -38,24 +38,11 @@ export function GET() {
   return new NextResponse('Use POST', { status: 405 });
 }
 
-    if (!identifierValue) {
-      return NextResponse.json({ error: 'Invalid identifier' }, { status: 400 });
-    }
-
-    const admin = getSupabaseAdmin();
-
-    // 1) Lookup profile to get user_id
-    const { data: profile, error: profileErr } = await admin
-      .from('profiles')
-      .select('id, email, phone')
-      .eq(identifierColumn, identifierValue)
-      .maybeSingle();
-
-    if (profileErr) {
-      return NextResponse.json({ error: 'Failed to lookup account' }, { status: 500 });
-    }
-    if (!profile?.id) {
-      return NextResponse.json({ error: 'Account not found' }, { status: 404 });
+export async function POST(req: NextRequest) {
+  try {
+    if (!ENABLED) return new NextResponse('Trust PIN disabled', { status: 404 });
+    if (!SUPABASE_URL || !SUPABASE_ANON || !PIN_PEPPER) {
+      return NextResponse.json({ error: 'Server misconfigured' }, { status: 500 });
     }
 
     const body = (await req.json().catch(() => ({}))) as {
@@ -78,12 +65,14 @@ export function GET() {
       return NextResponse.json({ error: 'Missing email or phone' }, { status: 400 });
     }
     if (hasEmail && hasPhone) {
-      return NextResponse.json({ error: 'Provide either email or phone, not both' }, { status: 400 });
+      return NextResponse.json(
+        { error: 'Provide either email or phone, not both' },
+        { status: 400 },
+      );
     }
 
     const identifierColumn = hasEmail ? 'email' : 'phone';
     const identifierValue = hasEmail ? emailInput : normalizePhone(phoneInput);
-
     if (!identifierValue) {
       return NextResponse.json({ error: 'Invalid identifier' }, { status: 400 });
     }
@@ -123,7 +112,6 @@ export function GET() {
     if (saltValue.startsWith('\\x')) {
       saltValue = Buffer.from(saltValue.slice(2), 'hex').toString('base64');
     }
-
     const saltB64 = saltValue.replace(/-/g, '+').replace(/_/g, '/');
 
     const { derivedB64u: derivedPassword } = derivePasswordFromPinSync({
