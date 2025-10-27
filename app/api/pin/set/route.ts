@@ -41,13 +41,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'PIN must be 4–8 digits' }, { status: 400 });
     }
 
-    // Read current session
-    const cookieStore = cookies();
-    const supabaseSSR = createServerClient(SUPABASE_URL, SUPABASE_ANON, {
-      cookies: {
-        getAll: () => cookieStore.getAll(),
-        setAll: (setCookies) => { for (const { name, value, options } of setCookies) cookieStore.set(name, value, options); },
-      },
+    // Derive strong secret from PIN
+    const saltBuf = genSalt(16);
+    const salt_b64 = saltBuf.toString('base64');
+    const { derivedB64u: derivedPassword } = await derivePasswordFromPin({
+      pin,
+      userId: user.id,
+      salt: saltBuf,
+      pepper,
     });
     const { data: auth } = await supabaseSSR.auth.getUser();
     const userId = auth?.user?.id;
@@ -68,17 +69,51 @@ export async function POST(req: NextRequest) {
       await svc.from('profiles').upsert({ id: userId, email: synthetic }, { onConflict: 'id' });
     }
 
-    // Salt + derive
-    const salt = b64url((crypto as any).randomBytes(16));
-    const derivedPassword = derive(pin, userId, salt, PIN_PEPPER);
+    const admin = getSupabaseAdmin();
+
+    // 1) Upsert salt (BYTEA via base64 string) + salt_b64 (TEXT) and KDF
+    //    NOTE: For BYTEA via PostgREST, passing base64 string is decoded into bytea server-side.
+    const { error: upsertErr } = await admin
+      .from('auth_local_pin')
+      .upsert({
+        user_id: user.id,
+        salt: salt_b64,      // satisfies NOT NULL on legacy column
+        salt_b64,            // new TEXT column for clarity/compat
+        kdf: 'scrypt-v1(N=8192,r=8,p=1)',
+        pin_retries: 0,
+        locked_until: null,
+      })
+      .eq('user_id', user.id);
+    if (upsertErr) return new NextResponse(`DB upsert failed: ${upsertErr.message}`, { status: 500 });
+
+    // 2) Update Supabase auth password via service role
+    const { error: updErr } = await admin.auth.admin.updateUserById(user.id, { password: derivedPassword });
+    if (updErr) return new NextResponse(`Auth update failed: ${updErr.message}`, { status: 500 });
+
+    // 3) VERIFY the write: sign out and sign back in with the new secret
+    await supabaseSSR.auth.signOut();
+
+    const { data: userRecord, error: fetchErr } = await admin.auth.admin.getUserById(user.id);
+    if (fetchErr) return new NextResponse(`Auth lookup failed: ${fetchErr.message}`, { status: 500 });
 
     // Upsert salt
     const { error: upErr } = await svc.from('auth_local_pin').upsert({ user_id: userId, salt }, { onConflict: 'user_id' });
     if (upErr) return NextResponse.json({ error: 'Failed to store PIN' }, { status: 500 });
 
-    // Sync GoTrue password
-    const { error: updPwdErr } = await svc.auth.admin.updateUserById(userId, { password: derivedPassword });
-    if (updPwdErr) return NextResponse.json({ error: 'Failed to sync auth password' }, { status: 500 });
+    let verifyErr: any = null;
+    if (email) {
+      const { error } = await supabaseSSR.auth.signInWithPassword({ email, password: derivedPassword });
+      verifyErr = error;
+    } else {
+      const { error } = await supabaseSSR.auth.signInWithPassword({ phone: phone!, password: derivedPassword } as any);
+      verifyErr = error;
+    }
+    if (verifyErr) return new NextResponse(`PIN write verification failed: ${verifyErr.message}`, { status: 500 });
+
+    const { data: { session } } = await supabaseSSR.auth.getSession();
+    if (!session?.access_token || !session?.refresh_token) {
+      return new NextResponse('No session returned after re-sign-in', { status: 500 });
+    }
 
     return new NextResponse(null, { status: 204 });
   } catch (e: any) {

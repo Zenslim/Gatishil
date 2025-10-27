@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 
 function detectMethod(input: string): 'email' | 'phone' {
   const v = input.trim();
@@ -9,7 +9,6 @@ function detectMethod(input: string): 'email' | 'phone' {
 }
 
 export default function LoginClient() {
-  const router = useRouter();
   const q = useSearchParams();
   const next = q.get('next') || '/dashboard';
 
@@ -29,21 +28,39 @@ export default function LoginClient() {
     setBusy(true);
     setErr(null);
     try {
+      const payload =
+        method === 'email'
+          ? { email: user.trim(), pin }
+          : { phone: user.trim(), pin };
+
       const res = await fetch('/api/pin/login', {
         method: 'POST',
         credentials: 'include',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ method, user: user.trim(), pin }),
+        body: JSON.stringify(payload),
       });
 
-      if (!res.ok) {
-        const msg = await res.text().catch(() => '');
-        throw new Error(msg || 'Login failed');
+      if (res.status === 204) {
+        window.location.replace(next || '/dashboard');
+        return;
       }
 
-      // Cookies were set by the server route; just navigate.
-      router.replace(next);
-      router.refresh();
+      let message = 'Could not sign in with PIN';
+      if (res.status === 401) message = 'Wrong PIN. Try again.';
+      else if (res.status === 404) message = 'We could not find an account with that email or phone.';
+      else if (res.status === 409) message = 'This account does not have a PIN yet.';
+      else {
+        try {
+          const body = await res.clone().json();
+          if (body?.error) message = body.error;
+          else if (typeof body === 'string' && body) message = body;
+        } catch {
+          const text = await res.text().catch(() => '');
+          if (text) message = text;
+        }
+      }
+
+      setErr(message);
     } catch (e: any) {
       setErr(e?.message || 'Could not sign in with PIN');
     } finally {
