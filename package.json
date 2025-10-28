@@ -2,10 +2,8 @@
   "name": "gatishilnepal",
   "private": true,
   "version": "1.0.0",
-  "description": "Gatishil Nepal \u2013 Next.js 14 (App Router, TS)",
-  "engines": {
-    "node": ">=18.18 <=22"
-  },
+  "description": "Gatishil Nepal – Next.js 14 (App Router, TS)",
+  "engines": { "node": ">=18.18 <=22" },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -13,21 +11,21 @@
     "lint": "next lint",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run --reporter=verbose",
-    "postinstall": "node -e \"console.log('\u2705 supabase-js@', require('@supabase/supabase-js/package.json').version)\""
+    "postinstall": "node -e \"console.log('✅ supabase-js@', require('@supabase/supabase-js/package.json').version)\""
   },
   "dependencies": {
-    "@supabase/supabase-js": "2.76.1",
-    "@supabase/ssr": "0.5.0",
-    "@supabase/auth-helpers-nextjs": "0.10.0",
     "@node-rs/argon2": "^1.7.0",
     "@react-three/drei": "^9.97.0",
     "@react-three/fiber": "^9.0.0",
+    "@supabase/auth-helpers-nextjs": "0.10.0",
+    "@supabase/supabase-js": "2.76.1",
+    "@supabase/ssr": "0.5.0",
     "framer-motion": "11.3.19",
     "howler": "^2.2.4",
     "lucide-react": "0.454.0",
     "next": "14.2.5",
-    "react": "18.3.1",
-    "react-dom": "18.3.1",
+    "react": "18.2.0",
+    "react-dom": "18.2.0",
     "react-markdown": "9.0.1",
     "remark-gfm": "4.0.0",
     "three": "0.169.0",
@@ -37,7 +35,7 @@
     "@testing-library/jest-dom": "6.4.2",
     "@testing-library/react": "14.2.1",
     "@types/node": "^22.0.0",
-    "@types/react": "18.3.3",
+    "@types/react": "18.2.79",
     "@types/three": "^0.169.0",
     "autoprefixer": "10.4.20",
     "eslint": "8.57.0",
@@ -50,8 +48,7 @@
     "vitest": "1.6.0"
   },
   "overrides": {
-    "react": "18.3.1",
-    "react-dom": "18.3.1",
-    "@supabase/supabase-js": "2.76.1"
+    "react": "18.2.0",
+    "react-dom": "18.2.0"
   }
 }
