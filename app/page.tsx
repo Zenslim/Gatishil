@@ -9,7 +9,6 @@ export default function HomePage() {
       <section className="relative h-[100dvh] w-full">
         <RebirthScene />
         <HeroOverlay />
-        <div className="pointer-events-none absolute inset-0 z-10 opacity-[0.08] animated-bg" />
       </section>
 
       <footer className="relative z-20 py-10 text-sm text-slate-300">
@@ -20,19 +19,6 @@ export default function HomePage() {
           </div>
         </div>
       </footer>
-
-      <style jsx global>{`
-        .animated-bg {
-          background: linear-gradient(270deg, #fbbf24, #ec4899, #8b5cf6, #fbbf24);
-          background-size: 600% 600%;
-          animation: aurora 25s ease infinite;
-        }
-        @keyframes aurora {
-          0% { background-position: 0% 50%; }
-          50% { background-position: 100% 50%; }
-          100% { background-position: 0% 50%; }
-        }
-      `}</style>
     </main>
   );
 }

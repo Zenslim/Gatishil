@@ -8,6 +8,9 @@ import LowMotionToggle from '@/components/LowMotionToggle';
 export default function HeroOverlay() {
   return (
     <div className="pointer-events-none absolute inset-0 z-30">
+      {/* Animated background lives in client to allow styled-jsx */}
+      <div className="pointer-events-none absolute inset-0 z-10 opacity-[0.08] animated-bg" />
+
       <div className="pointer-events-auto fixed z-40 top-4 right-4 flex items-center gap-2">
         <AudioFlowToggle />
         <LowMotionToggle />
@@ -59,6 +62,19 @@ export default function HeroOverlay() {
           </Link>
         </motion.div>
       </div>
+
+      <style jsx global>{`
+        .animated-bg {
+          background: linear-gradient(270deg, #fbbf24, #ec4899, #8b5cf6, #fbbf24);
+          background-size: 600% 600%;
+          animation: aurora 25s ease infinite;
+        }
+        @keyframes aurora {
+          0% { background-position: 0% 50%; }
+          50% { background-position: 100% 50%; }
+          100% { background-position: 0% 50%; }
+        }
+      `}</style>
     </div>
   );
 }
