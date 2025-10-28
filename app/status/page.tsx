@@ -153,7 +153,7 @@ export default function StatusPage() {
           <ul className="text-sm space-y-1">
             <li>
               <span className="text-slate-400">Build started: </span>
-              {new Date(startedAt).toLocaleString()}
+              {new Date(startedAt).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' })}
             </li>
             <li>
               <span className="text-slate-400">Runtime: </span>Next.js App Router (client check)

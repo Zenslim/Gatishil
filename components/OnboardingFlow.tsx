@@ -1,5 +1,5 @@
 'use client'
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import dynamic from 'next/dynamic'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
@@ -22,13 +22,16 @@ export default function OnboardingFlow({ lang = 'en' }: Props) {
 
   const [authReady, setAuthReady] = useState(() => !code)
   const [authError, setAuthError] = useState<string | null>(null)
+  const [sanitizedHref, setSanitizedHref] = useState<string | null>(null)
 
-  const sanitizedHref = useMemo(() => {
-    if (typeof window === 'undefined') return null
-    const sp = new URLSearchParams(window.location.search)
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const { location } = window
+    if (!location) return
+    const sp = new URLSearchParams(location.search)
     sp.delete('code')
     const qs = sp.toString()
-    return qs ? `/onboard?${qs}` : '/onboard'
+    setSanitizedHref(qs ? `/onboard?${qs}` : '/onboard')
   }, [code])
 
   useEffect(() => {

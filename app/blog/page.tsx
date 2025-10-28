@@ -22,9 +22,9 @@ async function getPosts(): Promise<Post[]> {
   if (!url || !key) {
     // Fallback demo content if env is missing
     return [
-      { id: "demo-1", title: "The Spark that Moves", slug: "the-spark-that-moves", excerpt: "On motion, courage, and quiet revolutions.", tags: ["Essays"], created_at: new Date().toISOString(), author_name: "Gatishil" },
-      { id: "demo-2", title: "Economy as Ecology", slug: "economy-as-ecology", excerpt: "Designing value like watersheds, not pipelines.", tags: ["Economy","Ecology"], created_at: new Date().toISOString(), author_name: "Gatishil" },
-      { id: "demo-3", title: "Every Voice Sings", slug: "every-voice-sings", excerpt: "A DAO is a choir with a purpose.", tags: ["Governance"], created_at: new Date().toISOString(), author_name: "Gatishil" },
+      { id: "demo-1", title: "The Spark that Moves", slug: "the-spark-that-moves", excerpt: "On motion, courage, and quiet revolutions.", tags: ["Essays"], created_at: "2024-01-10T00:00:00.000Z", author_name: "Gatishil" },
+      { id: "demo-2", title: "Economy as Ecology", slug: "economy-as-ecology", excerpt: "Designing value like watersheds, not pipelines.", tags: ["Economy","Ecology"], created_at: "2024-02-12T00:00:00.000Z", author_name: "Gatishil" },
+      { id: "demo-3", title: "Every Voice Sings", slug: "every-voice-sings", excerpt: "A DAO is a choir with a purpose.", tags: ["Governance"], created_at: "2024-03-08T00:00:00.000Z", author_name: "Gatishil" },
     ];
   }
   const res = await fetch(`${url}/rest/v1/posts?select=id,title,slug,excerpt,tags,created_at,author_name&order=created_at.desc`, {
@@ -62,7 +62,7 @@ export default async function BlogIndexPage() {
                 <span key={t} className="rounded-full border border-white/10 px-2 py-0.5 bg-white/5">{t}</span>
               ))}
             </div>
-            <div className="mt-4 text-xs text-slate-500">{p.author_name ?? "Member"} • {new Date(p.created_at).toLocaleDateString()}</div>
+            <div className="mt-4 text-xs text-slate-500">{p.author_name ?? "Member"} • {new Date(p.created_at).toLocaleDateString('en-US', { dateStyle: 'medium' })}</div>
           </Link>
         ))}
         {posts.length === 0 && (

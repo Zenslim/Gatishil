@@ -1,6 +1,7 @@
 'use client';
 
-import { motion, useScroll, useTransform } from 'framer-motion';
+import dynamic from 'next/dynamic';
+import { motion } from 'framer-motion';
 import { useState, useEffect } from 'react';
 import ClientOnly from '@/components/ClientOnly';
 /** util: run code only after React mounts (prevents hydration mismatch) */
@@ -35,58 +36,10 @@ function SectionTitle(props: { id?: string; kicker?: string; title: string; subt
   );
 }
 
-/** Subtle starfield that fades in on scroll */
-function Starfield() {
-  const { scrollYProgress } = useScroll();
-  const opacity = useTransform(scrollYProgress, [0, 0.3], [0, 1]);
-
-  return (
-    <motion.div style={{ opacity }} className="fixed inset-0 -z-10 pointer-events-none">
-      <div className="absolute inset-0 starfield">
-        <div className="layer layer-s"></div>
-        <div className="layer layer-m"></div>
-        <div className="layer layer-l"></div>
-      </div>
-
-      <style jsx>{`
-        .starfield { position: absolute; inset: 0; overflow: hidden; }
-        .layer { position: absolute; inset: -50%; animation: drift 60s linear infinite; opacity: 0.9; }
-        .layer-s {
-          background-image:
-            radial-gradient(white 1px, transparent 1.5px),
-            radial-gradient(white 1px, transparent 1.5px);
-          background-size: 120px 120px, 160px 160px;
-          background-position: 0 0, 60px 80px;
-          filter: drop-shadow(0 0 1px rgba(255,255,255,0.35));
-          animation-duration: 90s;
-        }
-        .layer-m {
-          background-image:
-            radial-gradient(white 1.5px, transparent 2px),
-            radial-gradient(white 1.5px, transparent 2px);
-          background-size: 200px 200px, 260px 260px;
-          background-position: 40px 20px, 160px 100px;
-          filter: drop-shadow(0 0 2px rgba(255,255,255,0.25));
-          animation-duration: 120s;
-        }
-        .layer-l {
-          background-image:
-            radial-gradient(white 2px, transparent 2.5px),
-            radial-gradient(white 2px, transparent 2.5px);
-          background-size: 320px 320px, 420px 420px;
-          background-position: 120px 60px, 260px 180px;
-          filter: drop-shadow(0 0 3px rgba(255,255,255,0.2));
-          animation-duration: 150s;
-        }
-        @keyframes drift {
-          0%   { transform: translate3d(0, 0, 0); }
-          50%  { transform: translate3d(-2%, -3%, 0); }
-          100% { transform: translate3d(0, 0, 0); }
-        }
-      `}</style>
-    </motion.div>
-  );
-}
+const Starfield = dynamic(() => import('@/components/Starfield'), {
+  ssr: false,
+  loading: () => null,
+});
 // Replace your DaoWord with this version (supports gradient via className)
 function DaoWord({ className = "" }: { className?: string }) {
   return (
@@ -117,6 +70,7 @@ function DaoWord({ className = "" }: { className?: string }) {
 export default function HomePage() {
   const [open, setOpen] = useState(false);
   const mounted = useMounted();
+  const [year] = useState(() => new Date().getFullYear());
 
   const NavLinks = () => (
     <>
@@ -509,7 +463,7 @@ export default function HomePage() {
       <footer className="relative z-10 py-8 sm:py-10 text-sm text-slate-300">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-16">
           <div className="flex flex-col items-center gap-2">
-            <p className="text-center">© {mounted ? new Date().getFullYear() : 2025} GatishilNepal.org</p>
+            <p className="text-center">© {mounted ? year : 2025} GatishilNepal.org</p>
             <p className="text-center text-slate-400">Democracy That Flows — Not Stagnates.</p>
             <nav className="mt-3 flex flex-wrap items-center justify-center gap-4 text-slate-300">
               <a href="/join" className="hover:text-white">Join</a>

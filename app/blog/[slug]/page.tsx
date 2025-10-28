@@ -30,7 +30,7 @@ async function getPost(slug: string): Promise<Post | null> {
         excerpt: "On motion, courage, and quiet revolutions.",
         content_mdx: "# The Spark that Moves\n\nWe move so the world may breathe.",
         tags: ["Essays"],
-        created_at: new Date().toISOString(),
+        created_at: "2024-01-10T00:00:00.000Z",
         author_name: "Gatishil"
       };
     }

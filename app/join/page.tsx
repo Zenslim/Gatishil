@@ -1,5 +1,10 @@
 
-import JoinClient from "./JoinClient";
+import dynamic from "next/dynamic";
+
+const JoinClient = dynamic(() => import("./JoinClient"), {
+  ssr: false,
+  loading: () => null,
+});
 
 export const dynamic = "force-dynamic";
 

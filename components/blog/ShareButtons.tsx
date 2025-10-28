@@ -1,9 +1,20 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { Share2, Twitter, Linkedin, Link as LinkIcon, MessageCircle } from "lucide-react";
 
 export function ShareButtons({ title, slug }: { title: string; slug: string }) {
-  const url = typeof window !== "undefined" ? window.location.origin + `/blog/${slug}` : `/blog/${slug}`;
+  const [origin, setOrigin] = useState<string | null>(null);
+
+  useEffect(() => {
+    setOrigin(window.location.origin);
+  }, []);
+
+  if (!origin) {
+    return null;
+  }
+
+  const url = `${origin}/blog/${slug}`;
   const shareText = `${title} — Gatishil Blog`;
 
   const tryNative = async () => {

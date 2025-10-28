@@ -35,11 +35,15 @@ export default function Page() {
         {error && <div style={{color:'#fca5a5'}}>Error: {error}</div>}
       </Card>
 
-      {rows.map((row) => (
-        <Card key={String(row.id ?? Math.random())} title={String(row.name ?? row.title ?? row.question ?? '—')}>
+      {rows.map((row, idx) => (
+        <Card key={String(row.id ?? row.slug ?? row.name ?? row.title ?? row.question ?? idx)} title={String(row.name ?? row.title ?? row.question ?? '—')}>
         <div><b>Open:</b> {String((row as any).open_at ?? '—')}</div>
         <div><b>Close:</b> {String((row as any).close_at ?? '—')}</div>
-          {row.created_at ? <div style={{ marginTop: 8, opacity: .6, fontSize: 12 }}>added {new Date(row.created_at).toLocaleString()}</div> : null}
+          {row.created_at ? (
+            <div style={{ marginTop: 8, opacity: .6, fontSize: 12 }}>
+              added {new Date(row.created_at).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' })}
+            </div>
+          ) : null}
         </Card>
       ))}
 

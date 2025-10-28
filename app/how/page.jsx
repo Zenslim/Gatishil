@@ -1,4 +1,5 @@
 'use client'
+import { useState } from 'react'
 import { motion } from 'framer-motion'
 
 const fadeUp = (delay = 0) => ({
@@ -26,6 +27,7 @@ const principles = [
 ]
 
 export default function How() {
+  const [year] = useState(() => new Date().getFullYear())
   return (
     <main className="min-h-screen bg-[#05060a] text-white selection:bg-amber-300/20">
       {/* Hero */}
@@ -118,7 +120,7 @@ export default function How() {
       </Section>
 
       <footer className="px-4 sm:px-6 pb-16 text-center text-xs text-slate-400/70">
-        © {new Date().getFullYear()} Gatishil Nepal — The DAO Party of the Powerless.
+        © {year} Gatishil Nepal — The DAO Party of the Powerless.
       </footer>
     </main>
   )

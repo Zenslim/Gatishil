@@ -54,7 +54,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <head>
         {/* Explicit <link> tags help Google and Apple detect the favicon faster */}
         <link rel="icon" href="/favicon.ico" type="image/x-icon" />
