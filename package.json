@@ -11,7 +11,7 @@
     "lint": "next lint",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run --reporter=verbose",
-    "postinstall": "node -e \"console.log('✅ supabase-js@', require('@supabase/supabase-js/package.json').version); console.log('✅ react@', require('react/package.json').version); console.log('✅ r3f@', require('@react-three/fiber/package.json').version); console.log('✅ drei@', require('@react-three/drei/package.json').version);\""
+    "postinstall": "node -e \"console.log('✅ supabase-js@', require('@supabase/supabase-js/package.json').version); console.log('✅ react@', require('react/package.json').version); console.log('✅ r3f@', require('@react-three/fiber/package.json').version); console.log('✅ drei@', require('@react-three/drei/package.json').version); console.log('✅ its-fine@', require('its-fine/package.json').version);\""
   },
   "dependencies": {
     "@node-rs/argon2": "^1.7.0",
@@ -50,6 +50,6 @@
   "overrides": {
     "react": "18.2.0",
     "react-dom": "18.2.0",
-    "its-fine": "0.0.15"
+    "its-fine": "1.1.4"
   }
 }
