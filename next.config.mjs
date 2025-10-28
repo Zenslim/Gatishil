@@ -1,5 +1,10 @@
 // next.config.mjs
 import path from 'path';
+import { fileURLToPath } from 'url';
+
+// ESM-safe __dirname/__filename
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
@@ -7,15 +12,12 @@ const nextConfig = {
 
   experimental: {
     forceSwcTransforms: true,
-    // keep native argon2 out of the server bundle
     serverComponentsExternalPackages: ['@node-rs/argon2'],
   },
 
-  // Build should proceed even if lint/types have issues (you already had these on)
   eslint: { ignoreDuringBuilds: true },
   typescript: { ignoreBuildErrors: true },
 
-  // Allow remote images you already use
   images: {
     remotePatterns: [
       { protocol: 'https', hostname: '*.supabase.co' },
@@ -25,16 +27,10 @@ const nextConfig = {
     ],
   },
 
-  // Transpile common client libs under one resolver (helps avoid mixed builds)
   transpilePackages: ['three', '@react-three/fiber', '@react-three/drei', 'framer-motion'],
 
-  // Only expose public env at build time (sanity guard)
-  env: {
-    // do not place secrets here
-  },
-
   webpack: (config, { isServer }) => {
-    // ✅ Force a single copy of React/DOM across the app and all deps
+    // ✅ Force a single copy of React/DOM to end the `'S'/isPrimaryRenderer` crash
     config.resolve = config.resolve || {};
     config.resolve.alias = {
       ...(config.resolve.alias || {}),
@@ -45,7 +41,7 @@ const nextConfig = {
     };
 
     if (isServer) {
-      // Keep @node-rs/argon2 as a runtime require (don’t bundle the native binary)
+      // Keep native binary out of the server bundle
       config.externals = config.externals || [];
       config.externals.push({ '@node-rs/argon2': 'commonjs @node-rs/argon2' });
     }
