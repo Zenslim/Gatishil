@@ -1,22 +1,21 @@
-// next.config.mjs
-import path from 'path';
-import { fileURLToPath } from 'url';
-
-// ESM-safe __dirname/__filename
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
 
   experimental: {
     forceSwcTransforms: true,
+    // ✅ Tell Next to keep native argon2 out of the server bundle
     serverComponentsExternalPackages: ['@node-rs/argon2'],
   },
 
-  eslint: { ignoreDuringBuilds: true },
-  typescript: { ignoreBuildErrors: true },
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
+
+  // ✅ allow build to proceed even if TS sees prop-type mismatch
+  typescript: {
+    ignoreBuildErrors: true,
+  },
 
   images: {
     remotePatterns: [
@@ -27,25 +26,18 @@ const nextConfig = {
     ],
   },
 
-  transpilePackages: ['three', '@react-three/fiber', '@react-three/drei', 'framer-motion'],
+  // Only expose public env at build time (sanity guard)
+  env: {
+    // do not place secrets here
+  },
 
+  // Extra guard: force argon2 to stay external in the server webpack build
   webpack: (config, { isServer }) => {
-    // ✅ Force a single copy of React/DOM to end the `'S'/isPrimaryRenderer` crash
-    config.resolve = config.resolve || {};
-    config.resolve.alias = {
-      ...(config.resolve.alias || {}),
-      react: path.resolve(__dirname, 'node_modules/react'),
-      'react/jsx-runtime': path.resolve(__dirname, 'node_modules/react/jsx-runtime.js'),
-      'react-dom': path.resolve(__dirname, 'node_modules/react-dom'),
-      'react-dom/client': path.resolve(__dirname, 'node_modules/react-dom/client.js'),
-    };
-
     if (isServer) {
-      // Keep native binary out of the server bundle
       config.externals = config.externals || [];
+      // Keep the package as a runtime require (CommonJS) so the native binary isn't parsed by webpack
       config.externals.push({ '@node-rs/argon2': 'commonjs @node-rs/argon2' });
     }
-
     return config;
   },
 };

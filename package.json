@@ -3,40 +3,37 @@
   "private": true,
   "version": "1.0.0",
   "description": "Gatishil Nepal – Next.js 14 (App Router, TS)",
-  "engines": { "node": ">=18.18 <=22" },
+  "engines": {
+    "node": "22.x"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run --reporter=verbose",
-    "postinstall": "node -e \"console.log('✅ supabase-js@', require('@supabase/supabase-js/package.json').version); console.log('✅ react@', require('react/package.json').version); console.log('✅ r3f@', require('@react-three/fiber/package.json').version); console.log('✅ drei@', require('@react-three/drei/package.json').version); console.log('✅ its-fine@', require('its-fine/package.json').version);\""
+    "test": "vitest run --reporter=verbose"
   },
   "dependencies": {
-    "@node-rs/argon2": "^1.7.0",
-    "@react-three/drei": "9.86.3",
-    "@react-three/fiber": "8.15.16",
-    "@supabase/auth-helpers-nextjs": "0.10.0",
     "@supabase/ssr": "0.5.0",
-    "@supabase/supabase-js": "2.76.1",
+    "@supabase/supabase-js": "2.45.4",
+    "@supabase/auth-helpers-nextjs": "^0.10.0",
+    "@node-rs/argon2": "^1.7.0",
     "framer-motion": "11.3.19",
-    "howler": "^2.2.4",
     "lucide-react": "0.454.0",
     "next": "14.2.5",
-    "react": "18.2.0",
-    "react-dom": "18.2.0",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
     "react-markdown": "9.0.1",
     "remark-gfm": "4.0.0",
-    "three": "0.149.0",
+    "three": "0.169.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "6.4.2",
     "@testing-library/react": "14.2.1",
     "@types/node": "^22.0.0",
-    "@types/react": "18.2.79",
-    "@types/three": "0.149.0",
+    "@types/react": "18.3.3",
     "autoprefixer": "10.4.20",
     "eslint": "8.57.0",
     "eslint-config-next": "14.2.5",
@@ -46,10 +43,5 @@
     "tailwindcss": "3.4.13",
     "typescript": "5.6.2",
     "vitest": "1.6.0"
-  },
-  "overrides": {
-    "react": "18.2.0",
-    "react-dom": "18.2.0",
-    "its-fine": "1.1.4"
   }
 }
