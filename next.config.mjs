@@ -1,22 +1,21 @@
+// next.config.mjs
+import path from 'path';
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
 
   experimental: {
     forceSwcTransforms: true,
-    // ✅ Tell Next to keep native argon2 out of the server bundle
+    // keep native argon2 out of the server bundle
     serverComponentsExternalPackages: ['@node-rs/argon2'],
   },
 
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
+  // Build should proceed even if lint/types have issues (you already had these on)
+  eslint: { ignoreDuringBuilds: true },
+  typescript: { ignoreBuildErrors: true },
 
-  // ✅ allow build to proceed even if TS sees prop-type mismatch
-  typescript: {
-    ignoreBuildErrors: true,
-  },
-
+  // Allow remote images you already use
   images: {
     remotePatterns: [
       { protocol: 'https', hostname: '*.supabase.co' },
@@ -26,18 +25,31 @@ const nextConfig = {
     ],
   },
 
+  // Transpile common client libs under one resolver (helps avoid mixed builds)
+  transpilePackages: ['three', '@react-three/fiber', '@react-three/drei', 'framer-motion'],
+
   // Only expose public env at build time (sanity guard)
   env: {
     // do not place secrets here
   },
 
-  // Extra guard: force argon2 to stay external in the server webpack build
   webpack: (config, { isServer }) => {
+    // ✅ Force a single copy of React/DOM across the app and all deps
+    config.resolve = config.resolve || {};
+    config.resolve.alias = {
+      ...(config.resolve.alias || {}),
+      react: path.resolve(__dirname, 'node_modules/react'),
+      'react/jsx-runtime': path.resolve(__dirname, 'node_modules/react/jsx-runtime.js'),
+      'react-dom': path.resolve(__dirname, 'node_modules/react-dom'),
+      'react-dom/client': path.resolve(__dirname, 'node_modules/react-dom/client.js'),
+    };
+
     if (isServer) {
+      // Keep @node-rs/argon2 as a runtime require (don’t bundle the native binary)
       config.externals = config.externals || [];
-      // Keep the package as a runtime require (CommonJS) so the native binary isn't parsed by webpack
       config.externals.push({ '@node-rs/argon2': 'commonjs @node-rs/argon2' });
     }
+
     return config;
   },
 };
