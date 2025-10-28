@@ -2,7 +2,6 @@
 import * as THREE from 'three';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { motion } from 'framer-motion';
 
 type Vec3 = [number, number, number];
 const NODE_COUNT = 420;
@@ -63,8 +62,8 @@ function Nodes({ t }: { t: number }) {
       const c = color.clone().multiplyScalar(flick);
       (ref.current as any).setColorAt(i, c as any);
     }
-    ref.current.instanceMatrix.needsUpdate = true
-    if ((ref.current as any).instanceColor) (ref.current as any).instanceColor.needsUpdate = true
+    ref.current.instanceMatrix.needsUpdate = true;
+    if ((ref.current as any).instanceColor) (ref.current as any).instanceColor.needsUpdate = true;
   }, [t, mandal, mapish, dummy, color]);
 
   const group = useRef<THREE.Group>(null!);
@@ -143,7 +142,7 @@ export default function RebirthScene() {
   const [t, setT] = useState(0);
 
   useEffect(() => {
-    let mounted = true
+    let mounted = true;
     const start = performance.now() + 650;
     const hold = 1200;
     const morph = 1200;
@@ -159,7 +158,7 @@ export default function RebirthScene() {
       requestAnimationFrame(tick);
     };
     requestAnimationFrame(tick);
-    return () => { mounted = false };
+    return () => { mounted = false; };
   }, []);
 
   return (
@@ -185,11 +184,11 @@ export default function RebirthScene() {
       </Canvas>
 
       <div className="pointer-events-none absolute bottom-4 left-1/2 -translate-x-1/2 opacity-50 text-[10px]">
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 2.0, duration: 0.8 }}>
+        <div className="opacity-0 animate-[fadeIn_0.8s_2s_forwards]">
           <span className="inline-block h-1 w-1 rounded-full bg-amber-300/60 mr-1" />
           <span className="inline-block h-1 w-1 rounded-full bg-amber-300/40 mr-1" />
           <span className="inline-block h-1 w-1 rounded-full bg-amber-300/30" />
-        </motion.div>
+        </div>
       </div>
     </div>
   );

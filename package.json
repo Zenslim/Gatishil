@@ -2,8 +2,10 @@
   "name": "gatishilnepal",
   "private": true,
   "version": "1.0.0",
-  "description": "Gatishil Nepal – Next.js 14 (App Router, TS)",
-  "engines": { "node": ">=18.18 <=22" },
+  "description": "Gatishil Nepal \u2013 Next.js 14 (App Router, TS)",
+  "engines": {
+    "node": ">=18.18 <=22"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -11,7 +13,7 @@
     "lint": "next lint",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run --reporter=verbose",
-    "postinstall": "node -e \"console.log('✅ supabase-js@', require('@supabase/supabase-js/package.json').version)\""
+    "postinstall": "node -e \"console.log('\u2705 supabase-js@', require('@supabase/supabase-js/package.json').version)\""
   },
   "dependencies": {
     "@node-rs/argon2": "^1.7.0",
