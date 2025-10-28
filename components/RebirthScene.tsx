@@ -1,4 +1,4 @@
-use client';
+'use client';
 import * as THREE from 'three';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -61,10 +61,10 @@ function Nodes({ t }: { t: number }) {
       ref.current.setMatrixAt(i, dummy.matrix);
       const flick = 0.6 + (Math.sin(i * 1.7 + (t * 3.0)) + 1) * 0.2;
       const c = color.clone().multiplyScalar(flick);
-      (ref.current as any).setColorAt(i, c);
+      (ref.current as any).setColorAt(i, c as any);
     }
-    ref.current.instanceMatrix.needsUpdate = True
-    if ((ref.current as any).instanceColor) (ref.current as any).instanceColor.needsUpdate = True
+    ref.current.instanceMatrix.needsUpdate = true
+    if ((ref.current as any).instanceColor) (ref.current as any).instanceColor.needsUpdate = true
   }, [t, mandal, mapish, dummy, color]);
 
   const group = useRef<THREE.Group>(null!);
@@ -143,7 +143,7 @@ export default function RebirthScene() {
   const [t, setT] = useState(0);
 
   useEffect(() => {
-    let mounted = true;
+    let mounted = true
     const start = performance.now() + 650;
     const hold = 1200;
     const morph = 1200;
@@ -159,7 +159,7 @@ export default function RebirthScene() {
       requestAnimationFrame(tick);
     };
     requestAnimationFrame(tick);
-    return () => { mounted = false; };
+    return () => { mounted = false };
   }, []);
 
   return (

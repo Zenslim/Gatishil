@@ -1,4 +1,4 @@
-use client';
+'use client';
 import { useAudioFlow } from '@/lib/useAudioFlow';
 import { useEffect, useState } from 'react';
 
