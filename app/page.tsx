@@ -1,285 +1,337 @@
 'use client';
 
-import { motion, useScroll, useTransform } from 'framer-motion';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { motion } from 'framer-motion';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import ClientOnly from '@/components/ClientOnly';
 
-/** util: run code only after React mounts (prevents hydration mismatch) */
+/* -------------------------------------------------------
+   Minimal motion hooks/utilities
+------------------------------------------------------- */
 function useMounted() {
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
-  return mounted;
+  const [m, setM] = useState(false);
+  useEffect(() => setM(true), []);
+  return m;
 }
-
-/** util: prefers reduced motion */
-function useReducedMotion(): boolean {
-  const [reduced, setReduced] = useState(false);
-  useEffect(() => {
-    const m = window.matchMedia?.('(prefers-reduced-motion: reduce)');
-    const handler = () => setReduced(!!m?.matches);
-    handler();
-    m?.addEventListener?.('change', handler);
-    return () => m?.removeEventListener?.('change', handler);
-  }, []);
-  return reduced;
-}
-
-/** fadeUp helper */
 const fadeUp = (delay = 0) => ({
   initial: { opacity: 0, y: 18 },
   whileInView: { opacity: 1, y: 0, transition: { duration: 0.7, ease: 'easeOut', delay } },
-  viewport: { once: true, amount: 0.35 }
+  viewport: { once: true, amount: 0.35 },
 });
 
-/** DAO tooltip word */
-function DaoWord({ className = "" }: { className?: string }) {
+/* -------------------------------------------------------
+   1) Entry Portal (2s). A heartbeat spark + glow that fades out.
+------------------------------------------------------- */
+function EntryPortal() {
+  const [hide, setHide] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setHide(true), 2000);
+    return () => clearTimeout(t);
+  }, []);
+  if (hide) return null;
+
   return (
-    <a href="/faq#dao" className="relative group cursor-help focus:outline-none">
-      <span
-        className={`underline decoration-dotted underline-offset-2 ${className}`}
-        aria-describedby="dao-tooltip"
-        tabIndex={0}
+    <motion.div
+      className="fixed inset-0 z-[60] bg-black flex items-center justify-center"
+      initial={{ opacity: 1 }}
+      animate={{ opacity: 0 }}
+      transition={{ delay: 1.6, duration: 0.4, ease: 'easeOut' }}
+    >
+      <motion.div
+        className="relative"
+        initial={{ scale: 0.95 }}
+        animate={{ scale: [0.95, 1.04, 1.0] }}
+        transition={{ times: [0, 0.5, 1], duration: 1.6, ease: 'easeInOut' }}
       >
-        DAO
-      </span>
-      <span
-        id="dao-tooltip"
-        role="tooltip"
-        className="pointer-events-none absolute left-0 top-[125%] w-[280px] sm:w-[320px] rounded-xl border border-white/15 bg-zinc-900/95 px-3 py-3 text-[11px] text-slate-200 shadow-2xl opacity-0 translate-y-1 group-hover:opacity-100 group-focus:opacity-100 group-focus:translate-y-0 transition"
-      >
-        <span className="block text-[11px] font-semibold text-amber-300">
-          DAO = Decentralized Autonomous Organization
-        </span>
-        <span className="block mt-1">Decentralized → Power is shared, no one owns the throne.</span>
-        <span className="block">Autonomous → Rules enforce themselves, no backdoor cheating.</span>
-        <span className="block">Organization → A living system, where each member’s voice adds to the whole.</span>
-        <span className="block mt-2 text-amber-300 underline underline-offset-4">Click to read more →</span>
-      </span>
-    </a>
-  );
-}
-
-/** Section title */
-function SectionTitle(props: { id?: string; kicker?: string; title: string; subtitle?: string }) {
-  const { id, kicker, title, subtitle } = props;
-  return (
-    <div id={id} className="text-center max-w-3xl mx-auto mb-8 px-2">
-      {kicker && <p className="uppercase tracking-widest text-[10px] text-amber-300/85">{kicker}</p>}
-      <h2 className="text-2xl sm:text-3xl font-bold mt-2">{title}</h2>
-      {subtitle && <p className="text-sm sm:text-base text-slate-300/85 mt-3">{subtitle}</p>}
-    </div>
-  );
-}
-
-/** Subtle starfield that fades in on scroll (pure CSS) */
-function Starfield() {
-  const { scrollYProgress } = useScroll();
-  const opacity = useTransform(scrollYProgress, [0, 0.3], [0, 1]);
-
-  return (
-    <motion.div style={{ opacity }} className="fixed inset-0 -z-10 pointer-events-none">
-      <div className="absolute inset-0 starfield">
-        <div className="layer layer-s"></div>
-        <div className="layer layer-m"></div>
-        <div className="layer layer-l"></div>
-      </div>
-
-      <style jsx>{`
-        .starfield { position: absolute; inset: 0; overflow: hidden; }
-        .layer { position: absolute; inset: -50%; animation: drift 60s linear infinite; opacity: 0.9; }
-        .layer-s {
-          background-image:
-            radial-gradient(white 1px, transparent 1.5px),
-            radial-gradient(white 1px, transparent 1.5px);
-          background-size: 120px 120px, 160px 160px;
-          background-position: 0 0, 60px 80px;
-          filter: drop-shadow(0 0 1px rgba(255,255,255,0.35));
-          animation-duration: 90s;
+        <div className="h-24 w-24 rounded-full bg-amber-300 blur-sm opacity-70" />
+        <div className="absolute inset-0 rounded-full ring-2 ring-amber-400/80 animate-ping-slow" />
+      </motion.div>
+      <style jsx global>{`
+        @keyframes ping-slow {
+          0% { transform: scale(0.9); opacity: 0.8; }
+          70% { transform: scale(1.25); opacity: 0.05; }
+          100% { transform: scale(1.35); opacity: 0; }
         }
-        .layer-m {
-          background-image:
-            radial-gradient(white 1.5px, transparent 2px),
-            radial-gradient(white 1.5px, transparent 2px);
-          background-size: 200px 200px, 260px 260px;
-          background-position: 40px 20px, 160px 100px;
-          filter: drop-shadow(0 0 2px rgba(255,255,255,0.25));
-          animation-duration: 120s;
-        }
-        .layer-l {
-          background-image:
-            radial-gradient(white 2px, transparent 2.5px),
-            radial-gradient(white 2px, transparent 2.5px);
-          background-size: 320px 320px, 420px 420px;
-          background-position: 120px 60px, 260px 180px;
-          filter: drop-shadow(0 0 3px rgba(255,255,255,0.2));
-          animation-duration: 150s;
-        }
-        @keyframes drift {
-          0%   { transform: translate3d(0, 0, 0); }
-          50%  { transform: translate3d(-2%, -3%, 0); }
-          100% { transform: translate3d(0, 0, 0); }
-        }
+        .animate-ping-slow { animation: ping-slow 1.6s cubic-bezier(0,0,0.2,1) infinite; }
       `}</style>
     </motion.div>
   );
 }
 
-/** Lightweight looping background video (≤ 500 KB webm recommended) */
-function BackgroundVideo({
-  src = '/hero-lite.webm',
-  poster = '/hero-poster.jpg'
-}: { src?: string; poster?: string }) {
-  const reduced = useReducedMotion();
-  const vidRef = useRef<HTMLVideoElement | null>(null);
+/* -------------------------------------------------------
+   2) MandalaCanvas: rotating lines + twinkling nodes (GPU-cheap).
+      - No images, no assets. ~0kb.
+------------------------------------------------------- */
+function MandalaCanvas() {
+  const ref = useRef<HTMLCanvasElement | null>(null);
+  const animRef = useRef<number | null>(null);
 
   useEffect(() => {
-    const v = vidRef.current;
-    if (!v) return;
-    if (reduced) {
-      try { v.pause(); } catch {}
-    } else {
-      const p = v.play();
-      if (p?.catch) p.catch(() => {/* ignore autoplay block; poster still shows */});
+    const canvas = ref.current!;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const ctx = canvas.getContext('2d')!;
+    let w = (canvas.width = Math.floor(canvas.clientWidth * dpr));
+    let h = (canvas.height = Math.floor(canvas.clientHeight * dpr));
+    const center = { x: w / 2, y: h / 2 };
+
+    const onResize = () => {
+      w = canvas.width = Math.floor(canvas.clientWidth * dpr);
+      h = canvas.height = Math.floor(canvas.clientHeight * dpr);
+      center.x = w / 2; center.y = h / 2;
+    };
+    const ro = new ResizeObserver(onResize);
+    ro.observe(canvas);
+
+    // Precompute radii and angles
+    const rings = 6;
+    const spokes = 40;
+    const maxR = Math.min(w, h) * 0.42;
+    const radii = Array.from({ length: rings }, (_, i) => (maxR * (i + 1)) / rings);
+    const nodes: { x: number; y: number; tw: number; phase: number }[] = [];
+
+    for (let r of radii) {
+      for (let s = 0; s < spokes; s++) {
+        const a = (s / spokes) * Math.PI * 2;
+        nodes.push({
+          x: center.x + Math.cos(a) * r,
+          y: center.y + Math.sin(a) * r,
+          tw: 0.6 + Math.random() * 0.8,
+          phase: Math.random() * Math.PI * 2,
+        });
+      }
     }
-  }, [reduced]);
+
+    let t0 = performance.now();
+    const draw = (t: number) => {
+      const dt = (t - t0) / 1000;
+      t0 = t;
+
+      // background clear (transparent for layering)
+      ctx.clearRect(0, 0, w, h);
+
+      // rotate slowly
+      const rot = t * 0.00006 * Math.PI * 2;
+      ctx.save();
+      ctx.translate(center.x, center.y);
+      ctx.rotate(rot);
+      ctx.translate(-center.x, -center.y);
+
+      // lines
+      ctx.strokeStyle = 'rgba(255,215,128,0.13)';
+      ctx.lineWidth = Math.max(1, 0.75 * dpr);
+      ctx.beginPath();
+      // spokes
+      for (let s = 0; s < spokes; s++) {
+        const a = (s / spokes) * Math.PI * 2;
+        ctx.moveTo(center.x + Math.cos(a) * radii[0], center.y + Math.sin(a) * radii[0]);
+        ctx.lineTo(center.x + Math.cos(a) * radii[radii.length - 1], center.y + Math.sin(a) * radii[radii.length - 1]);
+      }
+      // rings
+      for (let r of radii) {
+        ctx.moveTo(center.x + r, center.y);
+        ctx.arc(center.x, center.y, r, 0, Math.PI * 2);
+      }
+      ctx.stroke();
+
+      // nodes (twinkle)
+      for (let n of nodes) {
+        const twinkle = (Math.sin(t * 0.0012 + n.phase) * 0.5 + 0.5) * n.tw;
+        ctx.fillStyle = `rgba(255, 225, 160, ${0.25 + twinkle * 0.35})`;
+        ctx.beginPath();
+        ctx.arc(n.x, n.y, 1.4 * dpr + twinkle * 0.9 * dpr, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      ctx.restore();
+
+      animRef.current = requestAnimationFrame(draw);
+    };
+    animRef.current = requestAnimationFrame(draw);
+
+    return () => {
+      if (animRef.current) cancelAnimationFrame(animRef.current);
+      ro.disconnect();
+    };
+  }, []);
 
   return (
-    <div className="absolute inset-0 -z-20 pointer-events-none overflow-hidden rounded-none">
-      <video
-        ref={vidRef}
-        className="w-full h-full object-cover opacity-[0.35]"
-        autoPlay
-        playsInline
-        loop
-        muted
-        preload="metadata"
-        poster={poster}
-      >
-        <source src={src} type="video/webm" />
-      </video>
-      {/* subtle animated gradient under video for depth */}
-      <div className="absolute inset-0 opacity-[0.18] animated-bg" />
+    <canvas
+      ref={ref}
+      className="absolute inset-0 -z-10 opacity-80"
+      style={{ width: '100%', height: '100%' }}
+    />
+  );
+}
+
+/* -------------------------------------------------------
+   3) TypewriterHeadline: rotates key phrases w/ caret
+------------------------------------------------------- */
+function TypewriterHeadline() {
+  const phrases = useMemo(
+    () => [
+      'The DAO Party of the Powerless',
+      'Service, Not Career. Community, Not Power.',
+      'Many Rivers, One Flow.',
+      'Make Thrones Irrelevant.',
+    ],
+    []
+  );
+
+  const [idx, setIdx] = useState(0);
+  const [text, setText] = useState('');
+  const [phase, setPhase] = useState<'typing' | 'pausing' | 'deleting'>('typing');
+
+  useEffect(() => {
+    let t: any;
+    const current = phrases[idx];
+
+    if (phase === 'typing') {
+      if (text.length < current.length) {
+        t = setTimeout(() => setText(current.slice(0, text.length + 1)), 30);
+      } else {
+        setPhase('pausing');
+        t = setTimeout(() => setPhase('deleting'), 1300);
+      }
+    } else if (phase === 'deleting') {
+      if (text.length > 0) {
+        t = setTimeout(() => setText(current.slice(0, text.length - 1)), 16);
+      } else {
+        setIdx((i) => (i + 1) % phrases.length);
+        setPhase('typing');
+      }
+    }
+    return () => clearTimeout(t);
+  }, [text, phase, idx, phrases]);
+
+  return (
+    <h1 className="text-[28px] sm:text-4xl md:text-5xl font-extrabold leading-tight mt-3">
+      <span className="bg-clip-text text-transparent bg-gradient-to-r from-amber-300 via-orange-400 to-rose-400">
+        {text}
+      </span>
+      <span className="inline-block w-[10px] bg-amber-300 ml-[2px] caret" />
       <style jsx>{`
-        .animated-bg {
-          background: linear-gradient(270deg, rgba(251,191,36,0.6), rgba(236,72,153,0.35), rgba(139,92,246,0.35));
-          background-size: 600% 600%;
-          animation: aurora 25s ease infinite;
+        .caret { animation: blink 1s step-end infinite; height: 1em; transform: translateY(2px); }
+        @keyframes blink { 50% { opacity: 0; } }
+      `}</style>
+    </h1>
+  );
+}
+
+/* -------------------------------------------------------
+   4) LivingCTA: breathing orb + ripple ring + magnetic parallax
+------------------------------------------------------- */
+function LivingCTA(props: React.AnchorHTMLAttributes<HTMLAnchorElement>) {
+  const [mx, setMx] = useState(0);
+  const [my, setMy] = useState(0);
+
+  useEffect(() => {
+    const onMove = (e: MouseEvent) => {
+      const { innerWidth: w, innerHeight: h } = window;
+      const x = (e.clientX / w - 0.5) * 16; // ±8px
+      const y = (e.clientY / h - 0.5) * 16; // ±8px
+      setMx(x); setMy(y);
+    };
+    window.addEventListener('mousemove', onMove);
+    return () => window.removeEventListener('mousemove', onMove);
+  }, []);
+
+  return (
+    <a
+      {...props}
+      className={`relative inline-flex items-center justify-center px-5 py-3 rounded-2xl bg-amber-400 text-black font-semibold overflow-hidden group`}
+      style={{ transform: `translate3d(${mx}px, ${my}px, 0)` }}
+    >
+      <span className="relative z-10">Join Us to Restore the Flow</span>
+      <span className="absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity">
+        <span className="absolute inset-0 rounded-2xl blur-xl bg-amber-300/70 animate-breathe" />
+      </span>
+      <span className="pointer-events-none absolute inset-0 rounded-2xl ring-0 group-hover:ring-8 group-hover:ring-amber-300/35 transition-[ring-width] duration-500" />
+      <style jsx global>{`
+        @keyframes breathe {
+          0% { transform: scale(1); opacity: .7; }
+          50% { transform: scale(1.04); opacity: 1; }
+          100% { transform: scale(1); opacity: .7; }
         }
-        @keyframes aurora {
-          0% { background-position: 0% 50%; }
-          50% { background-position: 100% 50%; }
-          100% { background-position: 0% 50%; }
+        .animate-breathe { animation: breathe 2.2s ease-in-out infinite; }
+      `}</style>
+    </a>
+  );
+}
+
+/* -------------------------------------------------------
+   5) Slow Marquee: names flow like a river (CSS only)
+------------------------------------------------------- */
+function NamesMarquee() {
+  const items = [
+    'Mane Kharka', 'Gaire Kharka', 'Bhaktapur', 'Panga', 'Thimi',
+    'Patlekhet', 'Lalitpur', 'Kirtipur', 'Khokana', 'Sankhu',
+    'Bungamati', 'Siddhipur', 'Sunakothi', 'Bode', 'Harisiddhi',
+  ];
+  return (
+    <div className="relative overflow-hidden rounded-xl border border-white/10 bg-white/5 backdrop-blur-xl">
+      <div className="whitespace-nowrap animate-marquee py-2 text-[12px] sm:text-sm">
+        {items.concat(items).map((n, i) => (
+          <span key={i} className="mx-4 text-amber-200/90">{n} •</span>
+        ))}
+      </div>
+      <style jsx>{`
+        @keyframes marquee {
+          0% { transform: translateX(0); }
+          100% { transform: translateX(-50%); }
+        }
+        .animate-marquee { animation: marquee 22s linear infinite; }
+      `}</style>
+    </div>
+  );
+}
+
+/* -------------------------------------------------------
+   Decorative starfield (pure CSS) to add depth
+------------------------------------------------------- */
+function Starfield() {
+  return (
+    <div className="fixed inset-0 -z-20 pointer-events-none">
+      <div className="absolute inset-0 starfield">
+        <div className="layer layer-s"></div>
+        <div className="layer layer-m"></div>
+        <div className="layer layer-l"></div>
+      </div>
+      <style jsx>{`
+        .starfield { position: absolute; inset: 0; overflow: hidden; }
+        .layer { position: absolute; inset: -50%; animation: drift 60s linear infinite; opacity: 0.75; }
+        .layer-s {
+          background-image: radial-gradient(white 1px, transparent 1.5px), radial-gradient(white 1px, transparent 1.5px);
+          background-size: 120px 120px, 160px 160px; background-position: 0 0, 60px 80px;
+          filter: drop-shadow(0 0 1px rgba(255,255,255,0.35)); animation-duration: 90s;
+        }
+        .layer-m {
+          background-image: radial-gradient(white 1.5px, transparent 2px), radial-gradient(white 1.5px, transparent 2px);
+          background-size: 200px 200px, 260px 260px; background-position: 40px 20px, 160px 100px;
+          filter: drop-shadow(0 0 2px rgba(255,255,255,0.25)); animation-duration: 120s;
+        }
+        .layer-l {
+          background-image: radial-gradient(white 2px, transparent 2.5px), radial-gradient(white 2px, transparent 2.5px);
+          background-size: 320px 320px, 420px 420px; background-position: 120px 60px, 260px 180px;
+          filter: drop-shadow(0 0 3px rgba(255,255,255,0.2)); animation-duration: 150s;
+        }
+        @keyframes drift {
+          0% { transform: translate3d(0, 0, 0); }
+          50% { transform: translate3d(-2%, -3%, 0); }
+          100% { transform: translate3d(0, 0, 0); }
         }
       `}</style>
     </div>
   );
 }
 
-/** Wordless audio toggle using Web Audio API (no deps) */
-function FlowModeToggle() {
-  const [on, setOn] = useState(false);
-  const audioRef = useRef<{
-    ctx?: AudioContext,
-    master?: GainNode,
-    humOsc?: OscillatorNode,
-    humGain?: GainNode,
-    wind?: AudioBufferSourceNode,
-    windGain?: GainNode
-  } | null>(null);
-
-  async function startAudio() {
-    if (on) return;
-    try {
-      const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
-      const master = ctx.createGain();
-      master.gain.value = 0.0;
-      master.connect(ctx.destination);
-
-      // HUM: sine ~110Hz with gentle LFO to avoid stasis
-      const humOsc = ctx.createOscillator();
-      humOsc.type = 'sine';
-      humOsc.frequency.value = 110;
-
-      const humGain = ctx.createGain();
-      humGain.gain.value = 0.0;
-
-      // tiny LFO to modulate amplitude slowly
-      const lfo = ctx.createOscillator();
-      lfo.type = 'sine';
-      lfo.frequency.value = 0.05; // 0.05 Hz = 20s cycle
-      const lfoGain = ctx.createGain();
-      lfoGain.gain.value = 0.08;  // modulation depth
-      lfo.connect(lfoGain).connect(humGain.gain);
-
-      humOsc.connect(humGain).connect(master);
-      humOsc.start();
-      lfo.start();
-
-      // WIND: soft brown noise buffer
-      const windGain = ctx.createGain();
-      windGain.gain.value = 0.0;
-      windGain.connect(master);
-
-      const buffer = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
-      const data = buffer.getChannelData(0);
-      let lastOut = 0.0; // Brownian noise
-      for (let i = 0; i < data.length; i++) {
-        const white = Math.random() * 2 - 1;
-        // Brown noise formula
-        lastOut = (lastOut + 0.02 * white) / 1.02;
-        data[i] = lastOut * 0.4;
-      }
-      const wind = ctx.createBufferSource();
-      wind.buffer = buffer;
-      wind.loop = true;
-      wind.connect(windGain);
-      wind.start();
-
-      // Fade in master first (safety), then layers
-      const now = ctx.currentTime;
-      master.gain.linearRampToValueAtTime(1.0, now + 0.4);
-      humGain.gain.linearRampToValueAtTime(0.22, now + 4.0);
-      windGain.gain.linearRampToValueAtTime(0.14, now + 4.5);
-
-      audioRef.current = { ctx, master, humOsc, humGain, wind, windGain };
-      setOn(true);
-    } catch {
-      // ignore if blocked
-    }
-  }
-
-  function stopAudio() {
-    if (!on || !audioRef.current) return;
-    const { ctx, master, humGain, windGain } = audioRef.current;
-    if (ctx && master && humGain && windGain) {
-      const now = ctx.currentTime;
-      humGain.gain.cancelScheduledValues(now);
-      windGain.gain.cancelScheduledValues(now);
-      humGain.gain.linearRampToValueAtTime(0, now + 0.8);
-      windGain.gain.linearRampToValueAtTime(0, now + 0.8);
-      master.gain.linearRampToValueAtTime(0, now + 0.9);
-      setTimeout(() => {
-        try { ctx.close(); } catch {}
-        audioRef.current = null;
-      }, 950);
-    }
-    setOn(false);
-  }
-
+/* -------------------------------------------------------
+   Main Page
+------------------------------------------------------- */
+function DaoWord({ className = "" }: { className?: string }) {
   return (
-    <button
-      type="button"
-      aria-pressed={on}
-      onClick={() => (on ? stopAudio() : startAudio())}
-      className={`fixed right-3 top-3 z-30 px-3 py-1.5 rounded-full text-[11px] border transition
-        ${on ? 'bg-amber-400 text-black border-transparent' : 'border-white/15 bg-white/5 text-slate-300 hover:bg-white/10'}`}
-    >
-      {on ? 'Flow Mode: ON' : 'Flow Mode: OFF'}
-    </button>
+    <a href="/faq#dao" className={`underline decoration-dotted underline-offset-2 ${className}`}>DAO</a>
   );
 }
 
-/** Main Page */
 export default function HomePage() {
   const mounted = useMounted();
   const [open, setOpen] = useState(false);
@@ -297,18 +349,14 @@ export default function HomePage() {
         <a className="hover:text-white" href="/blog">Blog</a>
         <a className="hover:text-white" href="/faq#dao">FAQ</a>
       </>
-    ),
-    []
-  );
+    ), []);
 
   return (
-    <main className="relative min-h-screen bg-black text-white">
-      {/* Background video + gradient (single lightweight mode) */}
-      <BackgroundVideo />
-      {/* CSS starfield floats above video for parallax sparkle */}
-      <ClientOnly>{mounted ? <Starfield /> : null}</ClientOnly>
-      {/* Audio toggle (wordless, optional) */}
-      <FlowModeToggle />
+    <main className="relative min-h-screen bg-black text-white overflow-hidden">
+      {/* Entry ritual + moving layers */}
+      <EntryPortal />
+      <ClientOnly>{mounted ? <MandalaCanvas /> : null}</ClientOnly>
+      <Starfield />
 
       {/* Header */}
       <header className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-16 pt-4 sm:pt-6 relative z-20">
@@ -321,12 +369,8 @@ export default function HomePage() {
               onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
             />
             <div className="leading-tight">
-              <p className="text-[16px] sm:text-sm font-bold tracking-wide text-white">
-                Gatishil Nepal
-              </p>
-              <p className="text-[11px] sm:text-[12px] text-slate-200/85">
-                <DaoWord /> · Guthi · Movement
-              </p>
+              <p className="text-[16px] sm:text-sm font-bold tracking-wide text-white">Gatishil Nepal</p>
+              <p className="text-[11px] sm:text-[12px] text-slate-200/85"><DaoWord /> · Guthi · Movement</p>
             </div>
           </a>
 
@@ -338,39 +382,22 @@ export default function HomePage() {
           {/* Desktop actions */}
           <div className="hidden md:flex items-center gap-2">
             <a href="/login" className="px-3 py-2 border border-white/10 rounded-lg text-xs hover:bg-white/5 transition">Login</a>
-            <motion.a
-              href="/join"
-              whileHover={{ scale: 1.03 }}
-              whileTap={{ scale: 0.98 }}
-              className="px-4 py-2 rounded-xl bg-amber-400 text-black font-semibold transition shadow-[0_0_30px_rgba(251,191,36,0.35)]"
-            >
+            <motion.a href="/join" whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.98 }}
+              className="px-4 py-2 rounded-xl bg-amber-400 text-black font-semibold transition shadow-[0_0_30px_rgba(251,191,36,0.35)]">
               Join
             </motion.a>
           </div>
 
-          {/* Mobile actions */}
+          {/* Mobile */}
           <div className="md:hidden flex items-center gap-2">
-            <a
-              href="/login"
-              className="px-3 py-1.5 border border-white/10 rounded-lg text-[11px] hover:bg-white/5 transition"
-            >
-              Login
-            </a>
-            <a
-              href="/join"
-              className="px-3 py-1.5 rounded-lg bg-amber-400 text-black font-semibold text-[11px]"
-            >
-              Join
-            </a>
+            <a href="/login" className="px-3 py-1.5 border border-white/10 rounded-lg text-[11px] hover:bg-white/5 transition">Login</a>
+            <a href="/join" className="px-3 py-1.5 rounded-lg bg-amber-400 text-black font-semibold text-[11px]">Join</a>
           </div>
 
-          {/* Mobile hamburger */}
+          {/* Hamburger */}
           <button
-            type="button"
-            aria-label="Open menu"
-            aria-controls="mobile-menu"
-            aria-expanded={open ? 'true' : 'false'}
-            onClick={() => setOpen((v) => !v)}
+            type="button" aria-label="Open menu" aria-controls="mobile-menu"
+            aria-expanded={open ? 'true' : 'false'} onClick={() => setOpen(v => !v)}
             className="md:hidden inline-flex items-center justify-center rounded-lg p-2 border border-white/10 hover:bg-white/5"
           >
             {!open ? (
@@ -386,12 +413,7 @@ export default function HomePage() {
         </div>
 
         {/* Mobile menu */}
-        <motion.div
-          id="mobile-menu"
-          initial={false}
-          animate={open ? { height: 'auto', opacity: 1 } : { height: 0, opacity: 0 }}
-          className="md:hidden overflow-hidden"
-        >
+        <motion.div id="mobile-menu" initial={false} animate={open ? { height: 'auto', opacity: 1 } : { height: 0, opacity: 0 }} className="md:hidden overflow-hidden">
           <div className="mt-3 rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl p-4 text-sm text-slate-300 space-y-3">
             <div className="grid grid-cols-2 gap-3">
               <NavLinks />
@@ -405,24 +427,13 @@ export default function HomePage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-16 grid lg:grid-cols-12 gap-8 items-start">
           {/* Left text */}
           <div className="lg:col-span-7">
-            <motion.span
-              className="inline-block text-[10px] uppercase tracking-widest text-amber-300/90 px-2 py-1 border border-amber-300/30 rounded-full bg-black/20"
-              {...fadeUp(0)}
-            >
+            <motion.span className="inline-block text-[10px] uppercase tracking-widest text-amber-300/90 px-2 py-1 border border-amber-300/30 rounded-full bg-black/20" {...fadeUp(0)}>
               GatishilNepal.org
             </motion.span>
 
-            <motion.h1
-              className="text-[28px] sm:text-4xl md:text-5xl font-extrabold leading-tight mt-3"
-              {...fadeUp(0.05)}
-            >
-              The <DaoWord className="bg-clip-text text-transparent bg-gradient-to-r from-amber-300 via-orange-400 to-rose-400" /> Party of the Powerless.
-            </motion.h1>
+            <TypewriterHeadline />
 
-            <motion.p
-              className="mt-4 text-slate-200/90 text-xl sm:text-2xl font-bold max-w-2xl"
-              {...fadeUp(0.1)}
-            >
+            <motion.p className="mt-4 text-slate-200/90 text-xl sm:text-2xl font-bold max-w-2xl" {...fadeUp(0.1)}>
               Service, Not Career. Community, Not Power.
             </motion.p>
 
@@ -431,21 +442,11 @@ export default function HomePage() {
               Live free without fear. Create together. Restore the flow. Rise as one.
             </motion.p>
 
-            {/* CTAs */}
             <div className="mt-6 flex gap-3 flex-col xs:flex-row">
-              <motion.a
-                href="/join"
-                whileHover={{ y: -2, boxShadow: '0 0 40px rgba(251,191,36,0.35)' }}
-                whileTap={{ scale: 0.98 }}
-                className="px-5 py-3 rounded-2xl bg-amber-400 text-black font-semibold text-center transition"
-                {...fadeUp(0.18)}
-              >
-                Join Us to Restore the Flow
-              </motion.a>
+              <LivingCTA href="/join" />
               <motion.a
                 href="#manifesto"
-                whileHover={{ y: -2 }}
-                whileTap={{ scale: 0.98 }}
+                whileHover={{ y: -2 }} whileTap={{ scale: 0.98 }}
                 className="px-5 py-3 rounded-2xl border border-white/15 text-sm hover:bg-white/5 transition text-center"
                 {...fadeUp(0.22)}
               >
@@ -456,17 +457,14 @@ export default function HomePage() {
             <motion.p className="text-[11px] text-slate-300 mt-3" {...fadeUp(0.24)}>
               By joining you agree to transparent, tamper-proof decisions.
             </motion.p>
+
+            <div className="mt-6 max-w-xl"><NamesMarquee /></div>
           </div>
 
           {/* Right: Daily Pulse */}
-          <motion.aside
-            className="lg:col-span-5 p-5 rounded-2xl border border-white/10 bg-black/30 backdrop-blur-xl shadow-[0_0_35px_rgba(255,255,255,0.05)]"
-            {...fadeUp(0.18)}
-          >
+          <motion.aside className="lg:col-span-5 p-5 rounded-2xl border border-white/10 bg-black/30 backdrop-blur-xl shadow-[0_0_35px_rgba(255,255,255,0.05)]" {...fadeUp(0.18)}>
             <h3 className="text-base sm:text-lg font-semibold">🫀 Daily Pulse</h3>
-            <p className="text-xs sm:text-sm text-slate-200/85 mt-1">
-              Gatishil moves every day — small decisions, big rhythm.
-            </p>
+            <p className="text-xs sm:text-sm text-slate-200/85 mt-1">Gatishil moves every day — small decisions, big rhythm.</p>
 
             <div className="mt-3 grid grid-cols-1 gap-3">
               <motion.div className="grid grid-cols-2 gap-3" {...fadeUp(0.22)}>
@@ -494,181 +492,77 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* MANIFESTO — 8 Blocks */}
+      {/* MANIFESTO */}
       <section className="relative z-10 py-10 sm:py-12">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-16">
-          <SectionTitle
-            id="manifesto"
-            kicker="Manifesto"
-            title="The Power of the Powerless"
-            subtitle="Eight vows to give Nepal back to its people."
-          />
+          <div id="manifesto" className="text-center max-w-3xl mx-auto mb-8 px-2">
+            <p className="uppercase tracking-widest text-[10px] text-amber-300/85">Manifesto</p>
+            <h2 className="text-2xl sm:text-3xl font-bold mt-2">The Power of the Powerless</h2>
+            <p className="text-sm sm:text-base text-slate-300/85 mt-3">Eight vows to give Nepal back to its people.</p>
+          </div>
 
           <div className="max-w-6xl mx-auto grid gap-4 sm:gap-6 md:grid-cols-2 lg:grid-cols-3">
-            {/* 1 Courage */}
-            <motion.div {...fadeUp(0.02)} className="p-5 sm:p-6 rounded-2xl bg-white/5 border border-white/10">
-              <h3 className="font-semibold text-base sm:text-lg flex items-center gap-2">
-                🔥 Courage — Awaken the Giant
-              </h3>
-              <ul className="mt-2 space-y-2 text-slate-200/85 text-sm">
-                <li>Stop accepting helplessness. Our strength is immense but sleeping.</li>
-                <li>• The elephant forgets its power when it believes the rope is unbreakable.</li>
-                <li>• The mightiest river begins as a forgotten spring.</li>
-                <li>• The system sells fear; we return to the flow.</li>
-              </ul>
-              <p className="mt-3 text-amber-200 text-xs sm:text-sm">🤔 Will we keep living as captives when we were born as giants?</p>
-            </motion.div>
-
-            {/* 2 Livelihood */}
-            <motion.div {...fadeUp(0.04)} className="p-5 sm:p-6 rounded-2xl bg-white/5 border border-white/10">
-              <h3 className="font-semibold text-base sm:text-lg flex items-center gap-2">
-                🌱 Livelihood — Root Our Economy
-              </h3>
-              <ul className="mt-2 space-y-2 text-slate-200/85 text-sm">
-                <li>True prosperity is self-reliance, not borrowed survival.</li>
-                <li>• You cannot build a house on borrowed bricks.</li>
-                <li>• Eat from your own harvest; no one can buy your hunger.</li>
-                <li>• Work is dignity; dependence is chains.</li>
-              </ul>
-              <p className="mt-3 text-amber-200 text-xs sm:text-sm">🤔 Why beg for bread when our earth still waits for seed?</p>
-            </motion.div>
-
-            {/* 3 Justice */}
-            <motion.div {...fadeUp(0.06)} className="p-5 sm:p-6 rounded-2xl bg-white/5 border border-white/10">
-              <h3 className="font-semibold text-base sm:text-lg flex items-center gap-2">
-                ⚖️ Justice — Truth Has No Master
-              </h3>
-              <ul className="mt-2 space-y-2 text-slate-200/85 text-sm">
-                <li>The law must be blind, especially to the powerful.</li>
-                <li>• If the fence eats the crops, who protects the field?</li>
-                <li>• The scale must be balanced, not for sale.</li>
-                <li>• Fairness is not charity; it is our birthright.</li>
-              </ul>
-              <p className="mt-3 text-amber-200 text-xs sm:text-sm">🤔 Who will guard the people if justice itself is sold?</p>
-            </motion.div>
-
-            {/* 4 Transparency */}
-            <motion.div {...fadeUp(0.08)} className="p-5 sm:p-6 rounded-2xl bg-white/5 border border-white/10">
-              <h3 className="font-semibold text-base sm:text-lg flex items-center gap-2">
-                🌍 Transparency — Light Belongs to All
-              </h3>
-              <ul className="mt-2 space-y-2 text-slate-200/85 text-sm">
-                <li>Every rupee should shine, every decision be seen.</li>
-                <li>• Darkness hides thieves; light protects the people.</li>
-                <li>• Muddy water hides fish; clear water builds trust.</li>
-                <li>• The sun never left, we just closed our eyes</li>
-              </ul>
-              <p className="mt-3 text-amber-200 text-xs sm:text-sm">🤔 A leader who fears light has already betrayed the people.</p>
-            </motion.div>
-
-            {/* 5 Solidarity */}
-            <motion.div {...fadeUp(0.1)} className="p-5 sm:p-6 rounded-2xl bg-white/5 border border-white/10">
-              <h3 className="text-lg font-semibold">🤝 Solidarity — Bundle the Sticks</h3>
-              <ul className="mt-2 space-y-2 text-slate-200/85 text-sm">
-                <li>Our unity is our only undeniable strength.</li>
-                <li>• One stick breaks; a bundle does not.</li>
-                <li>• One drum sounds hollow; many drums shake the earth.</li>
-                <li>• Alone we are prey; together we are thunder.</li>
-              </ul>
-              <p className="mt-3 text-amber-200 text-xs sm:text-sm">🤔 Why fight alone when together we can shake the sky?</p>
-            </motion.div>
-
-            {/* 6 Servitude */}
-            <motion.div {...fadeUp(0.12)} className="p-5 sm:p-6 rounded-2xl bg-white/5 border border-white/10">
-              <h3 className="text-lg font-semibold">🛠 Servitude — Eat After the People</h3>
-              <ul className="mt-2 space-y-2 text-slate-200/85 text-sm">
-                <li>Leadership is service, not reward. Politics is duty, not business.</li>
-                <li>• The true shepherd eats after the flock, not from it.</li>
-                <li>• Power is not ownership; it is responsibility.</li>
-                <li>• To serve is to see the divine in every citizen.</li>
-              </ul>
-              <p className="mt-3 text-amber-200 text-xs sm:text-sm">🤔 What kind of leader feasts while their people starve?</p>
-            </motion.div>
-
-            {/* 7 Culture */}
-            <motion.div {...fadeUp(0.14)} className="p-5 sm:p-6 rounded-2xl bg-white/5 border border-white/10">
-              <h3 className="text-lg font-semibold">🎶 Culture — Every Voice Sings</h3>
-              <ul className="mt-2 space-y-2 text-slate-200/85 text-sm">
-                <li>Many Rivers, One Flow — The United Soul of Nepal.</li>
-                <li>• Crafted by many, mastered by none.</li>
-                <li>• We are not a solo; we are a chorus.</li>
-                <li>• Diversity is our strength — many notes, one harmony.</li>
-              </ul>
-              <p className="mt-3 text-amber-200 text-xs sm:text-sm">🤔 What happens to a nation when it forgets its own tune?</p>
-            </motion.div>
-
-            {/* 8 Freedom */}
-            <motion.div {...fadeUp(0.16)} className="p-5 sm:p-6 rounded-2xl bg-white/5 border border-white/10">
-              <h3 className="text-lg font-semibold">❤️ Freedom — Remember the Sky</h3>
-              <ul className="mt-2 space-y-2 text-slate-200/85 text-sm">
-                <li>Freedom is our natural state; we’ve just forgotten its taste.</li>
-                <li>• The throne survives only if we keep bowing.</li>
-                <li>• A bird in a cage forgets the sky until it flies.</li>
-                <li>• Freedom is not a privilege; it is the air we breathe.</li>
-              </ul>
-              <p className="mt-3 text-amber-200 text-xs sm:text-sm">🤔 Why beg for light while standing under the sun?</p>
-            </motion.div>
+            {[
+              ['🔥 Courage — Awaken the Giant', [
+                'Stop accepting helplessness. Our strength is immense but sleeping.',
+                '• The elephant forgets its power when it believes the rope is unbreakable.',
+                '• The mightiest river begins as a forgotten spring.',
+                '• The system sells fear; we return to the flow.',
+              ]],
+              ['🌱 Livelihood — Root Our Economy', [
+                'True prosperity is self-reliance, not borrowed survival.',
+                '• You cannot build a house on borrowed bricks.',
+                '• Eat from your own harvest; no one can buy your hunger.',
+                '• Work is dignity; dependence is chains.',
+              ]],
+              ['⚖️ Justice — Truth Has No Master', [
+                'The law must be blind, especially to the powerful.',
+                '• If the fence eats the crops, who protects the field?',
+                '• The scale must be balanced, not for sale.',
+                '• Fairness is not charity; it is our birthright.',
+              ]],
+              ['🌍 Transparency — Light Belongs to All', [
+                'Every rupee should shine, every decision be seen.',
+                '• Darkness hides thieves; light protects the people.',
+                '• Muddy water hides fish; clear water builds trust.',
+                '• The sun never left, we just closed our eyes',
+              ]],
+              ['🤝 Solidarity — Bundle the Sticks', [
+                'Our unity is our only undeniable strength.',
+                '• One stick breaks; a bundle does not.',
+                '• One drum sounds hollow; many drums shake the earth.',
+                '• Alone we are prey; together we are thunder.',
+              ]],
+              ['🛠 Servitude — Eat After the People', [
+                'Leadership is service, not reward. Politics is duty, not business.',
+                '• The true shepherd eats after the flock, not from it.',
+                '• Power is not ownership; it is responsibility.',
+                '• To serve is to see the divine in every citizen.',
+              ]],
+              ['🎶 Culture — Every Voice Sings', [
+                'Many Rivers, One Flow — The United Soul of Nepal.',
+                '• Crafted by many, mastered by none.',
+                '• We are not a solo; we are a chorus.',
+                '• Diversity is our strength — many notes, one harmony.',
+              ]],
+              ['❤️ Freedom — Remember the Sky', [
+                'Freedom is our natural state; we’ve just forgotten its taste.',
+                '• The throne survives only if we keep bowing.',
+                '• A bird in a cage forgets the sky until it flies.',
+                '• Freedom is not a privilege; it is the air we breathe.',
+              ]],
+            ].map(([title, lines], i) => (
+              <motion.div key={String(i)} {...fadeUp(0.02 + i * 0.02)} className="p-5 sm:p-6 rounded-2xl bg-white/5 border border-white/10">
+                <h3 className="font-semibold text-base sm:text-lg">{title as string}</h3>
+                <ul className="mt-2 space-y-2 text-slate-200/85 text-sm">
+                  {(lines as string[]).map((line, j) => (<li key={j}>{line}</li>))}
+                </ul>
+              </motion.div>
+            ))}
           </div>
 
           <p className="mt-8 text-center text-[16px] text-slate-300">
             Keep your vows in your heart, but navigate the world with your eyes wide open to its realities.
-          </p>
-        </div>
-      </section>
-
-      {/* FOUR STONES */}
-      <section className="relative z-10 pb-10 sm:pb-14">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-16">
-          <SectionTitle
-            kicker="Foundations"
-            title="Four Stones, One River"
-            subtitle="The path where democracy flows, not stagnates."
-          />
-
-          <div className="max-w-5xl mx-auto grid gap-4 sm:gap-6 sm:grid-cols-2">
-            <motion.div {...fadeUp(0.02)} className="p-5 sm:p-6 rounded-2xl bg-white/5 border border-white/10">
-              <h3 className="text-lg font-semibold">🗳 Tech-Forward Campaigns</h3>
-              <p className="mt-2 text-slate-200/85 text-sm">
-                <span className="font-semibold">Your Voice, Coded in Trust.</span> Like dropping your vote in a box everyone can see, but no one can steal.
-              </p>
-              <p className="mt-2 text-amber-300 text-sm font-medium">
-                The new chauṭarī is not a stage, it’s a shared ledger of trust.
-              </p>
-            </motion.div>
-
-            <motion.div {...fadeUp(0.04)} className="p-5 sm:p-6 rounded-2xl bg-white/5 border border-white/10">
-              <h3 className="text-lg font-semibold">💰 Anti-Corruption</h3>
-              <p className="mt-2 text-slate-200/85 text-sm">
-                <span className="font-semibold">Every Rupee Tracked. Every Promise Coded.</span> Like grain in a clear jar — all can see, none can steal.
-              </p>
-              <p className="mt-2 text-amber-300 text-sm font-medium">
-                Transparency is the new revolution; sunlight, our policy.
-              </p>
-            </motion.div>
-
-            <motion.div {...fadeUp(0.06)} className="p-5 sm:p-6 rounded-2xl bg-white/5 border border-white/10">
-              <h3 className="text-lg font-semibold">🌱 Grassroots Mobilization</h3>
-              <p className="mt-2 text-slate-200/85 text-sm">
-                <span className="font-semibold">The Party is You. The Mandate is Ours.</span> Like a shared khet where every farmer plants, no harvest unless all work.
-              </p>
-              <p className="mt-2 text-amber-300 text-sm font-medium">
-                This is not representation, this is participation.
-              </p>
-            </motion.div>
-
-            <motion.div {...fadeUp(0.08)} className="p-5 sm:p-6 rounded-2xl bg-white/5 border border-white/10">
-              <h3 className="text-lg font-semibold">📜 Philosophical Foundation</h3>
-              <p className="mt-2 text-slate-200/85 text-sm">
-                <span className="font-semibold">The People’s Code. The Nation’s Flow.</span> Like ancient guthi rules, but written in code — fair, tamper-proof, shared by all.
-              </p>
-              <p className="mt-2 text-amber-300 text-sm font-medium">
-                From Guthi to DAO — the wisdom is old, the tool is new, the flow eternal.
-              </p>
-            </motion.div>
-          </div>
-
-          <p className="mt-8 text-center text-[16px] text-slate-300">
-            A prince must combine the qualities of a lion and a fox.
           </p>
         </div>
       </section>
