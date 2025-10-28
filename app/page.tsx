@@ -4,14 +4,6 @@ import { motion, useScroll, useTransform } from 'framer-motion';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import ClientOnly from '@/components/ClientOnly';
 
-/** -----------------------------
- * Lightweight Philosophy
- * - One mode only (≤ 1000 KB budget)
- * - Visual core = 480p .webm loop + CSS starfield (no Three.js)
- * - Audio is wordless, optional, and lazy-loaded on click
- * - Everything works without audio or JS (progressive)
- * ------------------------------*/
-
 /** util: run code only after React mounts (prevents hydration mismatch) */
 function useMounted() {
   const [mounted, setMounted] = useState(false);
@@ -53,7 +45,7 @@ function DaoWord({ className = "" }: { className?: string }) {
       <span
         id="dao-tooltip"
         role="tooltip"
-        className="pointer-events-none absolute left-0 top-[125%] w-[280px] sm:w-[320px] rounded-xl border border-white/15 bg-zinc-900/95 px-3 py-3 text-[11px] text-slate-200 shadow-2xl opacity-0 translate-y-1 group-hover:opacity-100 group-hover:translate-y-0 group-focus:opacity-100 group-focus:translate-y-0 transition"
+        className="pointer-events-none absolute left-0 top-[125%] w-[280px] sm:w-[320px] rounded-xl border border-white/15 bg-zinc-900/95 px-3 py-3 text-[11px] text-slate-200 shadow-2xl opacity-0 translate-y-1 group-hover:opacity-100 group-focus:opacity-100 group-focus:translate-y-0 transition"
       >
         <span className="block text-[11px] font-semibold text-amber-300">
           DAO = Decentralized Autonomous Organization
@@ -79,7 +71,7 @@ function SectionTitle(props: { id?: string; kicker?: string; title: string; subt
   );
 }
 
-/** Subtle starfield that fades in on scroll (pure CSS, ~0 KB runtime) */
+/** Subtle starfield that fades in on scroll (pure CSS) */
 function Starfield() {
   const { scrollYProgress } = useScroll();
   const opacity = useTransform(scrollYProgress, [0, 0.3], [0, 1]);
@@ -146,7 +138,6 @@ function BackgroundVideo({
     if (reduced) {
       try { v.pause(); } catch {}
     } else {
-      // attempt play; some browsers require user gesture to start muted loop but we try
       const p = v.play();
       if (p?.catch) p.catch(() => {/* ignore autoplay block; poster still shows */});
     }
@@ -165,7 +156,6 @@ function BackgroundVideo({
         poster={poster}
       >
         <source src={src} type="video/webm" />
-        {/* Optional mp4 fall-back if you have it: <source src="/hero-lite.mp4" type="video/mp4" /> */}
       </video>
       {/* subtle animated gradient under video for depth */}
       <div className="absolute inset-0 opacity-[0.18] animated-bg" />
@@ -185,44 +175,102 @@ function BackgroundVideo({
   );
 }
 
-/** Wordless audio toggle (lazy-loads Howler and .ogg only after click) */
+/** Wordless audio toggle using Web Audio API (no deps) */
 function FlowModeToggle() {
   const [on, setOn] = useState(false);
-  const howlsRef = useRef<{ hum?: any; wind?: any } | null>(null);
+  const audioRef = useRef<{
+    ctx?: AudioContext,
+    master?: GainNode,
+    humOsc?: OscillatorNode,
+    humGain?: GainNode,
+    wind?: AudioBufferSourceNode,
+    windGain?: GainNode
+  } | null>(null);
 
-  const enable = async () => {
+  async function startAudio() {
     if (on) return;
     try {
-      const { Howl } = await import('howler'); // ~8 KB gz
-      // NOTE: keep files tiny; target total ≤ 600 KB combined
-      const hum = new Howl({ src: ['/audio/hum.ogg'], loop: true, volume: 0 });
-      const wind = new Howl({ src: ['/audio/wind.ogg'], loop: true, volume: 0 });
-      hum.play(); wind.play();
-      hum.fade(0, 0.22, 4000);
-      wind.fade(0, 0.14, 4500);
-      howlsRef.current = { hum, wind };
+      const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const master = ctx.createGain();
+      master.gain.value = 0.0;
+      master.connect(ctx.destination);
+
+      // HUM: sine ~110Hz with gentle LFO to avoid stasis
+      const humOsc = ctx.createOscillator();
+      humOsc.type = 'sine';
+      humOsc.frequency.value = 110;
+
+      const humGain = ctx.createGain();
+      humGain.gain.value = 0.0;
+
+      // tiny LFO to modulate amplitude slowly
+      const lfo = ctx.createOscillator();
+      lfo.type = 'sine';
+      lfo.frequency.value = 0.05; // 0.05 Hz = 20s cycle
+      const lfoGain = ctx.createGain();
+      lfoGain.gain.value = 0.08;  // modulation depth
+      lfo.connect(lfoGain).connect(humGain.gain);
+
+      humOsc.connect(humGain).connect(master);
+      humOsc.start();
+      lfo.start();
+
+      // WIND: soft brown noise buffer
+      const windGain = ctx.createGain();
+      windGain.gain.value = 0.0;
+      windGain.connect(master);
+
+      const buffer = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
+      const data = buffer.getChannelData(0);
+      let lastOut = 0.0; // Brownian noise
+      for (let i = 0; i < data.length; i++) {
+        const white = Math.random() * 2 - 1;
+        // Brown noise formula
+        lastOut = (lastOut + 0.02 * white) / 1.02;
+        data[i] = lastOut * 0.4;
+      }
+      const wind = ctx.createBufferSource();
+      wind.buffer = buffer;
+      wind.loop = true;
+      wind.connect(windGain);
+      wind.start();
+
+      // Fade in master first (safety), then layers
+      const now = ctx.currentTime;
+      master.gain.linearRampToValueAtTime(1.0, now + 0.4);
+      humGain.gain.linearRampToValueAtTime(0.22, now + 4.0);
+      windGain.gain.linearRampToValueAtTime(0.14, now + 4.5);
+
+      audioRef.current = { ctx, master, humOsc, humGain, wind, windGain };
       setOn(true);
     } catch {
-      // ignore if user is offline or assets missing
+      // ignore if blocked
     }
-  };
+  }
 
-  const disable = () => {
-    if (!on) return;
-    const { hum, wind } = howlsRef.current || {};
-    try {
-      hum?.fade(hum.volume(), 0, 800);
-      wind?.fade(wind.volume(), 0, 800);
-      setTimeout(() => { hum?.stop(); wind?.stop(); }, 900);
-    } catch {}
+  function stopAudio() {
+    if (!on || !audioRef.current) return;
+    const { ctx, master, humGain, windGain } = audioRef.current;
+    if (ctx && master && humGain && windGain) {
+      const now = ctx.currentTime;
+      humGain.gain.cancelScheduledValues(now);
+      windGain.gain.cancelScheduledValues(now);
+      humGain.gain.linearRampToValueAtTime(0, now + 0.8);
+      windGain.gain.linearRampToValueAtTime(0, now + 0.8);
+      master.gain.linearRampToValueAtTime(0, now + 0.9);
+      setTimeout(() => {
+        try { ctx.close(); } catch {}
+        audioRef.current = null;
+      }, 950);
+    }
     setOn(false);
-  };
+  }
 
   return (
     <button
       type="button"
       aria-pressed={on}
-      onClick={() => (on ? disable() : enable())}
+      onClick={() => (on ? stopAudio() : startAudio())}
       className={`fixed right-3 top-3 z-30 px-3 py-1.5 rounded-full text-[11px] border transition
         ${on ? 'bg-amber-400 text-black border-transparent' : 'border-white/15 bg-white/5 text-slate-300 hover:bg-white/10'}`}
     >
