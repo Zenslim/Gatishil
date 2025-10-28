@@ -1,4 +1,4 @@
-'use client';
+\'use client\';
 
 import { motion } from 'framer-motion';
 import Link from 'next/link';
@@ -8,13 +8,6 @@ import CTAOrb from '@/components/CTAOrb';
 import AudioFlowToggle from '@/components/AudioFlowToggle';
 import LowMotionToggle from '@/components/LowMotionToggle';
 
-/**
- * Immersive homepage:
- * - Fullscreen Three.js "Rebirth Mandal" hero (R3F Canvas via dynamic import to avoid SSR)
- * - Wordless audio (hum/wind) is opt-in via "Flow Mode" toggle
- * - CTA transitions to Chauṭarī: /join?onboarding=1
- * - Below the hero, the existing manifesto/sections can remain or be restored later
- */
 const RebirthScene = dynamic(() => import('@/components/RebirthScene'), { ssr: false });
 
 export default function HomePage() {
@@ -23,18 +16,14 @@ export default function HomePage() {
 
   return (
     <main className="relative min-h-screen bg-black text-white overflow-x-clip">
-      {/* Top-right controls */}
       <div className="pointer-events-auto fixed z-40 top-4 right-4 flex items-center gap-2">
         <AudioFlowToggle />
         <LowMotionToggle />
       </div>
 
-      {/* Immersive hero */}
       <section className="relative h-[100dvh] w-full">
-        {/* Three.js background */}
         <RebirthScene />
 
-        {/* Overlay copy (minimal, fades) */}
         <div className="pointer-events-none absolute inset-0 z-30 flex flex-col items-center justify-center text-center px-4">
           <motion.p
             initial={{ opacity: 0, y: 8 }}
@@ -63,12 +52,10 @@ export default function HomePage() {
             Democracy that flows — not stagnates.
           </motion.p>
 
-          {/* CTA */}
           <div className="pointer-events-auto mt-8">
             <CTAOrb href="/join?onboarding=1" label="Sit under the Tree" />
           </div>
 
-          {/* Secondary links (optional) */}
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 0.8 }}
@@ -84,11 +71,9 @@ export default function HomePage() {
           </motion.div>
         </div>
 
-        {/* Gradient wash (very subtle) */}
         <div className="pointer-events-none absolute inset-0 z-10 opacity-[0.08] animated-bg" />
       </section>
 
-      {/* Footer (minimal for now) */}
       <footer className="relative z-20 py-10 text-sm text-slate-300">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-16">
           <div className="flex flex-col items-center gap-2">
@@ -98,7 +83,6 @@ export default function HomePage() {
         </div>
       </footer>
 
-      {/* Local styles (animated gradient background) */}
       <style jsx global>{`
         .animated-bg {
           background: linear-gradient(270deg, #fbbf24, #ec4899, #8b5cf6, #fbbf24);

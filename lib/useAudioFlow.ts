@@ -1,6 +1,5 @@
-'use client';
+\'use client\';
 import { useEffect, useRef, useState } from 'react';
-// Howler is lightweight and mobile-friendly for looped ambient audio
 let Howl: any;
 let Howler: any;
 
@@ -11,7 +10,6 @@ export function useAudioFlow() {
   const windRef = useRef<any>(null);
 
   useEffect(() => {
-    // Lazy-load howler client-side
     (async () => {
       try {
         const mod = await import('howler');
@@ -27,7 +25,6 @@ export function useAudioFlow() {
   useEffect(() => {
     if (!Howl) return;
     if (enabled) {
-      // Initialize if not yet
       if (!humRef.current) {
         humRef.current = new Howl({ src: ['/audio/flow-hum.ogg'], loop: true, volume: 0 });
       }
@@ -39,7 +36,6 @@ export function useAudioFlow() {
       humRef.current.fade(0, 0.25, 4000);
       windRef.current.fade(0, 0.15, 5000);
     } else {
-      // Fade out then stop to save battery
       [humRef.current, windRef.current].forEach((s) => {
         try {
           if (s && s.playing()) {
