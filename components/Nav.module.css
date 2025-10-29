@@ -3,92 +3,62 @@
   position: sticky;
   top: 0;
   z-index: 50;
-  background: rgba(0,0,0,0.6);
-  backdrop-filter: blur(10px);
-  border-bottom: 1px solid rgba(255,255,255,0.08);
+  backdrop-filter: blur(8px);
+  background: rgba(0,0,0,0.7);
+  border-bottom: 1px solid rgba(255,255,255,0.06);
 }
-
 .bar {
-  max-width: 1100px;
+  max-width: 1200px;
   margin: 0 auto;
-  padding: 14px 20px;
   display: flex;
   align-items: center;
   justify-content: space-between;
+  padding: 10px 16px;
 }
-
-.brand {
-  font-weight: 900;
-  letter-spacing: 0.3px;
-  text-decoration: none;
+.brand { color: #fff; text-decoration: none; }
+.actions { display: inline-flex; align-items: center; gap: 10px; }
+.localeBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  border: 1px solid rgba(255,255,255,0.15);
+  padding: 4px 8px;
+  background: transparent;
   color: #fff;
 }
+.flagImg { display: block; width: 26px; height: 26px; object-fit: contain; }
+.enBadge { font-weight: 700; letter-spacing: 0.4px; }
+.iconBtn { display: inline-flex; align-items: center; justify-content: center; }
 
-.navDesktop {
-  display: none;
-  gap: 14px;
-}
-
-.link {
-  color: #cfe9ff;
-  text-decoration: none;
-  padding: 8px 10px;
-  border-radius: 10px;
-  border: 1px solid transparent;
-}
-.link:hover {
-  border-color: rgba(255,255,255,0.1);
-  background: rgba(255,255,255,0.04);
-}
-
+/* Hamburger is ALWAYS visible (desktop & mobile) */
 .burger {
-  display: inline-flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 10px;
-  border-radius: 10px;
+  display: inline-flex !important;
+  width: 42px; height: 36px;
+  align-items: center; justify-content: center;
+  border-radius: 12px;
   background: rgba(255,255,255,0.06);
   border: 1px solid rgba(255,255,255,0.12);
-  cursor: pointer;
 }
-.burger:focus-visible {
-  outline: 2px solid #9bd6ff;
-  outline-offset: 2px;
-}
-.burgerBar {
-  width: 22px;
-  height: 2px;
-  background: #fff;
-  display: block;
-  border-radius: 2px;
-}
+.burgerBar { display: block; width: 20px; height: 2px; background: #fff; border-radius: 2px; }
+.burgerBar + .burgerBar { margin-top: 4px; }
 
-/* Mobile drawer */
-.navMobile {
-  display: none;
-  flex-direction: column;
-  gap: 6px;
-  max-width: 1100px;
-  margin: 0 auto;
-  padding: 8px 20px 16px;
+/* Drawer works on desktop too */
+.drawer { position: fixed; inset: 0; pointer-events: none; }
+.drawer.open { pointer-events: auto; }
+.backdrop { position: absolute; inset: 0; background: rgba(0,0,0,0.45); }
+.drawerBody {
+  position: absolute; top: 0; right: 0;
+  width: min(92vw, 360px); height: 100%;
+  background: rgba(12,12,12,0.98);
+  border-left: 1px solid rgba(255,255,255,0.08);
+  transform: translateX(100%);
+  transition: transform 220ms ease;
+  padding: 14px;
+  display: flex; flex-direction: column; gap: 2px;
 }
-.mobileLink {
-  color: #fff;
-  text-decoration: none;
-  padding: 12px 12px;
-  border-radius: 12px;
-  background: linear-gradient(180deg,#0f172a,#0b1222);
-  border: 1px solid #1f2a44;
-}
-
-/* Responsive: show desktop links ≥ 900px, else burger+drawer */
-@media (min-width: 900px) {
-  .navDesktop { display: flex; }
-  .burger { display: none; }
-  .navMobile { display: none !important; }
-}
-
-/* When open on mobile */
-.open {
-  display: flex;
-}
+.drawer.open .drawerBody { transform: translateX(0); }
+.drawerLink { color: #ddd; text-decoration: none; padding: 10px 8px; border-radius: 8px; }
+.drawerLink:hover { background: rgba(255,255,255,0.06); color: #fff; }
+.drawerDivider { height: 1px; background: rgba(255,255,255,0.08); margin: 10px 0; }
+.drawerRow { display: flex; align-items: center; justify-content: space-between; color: #bbb; padding: 8px 4px; }
