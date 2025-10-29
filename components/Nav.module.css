@@ -1,139 +1,60 @@
 /* components/Nav.module.css */
 
-/* Header */
-.header {
-  position: sticky;
-  top: 0;
-  z-index: 40;
-  background: rgba(0,0,0,0.55);
-  -webkit-backdrop-filter: blur(8px);
-  backdrop-filter: blur(8px);
-  border-bottom: 1px solid rgba(255,255,255,0.06);
-}
-.bar {
-  max-width: 1200px;
-  margin: 0 auto;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 10px 16px;
-  min-height: 56px;
-}
+.header{position:sticky;top:0;z-index:40;background:rgba(0,0,0,.55);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);border-bottom:1px solid rgba(255,255,255,.06)}
+.bar{max-width:1200px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;padding:10px 16px;min-height:56px}
 
-.brand { color: #fff; text-decoration: none; }
-.brandRow { display: flex; align-items: center; gap: 10px; }
-.brandText { line-height: 1; }
-.brandTitle { font-weight: 700; }
-.brandSub { font-size: 12px; opacity: 0.8; }
+.brand{color:#fff;text-decoration:none}
+.brandRow{display:flex;align-items:center;gap:10px}
+.brandText{line-height:1}
+.brandTitle{font-weight:700}
+.brandSub{font-size:12px;opacity:.8}
 
-.actions { display: inline-flex; align-items: center; gap: 12px; }
+.actions{display:inline-flex;align-items:center;gap:12px}
 
-/* ——— Borderless controls (flag / EN / profile / hamburger) ——— */
-.localeBtn,
-.iconBtn,
-.burger {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: transparent;   /* ← no grey pill */
-  border: 0;                 /* ← no outline */
-  padding: 0;
-  margin: 0;
-  border-radius: 12px;       /* only to clip focus ring */
+/* Borderless controls (flag / EN / profile / burger) */
+.localeBtn,.iconBtn,.burger{
+  display:inline-flex;align-items:center;justify-content:center;
+  background:transparent;border:0;padding:0;margin:0;border-radius:12px /* for focus ring clipping */
 }
-.localeBtn:focus-visible,
-.iconBtn:focus-visible,
-.burger:focus-visible {
-  outline: 2px solid rgba(255,255,255,0.5);
-  outline-offset: 2px;
-}
-
-.flagImg { width: 26px; height: 18px; object-fit: contain; display: block; }
-.enBadge { font-weight: 700; letter-spacing: 0.4px; color: #fff; }
+.localeBtn:focus-visible,.iconBtn:focus-visible,.burger:focus-visible{outline:2px solid rgba(255,255,255,.55);outline-offset:2px}
+.flagImg{width:26px;height:18px;object-fit:contain;display:block}
+.enBadge{font-weight:700;letter-spacing:.4px;color:#fff}
 
 /* Hamburger */
-.burger { width: 42px; height: 36px; }
-.burgerInner { display: grid; grid-auto-rows: 2px; row-gap: 4px; }
-.burgerBar { width: 20px; height: 2px; background: #fff; border-radius: 2px; transform: translateZ(0); }
+.burger{width:42px;height:36px}
+.burgerInner{display:grid;grid-auto-rows:2px;row-gap:4px}
+.burgerBar{width:20px;height:2px;background:#fff;border-radius:2px;transform:translateZ(0)}
 
-/* ——— Full-screen drawer ——— */
-.drawer {
-  position: fixed; inset: 0;
-  z-index: 9999;
-  visibility: hidden;            /* default closed */
-  isolation: isolate;
+/* Drawer (portaled to <body>) */
+.drawer{
+  position:fixed;inset:0;z-index:9999;
+  visibility:hidden;pointer-events:none;isolation:isolate;
 }
+.isOpen{visibility:visible;pointer-events:auto}
 
-/* IMPORTANT: the JS adds a PLAIN 'open' class.
-   In CSS Modules we must target it as GLOBAL. */
-:global(.open).drawer {          /* acts like .drawer.open */
-  visibility: visible;
+.backdrop{position:absolute;inset:0;background:rgba(0,0,0,.65);opacity:0;transition:opacity .2s ease}
+.isOpen .backdrop{opacity:1}
+
+.panel{
+  position:absolute;inset:0;background:#0b0b0c;color:#f2f2f2;
+  transform:translateY(-6%);opacity:0;transition:transform .22s ease,opacity .22s ease;
+  display:flex;flex-direction:column;padding:12px 16px 24px;overflow-y:auto
 }
+.isOpen .panel{transform:translateY(0);opacity:1}
 
-.backdrop {
-  position: absolute; inset: 0;
-  background: rgba(0,0,0,0.65);
-  opacity: 0;
-  transition: opacity 200ms ease;
-}
-:global(.open) .backdrop { opacity: 1; }
+.panelHead{display:flex;align-items:center;justify-content:space-between;padding:8px 4px 12px;border-bottom:1px solid rgba(255,255,255,.12)}
+.panelTitle{font-size:16px;font-weight:700}
+.closeBtn{display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:12px;background:rgba(255,255,255,.06);border:0;color:#fff}
 
-.panel {
-  position: absolute; inset: 0;
-  background: #0b0b0c;           /* solid panel so items don’t show through */
-  color: #f2f2f2;
-  transform: translateY(-6%);
-  opacity: 0;
-  transition: transform 220ms ease, opacity 220ms ease;
-  display: flex; flex-direction: column;
-  padding: 12px 16px 24px;
-  overflow-y: auto;
-}
-:global(.open) .panel { transform: translateY(0); opacity: 1; }
+.list{padding:8px 2px;display:grid;gap:6px}
+.link{display:flex;align-items:center;gap:10px;color:#e6e6e6;text-decoration:none;padding:12px 10px;border-radius:10px}
+.link:hover{background:rgba(255,255,255,.08);color:#fff}
+.icon{width:18px;height:18px;display:inline-block;line-height:0;opacity:.9}
 
-.panelHead {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 8px 4px 12px;
-  border-bottom: 1px solid rgba(255,255,255,0.12);
-}
-.panelTitle { font-size: 16px; font-weight: 700; }
+.group{margin-top:6px;border:1px solid rgba(255,255,255,.12);border-radius:12px;overflow:hidden}
+.group summary{cursor:pointer;display:flex;align-items:center;gap:10px;padding:12px 12px;color:#fff;background:rgba(255,255,255,.04);font-weight:600;list-style:none}
+.group summary::-webkit-details-marker{display:none}
+.groupInner{padding:6px;display:grid;gap:4px}
 
-.closeBtn {
-  display: inline-flex; align-items: center; justify-content: center;
-  width: 36px; height: 36px;
-  border-radius: 12px;
-  background: rgba(255,255,255,0.06);
-  border: 0;
-  color: #fff;
-}
-
-.list { padding: 8px 2px; display: grid; gap: 6px; }
-
-.link {
-  display: flex; align-items: center; gap: 10px;
-  color: #e6e6e6; text-decoration: none;
-  padding: 12px 10px; border-radius: 10px;
-}
-.link:hover { background: rgba(255,255,255,0.08); color: #fff; }
-
-.icon { width: 18px; height: 18px; display: inline-block; line-height: 0; opacity: .9; }
-
-.group {
-  margin-top: 6px;
-  border: 1px solid rgba(255,255,255,0.12);
-  border-radius: 12px;
-  overflow: hidden;
-}
-.group summary {
-  cursor: pointer;
-  display: flex; align-items: center; gap: 10px;
-  padding: 12px 12px;
-  color: #fff; background: rgba(255,255,255,0.04);
-  font-weight: 600;
-  list-style: none;
-}
-.group summary::-webkit-details-marker { display: none; }
-.groupInner { padding: 6px; display: grid; gap: 4px; }
-
-.footerRow { margin-top: 12px; display: flex; align-items: center; justify-content: space-between; color: #cfcfcf; }
-.divider { height: 1px; background: rgba(255,255,255,0.12); margin: 10px 0; }
+.footerRow{margin-top:12px;display:flex;align-items:center;justify-content:space-between;color:#cfcfcf}
+.divider{height:1px;background:rgba(255,255,255,.12);margin:10px 0}
