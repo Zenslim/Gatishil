@@ -19,59 +19,68 @@
   padding: 10px 16px;
   min-height: 56px;
 }
+
 .brand { color: #fff; text-decoration: none; }
 .brandRow { display: flex; align-items: center; gap: 10px; }
 .brandText { line-height: 1; }
 .brandTitle { font-weight: 700; }
 .brandSub { font-size: 12px; opacity: 0.8; }
 
-.actions { display: inline-flex; align-items: center; gap: 10px; }
+.actions { display: inline-flex; align-items: center; gap: 12px; }
 
-/* Locale button */
-.localeBtn {
-  display: inline-flex; align-items: center; justify-content: center;
-  border-radius: 9999px;
-  border: 1px solid rgba(255,255,255,0.18);
-  padding: 4px 8px;
-  background: rgba(255,255,255,0.06);
-  color: #fff;
-  line-height: 0;
-}
-.flagImg { width: 26px; height: 18px; object-fit: contain; display: block; }
-.enBadge { font-weight: 700; letter-spacing: 0.4px; }
-
-/* Burger */
+/* ——— Borderless controls (flag / EN / profile / hamburger) ——— */
+.localeBtn,
+.iconBtn,
 .burger {
-  display: inline-flex !important;
-  width: 42px; height: 36px;
-  align-items: center; justify-content: center;
-  border-radius: 12px;
-  background: rgba(255,255,255,0.10);
-  border: 1px solid rgba(255,255,255,0.18);
-  line-height: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;   /* ← no grey pill */
+  border: 0;                 /* ← no outline */
   padding: 0;
+  margin: 0;
+  border-radius: 12px;       /* only to clip focus ring */
 }
+.localeBtn:focus-visible,
+.iconBtn:focus-visible,
+.burger:focus-visible {
+  outline: 2px solid rgba(255,255,255,0.5);
+  outline-offset: 2px;
+}
+
+.flagImg { width: 26px; height: 18px; object-fit: contain; display: block; }
+.enBadge { font-weight: 700; letter-spacing: 0.4px; color: #fff; }
+
+/* Hamburger */
+.burger { width: 42px; height: 36px; }
 .burgerInner { display: grid; grid-auto-rows: 2px; row-gap: 4px; }
 .burgerBar { width: 20px; height: 2px; background: #fff; border-radius: 2px; transform: translateZ(0); }
 
-/* Full-screen Drawer */
+/* ——— Full-screen drawer ——— */
 .drawer {
   position: fixed; inset: 0;
   z-index: 9999;
-  visibility: hidden;
+  visibility: hidden;            /* default closed */
   isolation: isolate;
 }
-.drawer.open { visibility: visible; }
+
+/* IMPORTANT: the JS adds a PLAIN 'open' class.
+   In CSS Modules we must target it as GLOBAL. */
+:global(.open).drawer {          /* acts like .drawer.open */
+  visibility: visible;
+}
+
 .backdrop {
   position: absolute; inset: 0;
   background: rgba(0,0,0,0.65);
-  opacity: 0; transition: opacity 200ms ease;
+  opacity: 0;
+  transition: opacity 200ms ease;
 }
-.drawer.open .backdrop { opacity: 1; }
+:global(.open) .backdrop { opacity: 1; }
 
 .panel {
-  position: absolute; inset: 0;        /* full-screen panel */
-  background: #0b0b0c;                 /* opaque */
+  position: absolute; inset: 0;
+  background: #0b0b0c;           /* solid panel so items don’t show through */
   color: #f2f2f2;
   transform: translateY(-6%);
   opacity: 0;
@@ -80,7 +89,7 @@
   padding: 12px 16px 24px;
   overflow-y: auto;
 }
-.drawer.open .panel { transform: translateY(0); opacity: 1; }
+:global(.open) .panel { transform: translateY(0); opacity: 1; }
 
 .panelHead {
   display: flex; align-items: center; justify-content: space-between;
@@ -93,8 +102,9 @@
   display: inline-flex; align-items: center; justify-content: center;
   width: 36px; height: 36px;
   border-radius: 12px;
-  background: rgba(255,255,255,0.08);
-  border: 1px solid rgba(255,255,255,0.18);
+  background: rgba(255,255,255,0.06);
+  border: 0;
+  color: #fff;
 }
 
 .list { padding: 8px 2px; display: grid; gap: 6px; }
@@ -106,12 +116,8 @@
 }
 .link:hover { background: rgba(255,255,255,0.08); color: #fff; }
 
-.icon {
-  width: 18px; height: 18px; display: inline-block; line-height: 0; flex: 0 0 auto;
-  opacity: .9;
-}
+.icon { width: 18px; height: 18px; display: inline-block; line-height: 0; opacity: .9; }
 
-/* Group */
 .group {
   margin-top: 6px;
   border: 1px solid rgba(255,255,255,0.12);
@@ -121,9 +127,10 @@
 .group summary {
   cursor: pointer;
   display: flex; align-items: center; gap: 10px;
-  padding: 12px 12px; list-style: none;
+  padding: 12px 12px;
   color: #fff; background: rgba(255,255,255,0.04);
   font-weight: 600;
+  list-style: none;
 }
 .group summary::-webkit-details-marker { display: none; }
 .groupInner { padding: 6px; display: grid; gap: 4px; }
