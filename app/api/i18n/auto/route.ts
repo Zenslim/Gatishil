@@ -55,6 +55,16 @@ export async function POST(req: Request) {
     const supa = createServerSupabase();
     const hash = stableHash(`${text}::${context ?? ''}::${target}`);
 
+    const { data: overrideRow } = await supa
+      .from('i18n_overrides')
+      .select('np_text')
+      .eq('key', key)
+      .maybeSingle();
+
+    if (overrideRow?.np_text) {
+      return NextResponse.json({ translated: overrideRow.np_text, override: true });
+    }
+
     // 1) Check cache
     const { data: found, error: findErr } = await supa
       .from('i18n_cache')
@@ -73,10 +83,18 @@ export async function POST(req: Request) {
     if (provider === 'azure') translated = await azureTranslate(text, target);
     else translated = await googleTranslate(text, target);
 
-    // 3) Store cache
-    await supa.from('i18n_cache').upsert({
-      key, lang: target, source_text: text, translated_text: translated, hash
-    });
+    // 3) Store cache (unless an override was added meanwhile)
+    const { data: overrideExists } = await supa
+      .from('i18n_overrides')
+      .select('key')
+      .eq('key', key)
+      .maybeSingle();
+
+    if (!overrideExists?.key) {
+      await supa.from('i18n_cache').upsert({
+        key, lang: target, source_text: text, translated_text: translated, hash
+      });
+    }
 
     return NextResponse.json({ translated, cached: false });
   } catch (e: any) {

@@ -1,5 +1,6 @@
 'use client';
-import React, { createContext, useContext, useEffect, useMemo, useRef, useState, useCallback } from 'react';
+import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { createBrowserSupabase } from '@/lib/supa';
 import en from '@/locales/en.json';
 import np from '@/locales/np.json';
 
@@ -44,62 +45,65 @@ async function autoTranslate(key: string, english: string): Promise<string | nul
 export function I18nProvider({ children }: { children: React.ReactNode }) {
   const [lang, setLangState] = useState<Lang>('en');
   const [dyn, setDyn] = useState<Record<Lang, Dict>>({ en: {}, np: {} });
+  const [overrides, setOverrides] = useState<Record<Lang, Dict>>({ en: {}, np: {} });
   const inflight = useRef(new Set<string>());
-  const hasFetchedCache = useRef(false);
-
-  const logMissing = useCallback((key: string, english: string) => {
-    try {
-      const context =
-        typeof window !== 'undefined'
-          ? `${window.location.pathname}${window.location.search ?? ''}`
-          : undefined;
-
-      const body = JSON.stringify({
-        key,
-        text: english,
-        ...(context ? { context } : {}),
-      });
-
-      void fetch('/api/i18n/missing', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body,
-        keepalive: true,
-      }).catch(() => {});
-    } catch {
-      // ignore logging errors entirely to avoid UI impact
-    }
-  }, []);
+  const overridesRef = useRef<Record<Lang, Dict>>(overrides);
 
   useEffect(() => { setLangState(detectInitialLang()); }, []);
 
+  useEffect(() => { overridesRef.current = overrides; }, [overrides]);
+
   useEffect(() => {
-    if (typeof window === 'undefined') return;
-    if (lang !== 'np') return;
-    if (hasFetchedCache.current) return;
-    hasFetchedCache.current = true;
-
     let cancelled = false;
+    async function preload() {
+      try {
+        const supa = createBrowserSupabase();
+        const [cacheRes, overridesRes] = await Promise.all([
+          supa.from('i18n_cache').select('key, lang, translated_text'),
+          supa.from('i18n_overrides').select('key, np_text'),
+        ]);
+        if (cancelled) return;
 
-    fetch('/api/i18n/cache', { cache: 'no-store' })
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data: Record<string, string> | null) => {
-        if (cancelled || !data) return;
-        setDyn((prev) => ({
-          ...prev,
-          np: { ...prev.np, ...data },
-        }));
-      })
-      .catch(() => {
-        /* ignore fetch failures */
-      });
+        if (!cacheRes.error && cacheRes.data) {
+          setDyn(prev => {
+            const next: Record<Lang, Dict> = {
+              en: { ...prev.en },
+              np: { ...prev.np },
+            };
+            for (const row of cacheRes.data) {
+              if (!row?.key || !row?.lang) continue;
+              const lang = row.lang as Lang;
+              if (lang !== 'en' && lang !== 'np') continue;
+              if (typeof row.translated_text !== 'string') continue;
+              next[lang][row.key] = row.translated_text;
+            }
+            return next;
+          });
+        }
 
-    return () => {
-      cancelled = true;
-    };
-  }, [lang]);
+        if (!overridesRes.error && overridesRes.data) {
+          setOverrides(prev => {
+            const next: Record<Lang, Dict> = {
+              en: { ...prev.en },
+              np: { ...prev.np },
+            };
+            for (const row of overridesRes.data) {
+              if (!row?.key) continue;
+              next.np[row.key] = row.np_text ?? '';
+            }
+            return next;
+          });
+        }
+      } catch (err) {
+        console.error('Failed to preload i18n cache', err);
+      }
+    }
 
-  const setLang = useCallback((next: Lang) => {
+    preload();
+    return () => { cancelled = true; };
+  }, []);
+
+  function setLang(next: Lang) {
     setLangState(next);
     try {
       if (typeof window !== 'undefined') {
@@ -108,7 +112,9 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
     } catch {}
   }, []);
 
-  const t = useCallback((key: string, fallback?: string) => {
+  const t = (key: string, fallback?: string) => {
+    const overrideDict = overrides[lang] ?? {};
+    if (overrideDict[key]) return overrideDict[key];
     const dict = { ...base[lang], ...dyn[lang] };
     if (dict[key]) return dict[key];
     // if missing NP, auto-translate from EN (or provided fallback)
@@ -120,10 +126,13 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
         autoTranslate(key, enText).then((translated) => {
           inflight.current.delete(key);
           if (translated) {
-            setDyn(prev => ({
-              ...prev,
-              np: { ...prev.np, [key]: translated }
-            }));
+            setDyn(prev => {
+              if (overridesRef.current.np[key]) return prev;
+              return {
+                ...prev,
+                np: { ...prev.np, [key]: translated }
+              };
+            });
           }
         });
       }
@@ -134,7 +143,7 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
     return base.en[key] ?? fallback ?? key;
   }, [dyn, lang]);
 
-  const value = useMemo(() => ({ lang, setLang, t }), [lang, setLang, t, dyn]);
+  const value = useMemo(() => ({ lang, setLang, t }), [lang, dyn, overrides]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
