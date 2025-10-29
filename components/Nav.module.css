@@ -1,11 +1,12 @@
 /* components/Nav.module.css */
 
-/* Header: semi-translucent like before, not darker */
+/* Header: semi-translucent; drawer sits above everything */
 .header {
   position: sticky;
   top: 0;
-  z-index: 50;
+  z-index: 40;
   background: rgba(0,0,0,0.55);
+  -webkit-backdrop-filter: blur(8px);
   backdrop-filter: blur(8px);
   border-bottom: 1px solid rgba(255,255,255,0.06);
 }
@@ -32,21 +33,21 @@
   border-radius: 9999px;
   border: 1px solid rgba(255,255,255,0.18);
   padding: 4px 8px;
-  background: rgba(255,255,255,0.02);
+  background: rgba(255,255,255,0.06);
   color: #fff;
   line-height: 0;
 }
 .flagImg {
   display: block;
   width: 26px;
-  height: auto;         /* no distortion */
+  height: 18px;
   object-fit: contain;
 }
 .enBadge { font-weight: 700; letter-spacing: 0.4px; }
 
 .iconBtn { display: inline-flex; align-items: center; justify-content: center; }
 
-/* Hamburger */
+/* Hamburger — fix distortion by using flex + fixed bar sizes */
 .burger {
   display: inline-flex !important;
   width: 42px; height: 36px;
@@ -55,16 +56,27 @@
   background: rgba(255,255,255,0.10);
   border: 1px solid rgba(255,255,255,0.18);
   line-height: 0;
+  padding: 0;
+  gap: 4px;
+}
+.burger:focus-visible { outline: 2px solid rgba(255,255,255,0.5); outline-offset: 2px; }
+.burgerInner {
+  display: grid;
+  grid-auto-rows: 2px;
+  row-gap: 4px;
 }
 .burgerBar {
-  display: block; width: 20px; height: 2px; background: #fff; border-radius: 2px;
+  width: 20px; height: 2px;
+  background: #fff; border-radius: 2px;
+  transform: translateZ(0);  /* avoid sub-pixel blur */
 }
-.burgerBar + .burgerBar { margin-top: 4px; }
 
-/* Drawer: hidden by default using visibility/opacity; no dim when closed */
+/* Drawer: solid + opaque, no bleed-through */
 .drawer {
   position: fixed; inset: 0;
+  z-index: 9999;
   visibility: hidden;
+  isolation: isolate;      /* ensure top stacking context */
 }
 .drawer .backdrop { opacity: 0; transition: opacity 180ms ease; }
 .drawer.open { visibility: visible; }
@@ -72,24 +84,29 @@
 
 .backdrop {
   position: absolute; inset: 0;
-  background: rgba(0,0,0,0.55);
+  background: rgba(0,0,0,0.65);
+  pointer-events: auto;
 }
 
 /* Solid drawer panel */
 .drawerBody {
   position: absolute; top: 0; right: 0;
   width: min(92vw, 360px); height: 100%;
-  background: #0f0f0f;
+  background: #0b0b0c;     /* opaque */
   border-left: 1px solid rgba(255,255,255,0.12);
   transform: translateX(100%);
   transition: transform 220ms ease;
   padding: 16px;
   display: flex; flex-direction: column; gap: 2px;
-  box-shadow: -12px 0 24px rgba(0,0,0,0.5);
+  box-shadow: -12px 0 24px rgba(0,0,0,0.6);
 }
 .drawer.open .drawerBody { transform: translateX(0); }
 
-.drawerLink { color: #ddd; text-decoration: none; padding: 12px 10px; border-radius: 8px; }
-.drawerLink:hover { background: rgba(255,255,255,0.06); color: #fff; }
+.drawerLink {
+  color: #e6e6e6; text-decoration: none;
+  padding: 12px 10px; border-radius: 8px;
+  position: relative;
+}
+.drawerLink:hover { background: rgba(255,255,255,0.08); color: #fff; }
 .drawerDivider { height: 1px; background: rgba(255,255,255,0.12); margin: 12px 0; }
-.drawerRow { display: flex; align-items: center; justify-content: space-between; color: #bbb; padding: 8px 4px; }
+.drawerRow { display: flex; align-items: center; justify-content: space-between; color: #ccc; padding: 8px 4px; }

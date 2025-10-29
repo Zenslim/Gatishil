@@ -20,7 +20,7 @@ function BlueLoginIcon({ className = '' }: { className?: string }) {
   );
 }
 
-/** Locale toggle: EN view → Nepal flag (from /public/nepal.svg). NP view → EN badge. */
+/** Locale toggle: EN view → Nepal flag. NP view → EN badge. */
 function InlineLocaleToggle() {
   const { lang, setLang } = useI18n();
   if (lang === 'en') {
@@ -103,9 +103,11 @@ export default function Nav() {
             aria-expanded={open}
             onClick={() => setOpen(v => !v)}
           >
-            <span className={styles.burgerBar} />
-            <span className={styles.burgerBar} />
-            <span className={styles.burgerBar} />
+            <span className={styles.burgerInner}>
+              <span className={styles.burgerBar} />
+              <span className={styles.burgerBar} />
+              <span className={styles.burgerBar} />
+            </span>
           </button>
         </div>
       </div>
