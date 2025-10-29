@@ -4,6 +4,7 @@
 import { motion, useScroll, useTransform } from 'framer-motion';
 import { useState, useEffect } from 'react';
 import ClientOnly from '@/components/ClientOnly';
+import { useT } from '@/lib/i18n';
 
 /** Reusable animation helper used like: <motion.div {...fadeUp(0.06)} /> */
 type FadeUpProps = {
@@ -93,6 +94,7 @@ function Starfield() {
 
 // Replace your DaoWord with this version (supports gradient via className)
 function DaoWord({ className = "" }: { className?: string }) {
+  const t = useT();
   return (
     <a href="/faq#dao" className="relative group cursor-help focus:outline-none">
       <span
@@ -100,7 +102,7 @@ function DaoWord({ className = "" }: { className?: string }) {
         aria-describedby="dao-tooltip"
         tabIndex={0}
       >
-        DAO
+        {t('home.daoWord.label', 'DAO')}
       </span>
       <span
         id="dao-tooltip"
@@ -108,12 +110,12 @@ function DaoWord({ className = "" }: { className?: string }) {
         className="pointer-events-none absolute left-0 top-[125%] w-[280px] sm:w-[320px] rounded-xl border border-white/15 bg-zinc-900/95 px-3 py-3 text-[11px] text-slate-200 shadow-2xl opacity-0 translate-y-1 group-hover:opacity-100 group-hover:translate-y-0 group-focus:opacity-100 group-focus:translate-y-0 transition"
       >
         <span className="block text-[11px] font-semibold text-amber-300">
-          DAO = Decentralized Autonomous Organization
+          {t('home.daoWord.definition', 'DAO = Decentralized Autonomous Organization')}
         </span>
-        <span className="block mt-1">Decentralized → Power is shared, no one owns the throne.</span>
-        <span className="block">Autonomous → Rules enforce themselves, no backdoor cheating.</span>
-        <span className="block">Organization → A living system, where each member’s voice adds to the whole.</span>
-        <span className="block mt-2 text-amber-300 underline underline-offset-4">Click to read more →</span>
+        <span className="block mt-1">{t('home.daoWord.decentralized', 'Decentralized → Power is shared, no one owns the throne.')}</span>
+        <span className="block">{t('home.daoWord.autonomous', 'Autonomous → Rules enforce themselves, no backdoor cheating.')}</span>
+        <span className="block">{t('home.daoWord.organization', 'Organization → A living system, where each member’s voice adds to the whole.')}</span>
+        <span className="block mt-2 text-amber-300 underline underline-offset-4">{t('home.daoWord.cta', 'Click to read more →')}</span>
       </span>
     </a>
   );
@@ -121,6 +123,9 @@ function DaoWord({ className = "" }: { className?: string }) {
 
 export default function HomePage() {
   const mounted = useMounted();
+  const t = useT();
+  const headlineBeforeDao = t('home.hero.headline.beforeDao', 'The');
+  const headlineAfterDao = t('home.hero.headline.afterDao', 'Party of the Powerless.');
 
   return (
     <main className="relative min-h-screen bg-black text-white">
@@ -140,29 +145,32 @@ export default function HomePage() {
               className="inline-block text-[10px] uppercase tracking-widest text-amber-300/90 px-2 py-1 border border-amber-300/30 rounded-full"
               initial={{ opacity: 0, y: 8 }} whileInView={{ opacity: 1, y: 0, transition: { duration: 0.6 } }} viewport={{ once: true }}
             >
-              GatishilNepal.org
+              {t('home.hero.badge', 'GatishilNepal.org')}
             </motion.span>
 
             <motion.h1 className="text-[28px] sm:text-4xl md:text-5xl font-extrabold leading-tight mt-3"
               initial={{ opacity: 0, y: 10 }} whileInView={{ opacity: 1, y: 0, transition: { duration: 0.7, delay: 0.05 }}}
               viewport={{ once: true }}
             >
-              The <DaoWord className="bg-clip-text text-transparent bg-gradient-to-r from-amber-300 via-orange-400 to-rose-400" /> Party of the Powerless.
+              {headlineBeforeDao}{' '}
+              <DaoWord className="bg-clip-text text-transparent bg-gradient-to-r from-amber-300 via-orange-400 to-rose-400" />{' '}
+              {headlineAfterDao}
             </motion.h1>
 
             <motion.p className="mt-4 text-slate-300/90 text-xl sm:text-2xl font-bold max-w-2xl"
               initial={{ opacity: 0, y: 10 }} whileInView={{ opacity: 1, y: 0, transition: { duration: 0.7, delay: 0.1 }}}
               viewport={{ once: true }}
             >
-              Service, Not Career. Community, Not Power.
+              {t('home.hero.tagline', 'Service, Not Career. Community, Not Power.')}
             </motion.p>
 
             <motion.p className="mt-2 text-slate-300/90 text-sm sm:text-base max-w-2xl"
               initial={{ opacity: 0, y: 10 }} whileInView={{ opacity: 1, y: 0, transition: { duration: 0.7, delay: 0.14 }}}
               viewport={{ once: true }}
             >
-              Not another party of faces, but a movement that makes thrones irrelevant.
-              Live free without fear. Create together. Restore the flow. Rise as one.
+              {t('home.hero.description.line1', 'Not another party of faces, but a movement that makes thrones irrelevant.')}
+              {' '}
+              {t('home.hero.description.line2', 'Live free without fear. Create together. Restore the flow. Rise as one.')}
             </motion.p>
 
             {/* CTAs */}
@@ -174,7 +182,7 @@ export default function HomePage() {
                 className="px-5 py-3 rounded-2xl bg-amber-400 text-black font-semibold text-center transition"
                 initial={false}
               >
-                Join Us to Restore the Flow
+                {t('home.hero.ctaPrimary', 'Join Us to Restore the Flow')}
               </motion.a>
               <motion.a
                 href="#manifesto"
@@ -183,7 +191,7 @@ export default function HomePage() {
                 className="px-5 py-3 rounded-2xl border border-white/15 text-sm hover:bg-white/5 transition text-center"
                 initial={false}
               >
-                Read Our Manifesto
+                {t('home.hero.ctaSecondary', 'Read Our Manifesto')}
               </motion.a>
             </div>
 
@@ -191,7 +199,7 @@ export default function HomePage() {
               initial={{ opacity: 0, y: 8 }} whileInView={{ opacity: 1, y: 0, transition: { duration: 0.6, delay: 0.18 }}}
               viewport={{ once: true }}
             >
-              By joining you agree to transparent, tamper-proof decisions.
+              {t('home.hero.disclaimer', 'By joining you agree to transparent, tamper-proof decisions.')}
             </motion.p>
           </div>
 
@@ -201,30 +209,30 @@ export default function HomePage() {
             initial={{ opacity: 0, y: 12 }} whileInView={{ opacity: 1, y: 0, transition: { duration: 0.7, delay: 0.18 }}}
             viewport={{ once: true }}
           >
-            <h3 className="text-base sm:text-lg font-semibold">🫀 Daily Pulse</h3>
+            <h3 className="text-base sm:text-lg font-semibold">{t('home.hero.dailyPulse.title', '🫀 Daily Pulse')}</h3>
             <p className="text-xs sm:text-sm text-slate-300/80 mt-1">
-              Gatishil moves every day — small decisions, big rhythm.
+              {t('home.hero.dailyPulse.subtitle', 'Gatishil moves every day — small decisions, big rhythm.')}
             </p>
 
             <div className="mt-3 grid grid-cols-1 gap-3">
               <div className="grid grid-cols-2 gap-3">
                 <div className="p-3 rounded-xl bg-white/5 border border-white/10">
-                  <p className="text-slate-300/80 text-[11px]">Today’s Poll</p>
-                  <p className="text-amber-200 font-semibold mt-1 text-xs sm:text-sm">Should ward meetings livestream?</p>
-                  <a href="/polls" className="inline-block mt-2 text-[11px] font-semibold underline underline-offset-4">Vote now →</a>
+                  <p className="text-slate-300/80 text-[11px]">{t('home.hero.dailyPulse.todaysPoll', 'Today’s Poll')}</p>
+                  <p className="text-amber-200 font-semibold mt-1 text-xs sm:text-sm">{t('home.hero.dailyPulse.pollQuestion', 'Should ward meetings livestream?')}</p>
+                  <a href="/polls" className="inline-block mt-2 text-[11px] font-semibold underline underline-offset-4">{t('home.hero.dailyPulse.voteCta', 'Vote now →')}</a>
                 </div>
                 <div className="p-3 rounded-xl bg-white/5 border border-white/10">
-                  <p className="text-slate-300/80 text-[11px]">Active Proposal</p>
-                  <p className="text-amber-200 font-semibold mt-1 text-xs sm:text-sm">Publish MLA attendance weekly</p>
-                  <a href="/proposals" className="inline-block mt-2 text-[11px] font-semibold underline underline-offset-4">Review →</a>
+                  <p className="text-slate-300/80 text-[11px]">{t('home.hero.dailyPulse.activeProposal', 'Active Proposal')}</p>
+                  <p className="text-amber-200 font-semibold mt-1 text-xs sm:text-sm">{t('home.hero.dailyPulse.proposalTitle', 'Publish MLA attendance weekly')}</p>
+                  <a href="/proposals" className="inline-block mt-2 text-[11px] font-semibold underline underline-offset-4">{t('home.hero.dailyPulse.reviewCta', 'Review →')}</a>
                 </div>
               </div>
 
               <div className="p-3 rounded-xl bg-white/5 border border-white/10">
-                <p className="text-[11px] text-slate-300/80">Quick Join</p>
+                <p className="text-[11px] text-slate-300/80">{t('home.hero.dailyPulse.quickJoin', 'Quick Join')}</p>
                 <div className="mt-2 flex gap-2">
-                  <a href="/join" className="flex-1 px-3 py-2 text-sm text-black bg-amber-300 rounded-lg text-center font-semibold">Start</a>
-                  <a href="/explore" className="px-3 py-2 border border-white/10 rounded-lg text-sm">Explore</a>
+                  <a href="/join" className="flex-1 px-3 py-2 text-sm text-black bg-amber-300 rounded-lg text-center font-semibold">{t('home.hero.dailyPulse.quickJoinStart', 'Start')}</a>
+                  <a href="/explore" className="px-3 py-2 border border-white/10 rounded-lg text-sm">{t('home.hero.dailyPulse.quickJoinExplore', 'Explore')}</a>
                 </div>
               </div>
             </div>
@@ -237,9 +245,9 @@ export default function HomePage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-16">
           <SectionTitle
             id="manifesto"
-            kicker="Manifesto"
-            title="The Power of the Powerless"
-            subtitle="Eight vows to give Nepal back to its people."
+            kicker={t('home.manifesto.kicker', 'Manifesto')}
+            title={t('home.manifesto.title', 'The Power of the Powerless')}
+            subtitle={t('home.manifesto.subtitle', 'Eight vows to give Nepal back to its people.')}
           />
 
           <div className="max-w-6xl mx-auto grid gap-4 sm:gap-6 md:grid-cols-2 lg:grid-cols-3">
@@ -357,7 +365,7 @@ export default function HomePage() {
           </div>
 
           <p className="mt-8 text-center text-[16px] text-slate-400">
-            Keep your vows in your heart, but navigate the world with your eyes wide open to its realities.
+            {t('home.manifesto.closer', 'Keep your vows in your heart, but navigate the world with your eyes wide open to its realities.')}
           </p>
         </div>
       </section>
@@ -366,9 +374,9 @@ export default function HomePage() {
       <section className="relative z-10 pb-10 sm:pb-14">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-16">
           <SectionTitle
-            kicker="Foundations"
-            title="Four Stones, One River"
-            subtitle="The path where democracy flows, not stagnates."
+            kicker={t('home.foundations.kicker', 'Foundations')}
+            title={t('home.foundations.title', 'Four Stones, One River')}
+            subtitle={t('home.foundations.subtitle', 'The path where democracy flows, not stagnates.')}
           />
 
           <div className="max-w-5xl mx-auto grid gap-4 sm:gap-6 sm:grid-cols-2">
@@ -414,7 +422,7 @@ export default function HomePage() {
           </div>
 
           <p className="mt-8 text-center text-[16px] text-slate-400">
-            A prince must combine the qualities of a lion and a fox.
+            {t('home.foundations.closer', 'A prince must combine the qualities of a lion and a fox.')}
           </p>
         </div>
       </section>
@@ -423,14 +431,14 @@ export default function HomePage() {
       <footer className="relative z-10 py-8 sm:py-10 text-sm text-slate-300">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-16">
           <div className="flex flex-col items-center gap-2">
-            <p className="text-center">© {mounted ? new Date().getFullYear() : 2025} GatishilNepal.org</p>
-            <p className="text-center text-slate-400">Democracy That Flows — Not Stagnates.</p>
+            <p className="text-center">© {mounted ? new Date().getFullYear() : 2025} {t('home.footer.site', 'GatishilNepal.org')}</p>
+            <p className="text-center text-slate-400">{t('home.footer.tagline', 'Democracy That Flows — Not Stagnates.')}</p>
             <nav className="mt-3 flex flex-wrap items-center justify-center gap-4 text-slate-300">
-              <a href="/join" className="hover:text-white">Join</a>
-              <a href="/polls" className="hover:text-white">Polls</a>
-              <a href="/proposals" className="hover:text-white">Proposals</a>
-              <a href="/blog" className="hover:text-white">Blog</a>
-              <a href="/faq#dao" className="hover:text-white">FAQ</a>
+              <a href="/join" className="hover:text-white">{t('home.footer.links.join', 'Join')}</a>
+              <a href="/polls" className="hover:text-white">{t('home.footer.links.polls', 'Polls')}</a>
+              <a href="/proposals" className="hover:text-white">{t('home.footer.links.proposals', 'Proposals')}</a>
+              <a href="/blog" className="hover:text-white">{t('home.footer.links.blog', 'Blog')}</a>
+              <a href="/faq#dao" className="hover:text-white">{t('home.footer.links.faq', 'FAQ')}</a>
             </nav>
           </div>
         </div>
