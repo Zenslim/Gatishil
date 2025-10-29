@@ -8,7 +8,46 @@ import { useI18n } from '@/lib/i18n';
 
 type SessionState = 'unknown' | 'signedOut' | 'signedIn';
 
-/** Blue circular “account” icon like your screenshot */
+/** Inline Nepal flag SVG (double-pennon), ensures visibility on all platforms */
+function FlagNP({ size = 22 }: { size?: number }) {
+  return (
+    <svg
+      width={size}
+      height={size * 1.3}
+      viewBox="0 0 100 130"
+      aria-hidden
+      role="img"
+      style={{ display: 'block' }}
+    >
+      <defs>
+        <linearGradient id="npEdge" x1="0" x2="0" y1="0" y2="1">
+          <stop offset="0" stopColor="#1d3f8f" />
+          <stop offset="1" stopColor="#0b2c6f" />
+        </linearGradient>
+      </defs>
+      {/* Border */}
+      <path d="M6 4 L94 65 L36 65 L94 126 L6 126 Z" fill="url(#npEdge)"/>
+      {/* Red field (inset) */}
+      <path d="M10 10 L86 65 L32 65 L86 120 L10 120 Z" fill="#d82027"/>
+      {/* Crescent + sun (simplified iconic shapes) */}
+      <g fill="#fff">
+        {/* Crescent (upper) */}
+        <path d="M28 40 a16 16 0 1 0 24 0 a12 12 0 1 1 -24 0z"/>
+        {/* Sun (lower) */}
+        <circle cx="48" cy="90" r="10"/>
+        <g transform="translate(48,90)">
+          {Array.from({length:12}).map((_,i)=>(
+            <rect key={i} x="-1.2" y="-15" width="2.4" height="6" transform={`rotate(${i*30})`} />
+          ))}
+        </g>
+      </g>
+      {/* Blue outline stroke */}
+      <path d="M6 4 L94 65 L36 65 L94 126 L6 126 Z" fill="none" stroke="#0b2c6f" strokeWidth="3"/>
+    </svg>
+  );
+}
+
+/** Blue circular “account” icon */
 function BlueLoginIcon({ className = '' }: { className?: string }) {
   return (
     <svg viewBox="0 0 48 48" width="26" height="26" className={className} aria-hidden>
@@ -19,7 +58,10 @@ function BlueLoginIcon({ className = '' }: { className?: string }) {
   );
 }
 
-/** Locale toggle: EN UI → show 🇳🇵 flag only; NP UI → show EN text only */
+/** Locale toggle:
+ * EN UI → show Nepal flag (switches to Nepali)
+ * NP UI → show EN text (switches to English)
+ */
 function InlineLocaleToggle() {
   const { lang, setLang } = useI18n();
   if (lang === 'en') {
@@ -27,9 +69,10 @@ function InlineLocaleToggle() {
       <button
         onClick={() => setLang('np')}
         aria-label="Switch to Nepali"
-        className="inline-flex items-center justify-center rounded-full border border-white/15 px-2 py-1 text-sm hover:bg-white/5"
+        className="inline-flex items-center justify-center rounded-full border border-white/15 px-2 py-1 hover:bg-white/5"
+        title="Switch to नेपाली"
       >
-        <span aria-hidden>🇳🇵</span>
+        <FlagNP />
       </button>
     );
   }
@@ -37,7 +80,8 @@ function InlineLocaleToggle() {
     <button
       onClick={() => setLang('en')}
       aria-label="Switch to English"
-      className="inline-flex items-center justify-center rounded-full border border-white/15 px-2 py-1 text-sm hover:bg-white/5 font-semibold"
+      className="inline-flex items-center justify-center rounded-full border border-white/15 px-2 py-1 hover:bg-white/5 font-semibold"
+      title="Switch to English"
     >
       EN
     </button>
@@ -101,11 +145,10 @@ export default function Nav() {
           </div>
         </Link>
 
-        {/* Right actions (same on desktop & mobile): language, login icon, burger */}
+        {/* Right: language, login/dashboard icon, hamburger */}
         <div className="flex items-center gap-3">
           <InlineLocaleToggle />
 
-          {/* Signed-out: blue login icon → /login; Signed-in: blue icon → /dashboard */}
           {auth === 'signedIn' ? (
             <Link href="/dashboard" aria-label="Dashboard">
               <BlueLoginIcon />
@@ -116,7 +159,7 @@ export default function Nav() {
             </Link>
           )}
 
-          {/* Hamburger (always visible) */}
+          {/* Hamburger — forced visible on desktop too */}
           <button
             ref={btnRef}
             className={styles.burger}
@@ -124,6 +167,7 @@ export default function Nav() {
             aria-controls="mobile-menu"
             aria-expanded={open}
             onClick={() => setOpen(v => !v)}
+            style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }} // override any desktop hide
           >
             <span className={styles.burgerBar} />
             <span className={styles.burgerBar} />
@@ -132,7 +176,7 @@ export default function Nav() {
         </div>
       </div>
 
-      {/* Drawer menu (used on all breakpoints) */}
+      {/* Drawer (used on all breakpoints) */}
       <div id="mobile-menu" ref={menuRef} className={`${styles.navMobile} ${open ? styles.open : ''}`}>
         <div className={styles.mobileLink} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <span>Language</span>
