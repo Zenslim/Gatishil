@@ -5,6 +5,20 @@ import { motion, useScroll, useTransform } from 'framer-motion';
 import { useState, useEffect } from 'react';
 import ClientOnly from '@/components/ClientOnly';
 
+/** Reusable animation helper used like: <motion.div {...fadeUp(0.06)} /> */
+type FadeUpProps = {
+  initial: { opacity: number; y: number };
+  whileInView: { opacity: number; y: number; transition: { duration: number; ease: string; delay?: number } };
+  viewport: { once: boolean; amount?: number };
+};
+function fadeUp(delay = 0, distance = 10, duration = 0.6): FadeUpProps {
+  return {
+    initial: { opacity: 0, y: distance },
+    whileInView: { opacity: 1, y: 0, transition: { duration, ease: 'easeOut', delay } },
+    viewport: { once: true, amount: 0.2 },
+  };
+}
+
 /** util: run code only after React mounts (prevents hydration mismatch) */
 function useMounted() {
   const [mounted, setMounted] = useState(false);
@@ -362,41 +376,46 @@ export default function HomePage() {
               <h3 className="text-lg font-semibold">🗳 Tech-Forward Campaigns</h3>
               <p className="mt-2 text-slate-300/85 text-sm">
                 <span className="font-semibold">Your Voice, Coded in Trust.</span> Like dropping your vote in a box everyone can see, but no one can steal.
-              </p>              <p className="mt-2 text-amber-400 text-sm font-medium">
-  The new chauṭarī is not a stage, it’s a shared ledger of trust.
-</p>
+              </p>
+              <p className="mt-2 text-amber-400 text-sm font-medium">
+                The new chauṭarī is not a stage, it’s a shared ledger of trust.
+              </p>
             </motion.div>
 
             <motion.div {...fadeUp(0.04)} className="p-5 sm:p-6 rounded-2xl bg-white/5 border border-white/10">
               <h3 className="text-lg font-semibold">💰 Anti-Corruption</h3>
               <p className="mt-2 text-slate-300/85 text-sm">
                 <span className="font-semibold">Every Rupee Tracked. Every Promise Coded.</span> Like grain in a clear jar — all can see, none can steal.
- </p>  <p className="mt-2 text-amber-400 text-sm font-medium">
-    Transparency is the new revolution; sunlight, our policy.
-  </p>
+              </p>
+              <p className="mt-2 text-amber-400 text-sm font-medium">
+                Transparency is the new revolution; sunlight, our policy.
+              </p>
             </motion.div>
 
             <motion.div {...fadeUp(0.06)} className="p-5 sm:p-6 rounded-2xl bg-white/5 border border-white/10">
               <h3 className="text-lg font-semibold">🌱 Grassroots Mobilization</h3>
               <p className="mt-2 text-slate-300/85 text-sm">
                 <span className="font-semibold">The Party is You. The Mandate is Ours.</span> Like a shared khet where every farmer plants, no harvest unless all work.
-              </p>   <p className="mt-2 text-amber-400 text-sm font-medium">
-    This is not representation, this is participation.
-  </p>
+              </p>
+              <p className="mt-2 text-amber-400 text-sm font-medium">
+                This is not representation, this is participation.
+              </p>
             </motion.div>
 
             <motion.div {...fadeUp(0.08)} className="p-5 sm:p-6 rounded-2xl bg-white/5 border border-white/10">
               <h3 className="text-lg font-semibold">📜 Philosophical Foundation</h3>
               <p className="mt-2 text-slate-300/85 text-sm">
                 <span className="font-semibold">The People’s Code. The Nation’s Flow.</span> Like ancient guthi rules, but written in code — fair, tamper-proof, shared by all.
-              </p>   <p className="mt-2 text-amber-400 text-sm font-medium">
-    From Guthi to DAO — the wisdom is old, the tool is new, the flow eternal.
-  </p>
+              </p>
+              <p className="mt-2 text-amber-400 text-sm font-medium">
+                From Guthi to DAO — the wisdom is old, the tool is new, the flow eternal.
+              </p>
             </motion.div>
           </div>
-       <p className="mt-8 text-center text-[16px] text-slate-400">
+
+          <p className="mt-8 text-center text-[16px] text-slate-400">
             A prince must combine the qualities of a lion and a fox.
-          </p>  
+          </p>
         </div>
       </section>
 
