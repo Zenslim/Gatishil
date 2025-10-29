@@ -3,10 +3,47 @@
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 import styles from './Nav.module.css';
-import LocaleSwitch from '@/components/LocaleSwitch';
 import { createBrowserSupabase } from '@/lib/supa';
+import { useI18n } from '@/lib/i18n';
 
 type SessionState = 'unknown' | 'signedOut' | 'signedIn';
+
+function SignInIcon({ className = '' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden className={className} fill="currentColor">
+      <path d="M12 12c2.76 0 5-2.69 5-6S14.76 0 12 0 7 2.69 7 6s2.24 6 5 6zm0 2c-4.42 0-8 2.24-8 5v1a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-1c0-2.76-3.58-5-8-5z"/>
+    </svg>
+  );
+}
+
+/** Inline universal language toggle:
+ *  - If current = EN → show 🇳🇵 (press to switch to Nepali)
+ *  - If current = NP → show EN (press to switch back to English)
+ */
+function InlineLocaleToggle() {
+  const { lang, setLang } = useI18n();
+  if (lang === 'en') {
+    return (
+      <button
+        onClick={() => setLang('np')}
+        aria-label="Switch to Nepali"
+        className="inline-flex items-center gap-1 rounded-full border border-white/15 px-2 py-1 text-sm hover:bg-white/5"
+      >
+        <span aria-hidden>🇳🇵</span>
+        <span className="hidden sm:inline">NP</span>
+      </button>
+    );
+  }
+  return (
+    <button
+      onClick={() => setLang('en')}
+      aria-label="Switch to English"
+      className="inline-flex items-center gap-1 rounded-full border border-white/15 px-2 py-1 text-sm hover:bg-white/5"
+    >
+      <span className="font-semibold">EN</span>
+    </button>
+  );
+}
 
 export default function Nav() {
   const [open, setOpen] = useState(false);
@@ -14,7 +51,7 @@ export default function Nav() {
   const menuRef = useRef<HTMLDivElement>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
 
-  // Auth state
+  // Auth state (Supabase)
   useEffect(() => {
     const supa = createBrowserSupabase();
     supa.auth.getSession().then(({ data }) => setAuth(data.session ? 'signedIn' : 'signedOut'));
@@ -24,7 +61,7 @@ export default function Nav() {
     return () => { sub.subscription.unsubscribe(); };
   }, []);
 
-  // Close on outside click
+  // Close mobile drawer on outside click
   useEffect(() => {
     function onDocClick(e: MouseEvent) {
       if (!open) return;
@@ -47,10 +84,9 @@ export default function Nav() {
   return (
     <header className={styles.header}>
       <div className={styles.bar}>
-        {/* BRAND: logo + title + subline */}
+        {/* Brand: logo + title + subline (always) */}
         <Link href="/" className={styles.brand} aria-label="Gatishil Nepal — Home">
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            {/* Put your file at /public/logo.svg  (fallback: /logo.png) */}
             <img
               src="/logo.svg"
               onError={(e) => { (e.currentTarget as HTMLImageElement).src = '/logo.png'; }}
@@ -79,9 +115,10 @@ export default function Nav() {
           <Link href="/faq#dao" className={styles.link}>FAQ</Link>
         </nav>
 
-        {/* Right side: language + auth */}
+        {/* Right side (desktop): language + auth */}
         <div className={styles.navDesktop} aria-label="Actions" style={{ gap: 12 }}>
-          <LocaleSwitch />
+          <InlineLocaleToggle />
+
           {auth === 'signedIn' ? (
             <>
               <Link href="/dashboard" className={styles.link}>Dashboard</Link>
@@ -91,7 +128,10 @@ export default function Nav() {
             </>
           ) : (
             <>
-              <Link href="/login" className={styles.link}>Login</Link>
+              {/* Sign-in icon goes to /login */}
+              <Link href="/login" className={styles.link} aria-label="Sign in">
+                <SignInIcon />
+              </Link>
               <Link
                 href="/join"
                 className={styles.link}
@@ -103,14 +143,14 @@ export default function Nav() {
           )}
         </div>
 
-        {/* Mobile burger */}
+        {/* Burger (mobile) */}
         <button
           ref={btnRef}
           className={styles.burger}
           aria-label="Menu"
           aria-controls="mobile-menu"
           aria-expanded={open}
-          onClick={() => setOpen((v) => !v)}
+          onClick={() => setOpen(v => !v)}
         >
           <span className={styles.burgerBar} />
           <span className={styles.burgerBar} />
@@ -120,9 +160,10 @@ export default function Nav() {
 
       {/* Mobile drawer */}
       <div id="mobile-menu" ref={menuRef} className={`${styles.navMobile} ${open ? styles.open : ''}`}>
+        {/* Put language first on mobile */}
         <div className={styles.mobileLink} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <span>Language</span>
-          <LocaleSwitch />
+          <InlineLocaleToggle />
         </div>
 
         <Link href="/why" className={styles.mobileLink} onClick={() => setOpen(false)}>Why</Link>
@@ -144,7 +185,7 @@ export default function Nav() {
           </>
         ) : (
           <>
-            <Link href="/login" className={styles.mobileLink} onClick={() => setOpen(false)}>Login</Link>
+            <Link href="/login" className={styles.mobileLink} onClick={() => setOpen(false)}>Sign in</Link>
             <Link href="/join" className={styles.mobileLink} onClick={() => setOpen(false)}>Join</Link>
           </>
         )}
