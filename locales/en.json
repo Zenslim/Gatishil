@@ -1,5 +1,107 @@
 {
   "welcome": "Welcome to Gatishil Chauṭarī",
   "continue": "Continue",
-  "reflect_prompt": "Before you sleep, what did you give today?"
+  "reflect_prompt": "Before you sleep, what did you give today?",
+  "nav": {
+    "locale": {
+      "switchToNepali": "Switch to Nepali",
+      "switchToNepaliTitle": "Switch to नेपाली",
+      "switchToEnglish": "Switch to English",
+      "switchToEnglishTitle": "Switch to English"
+    },
+    "brand": {
+      "ariaHome": "Gatishil Nepal — Home",
+      "alt": "Gatishil Nepal logo",
+      "title": "Gatishil Nepal",
+      "subtitle": "DAO · Guthi · Movement"
+    },
+    "actions": {
+      "dashboard": "Dashboard",
+      "signIn": "Sign in"
+    },
+    "burger": {
+      "label": "Menu"
+    },
+    "drawer": {
+      "ariaLabel": "Main menu",
+      "title": "Menu",
+      "close": "Close menu",
+      "language": "Language"
+    },
+    "links": {
+      "about": "About Us",
+      "why": "Why",
+      "how": "How",
+      "what": "What",
+      "blog": "Blog",
+      "polls": "Polls",
+      "proposals": "Proposals",
+      "members": "Members",
+      "manifesto": "Manifesto",
+      "faq": "FAQ",
+      "dashboard": "Dashboard",
+      "signIn": "Sign in"
+    }
+  },
+  "home": {
+    "daoWord": {
+      "label": "DAO",
+      "definition": "DAO = Decentralized Autonomous Organization",
+      "decentralized": "Decentralized → Power is shared, no one owns the throne.",
+      "autonomous": "Autonomous → Rules enforce themselves, no backdoor cheating.",
+      "organization": "Organization → A living system, where each member’s voice adds to the whole.",
+      "cta": "Click to read more →"
+    },
+    "hero": {
+      "headline": {
+        "beforeDao": "The",
+        "afterDao": "Party of the Powerless."
+      },
+      "badge": "GatishilNepal.org",
+      "tagline": "Service, Not Career. Community, Not Power.",
+      "description": {
+        "line1": "Not another party of faces, but a movement that makes thrones irrelevant.",
+        "line2": "Live free without fear. Create together. Restore the flow. Rise as one."
+      },
+      "ctaPrimary": "Join Us to Restore the Flow",
+      "ctaSecondary": "Read Our Manifesto",
+      "disclaimer": "By joining you agree to transparent, tamper-proof decisions.",
+      "dailyPulse": {
+        "title": "🫀 Daily Pulse",
+        "subtitle": "Gatishil moves every day — small decisions, big rhythm.",
+        "todaysPoll": "Today’s Poll",
+        "pollQuestion": "Should ward meetings livestream?",
+        "voteCta": "Vote now →",
+        "activeProposal": "Active Proposal",
+        "proposalTitle": "Publish MLA attendance weekly",
+        "reviewCta": "Review →",
+        "quickJoin": "Quick Join",
+        "quickJoinStart": "Start",
+        "quickJoinExplore": "Explore"
+      }
+    },
+    "manifesto": {
+      "kicker": "Manifesto",
+      "title": "The Power of the Powerless",
+      "subtitle": "Eight vows to give Nepal back to its people.",
+      "closer": "Keep your vows in your heart, but navigate the world with your eyes wide open to its realities."
+    },
+    "foundations": {
+      "kicker": "Foundations",
+      "title": "Four Stones, One River",
+      "subtitle": "The path where democracy flows, not stagnates.",
+      "closer": "A prince must combine the qualities of a lion and a fox."
+    },
+    "footer": {
+      "site": "GatishilNepal.org",
+      "tagline": "Democracy That Flows — Not Stagnates.",
+      "links": {
+        "join": "Join",
+        "polls": "Polls",
+        "proposals": "Proposals",
+        "blog": "Blog",
+        "faq": "FAQ"
+      }
+    }
+  }
 }
