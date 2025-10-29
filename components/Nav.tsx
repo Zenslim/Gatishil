@@ -1,4 +1,3 @@
-// components/Nav.tsx
 'use client';
 
 import Link from 'next/link';
@@ -9,21 +8,13 @@ import { createBrowserSupabase } from '@/lib/supa';
 
 type SessionState = 'unknown' | 'signedOut' | 'signedIn';
 
-/**
- * Single-source Navbar (global).
- * - Desktop: Why, How, What, Manifesto, Polls, Proposals, Members, Blog, FAQ
- * - Right side: Language toggle + Auth-aware actions
- *   - Signed OUT: subtle Login + primary Join
- *   - Signed IN: Dashboard + Logout (no Join/Login)
- * - Mobile: Drawer with same links; language toggle at top
- */
 export default function Nav() {
   const [open, setOpen] = useState(false);
   const [auth, setAuth] = useState<SessionState>('unknown');
   const menuRef = useRef<HTMLDivElement>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
 
-  // Auth state (simple + robust)
+  // Auth state
   useEffect(() => {
     const supa = createBrowserSupabase();
     supa.auth.getSession().then(({ data }) => setAuth(data.session ? 'signedIn' : 'signedOut'));
@@ -56,8 +47,23 @@ export default function Nav() {
   return (
     <header className={styles.header}>
       <div className={styles.bar}>
-        <Link href="/" className={styles.brand}>
-          <span aria-hidden>✅</span>&nbsp;Gatishil Nepal
+        {/* BRAND: logo + title + subline */}
+        <Link href="/" className={styles.brand} aria-label="Gatishil Nepal — Home">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            {/* Put your file at /public/logo.svg  (fallback: /logo.png) */}
+            <img
+              src="/logo.svg"
+              onError={(e) => { (e.currentTarget as HTMLImageElement).src = '/logo.png'; }}
+              alt="Gatishil Nepal"
+              width={28}
+              height={28}
+              style={{ display: 'block' }}
+            />
+            <div style={{ lineHeight: 1 }}>
+              <div style={{ fontWeight: 700 }}>Gatishil Nepal</div>
+              <div style={{ fontSize: 12, opacity: 0.8 }}>DAO · Guthi · Movement</div>
+            </div>
+          </div>
         </Link>
 
         {/* Desktop links */}
@@ -73,10 +79,9 @@ export default function Nav() {
           <Link href="/faq#dao" className={styles.link}>FAQ</Link>
         </nav>
 
-        {/* Right side: language + auth actions */}
-        <div className={styles.navDesktop} aria-label="Actions" style={{ gap: '12px' }}>
+        {/* Right side: language + auth */}
+        <div className={styles.navDesktop} aria-label="Actions" style={{ gap: 12 }}>
           <LocaleSwitch />
-
           {auth === 'signedIn' ? (
             <>
               <Link href="/dashboard" className={styles.link}>Dashboard</Link>
@@ -89,8 +94,8 @@ export default function Nav() {
               <Link href="/login" className={styles.link}>Login</Link>
               <Link
                 href="/join"
-                className={`${styles.link}`}
-                style={{ background: 'rgb(251 191 36)', color: '#111', padding: '6px 12px', borderRadius: '9999px', fontWeight: 700 }}
+                className={styles.link}
+                style={{ background: 'rgb(251 191 36)', color: '#111', padding: '6px 12px', borderRadius: 9999, fontWeight: 700 }}
               >
                 Join
               </Link>
@@ -105,7 +110,7 @@ export default function Nav() {
           aria-label="Menu"
           aria-controls="mobile-menu"
           aria-expanded={open}
-          onClick={() => setOpen(v => !v)}
+          onClick={() => setOpen((v) => !v)}
         >
           <span className={styles.burgerBar} />
           <span className={styles.burgerBar} />
