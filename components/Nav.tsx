@@ -16,9 +16,9 @@ function SignInIcon({ className = '' }: { className?: string }) {
   );
 }
 
-/** Inline universal language toggle:
- *  - If current = EN → show 🇳🇵 (press to switch to Nepali)
- *  - If current = NP → show EN (press to switch back to English)
+/** Universal language toggle:
+ * EN → shows 🇳🇵 (tap to switch to Nepali)
+ * NP → shows EN (tap to switch back to English)
  */
 function InlineLocaleToggle() {
   const { lang, setLang } = useI18n();
@@ -51,13 +51,13 @@ export default function Nav() {
   const menuRef = useRef<HTMLDivElement>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
 
-  // Auth state (Supabase)
+  // Supabase auth state
   useEffect(() => {
     const supa = createBrowserSupabase();
     supa.auth.getSession().then(({ data }) => setAuth(data.session ? 'signedIn' : 'signedOut'));
-    const { data: sub } = supa.auth.onAuthStateChange((_e, session) => {
-      setAuth(session ? 'signedIn' : 'signedOut');
-    });
+    const { data: sub } = supa.auth.onAuthStateChange((_e, session) =>
+      setAuth(session ? 'signedIn' : 'signedOut')
+    );
     return () => { sub.subscription.unsubscribe(); };
   }, []);
 
@@ -84,7 +84,7 @@ export default function Nav() {
   return (
     <header className={styles.header}>
       <div className={styles.bar}>
-        {/* Brand: logo + title + subline (always) */}
+        {/* BRAND: Logo + Title + Subline (always) */}
         <Link href="/" className={styles.brand} aria-label="Gatishil Nepal — Home">
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <img
@@ -102,7 +102,7 @@ export default function Nav() {
           </div>
         </Link>
 
-        {/* Desktop links */}
+        {/* Desktop links (center) */}
         <nav className={styles.navDesktop} aria-label="Primary">
           <Link href="/why" className={styles.link}>Why</Link>
           <Link href="/how" className={styles.link}>How</Link>
@@ -115,31 +115,15 @@ export default function Nav() {
           <Link href="/faq#dao" className={styles.link}>FAQ</Link>
         </nav>
 
-        {/* Right side (desktop): language + auth */}
+        {/* Right side (desktop): Language + Auth */}
         <div className={styles.navDesktop} aria-label="Actions" style={{ gap: 12 }}>
           <InlineLocaleToggle />
-
           {auth === 'signedIn' ? (
-            <>
-              <Link href="/dashboard" className={styles.link}>Dashboard</Link>
-              <form action="/api/auth/logout" method="post">
-                <button className={styles.link} type="submit">Logout</button>
-              </form>
-            </>
+            <Link href="/dashboard" className={styles.link}>Dashboard</Link>
           ) : (
-            <>
-              {/* Sign-in icon goes to /login */}
-              <Link href="/login" className={styles.link} aria-label="Sign in">
-                <SignInIcon />
-              </Link>
-              <Link
-                href="/join"
-                className={styles.link}
-                style={{ background: 'rgb(251 191 36)', color: '#111', padding: '6px 12px', borderRadius: 9999, fontWeight: 700 }}
-              >
-                Join
-              </Link>
-            </>
+            <Link href="/login" className={styles.link} aria-label="Sign in">
+              <SignInIcon />
+            </Link>
           )}
         </div>
 
@@ -160,7 +144,7 @@ export default function Nav() {
 
       {/* Mobile drawer */}
       <div id="mobile-menu" ref={menuRef} className={`${styles.navMobile} ${open ? styles.open : ''}`}>
-        {/* Put language first on mobile */}
+        {/* Language first on mobile */}
         <div className={styles.mobileLink} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <span>Language</span>
           <InlineLocaleToggle />
@@ -176,18 +160,11 @@ export default function Nav() {
         <Link href="/blog" className={styles.mobileLink} onClick={() => setOpen(false)}>Blog</Link>
         <Link href="/faq#dao" className={styles.mobileLink} onClick={() => setOpen(false)}>FAQ</Link>
 
+        {/* Auth row on mobile */}
         {auth === 'signedIn' ? (
-          <>
-            <Link href="/dashboard" className={styles.mobileLink} onClick={() => setOpen(false)}>Dashboard</Link>
-            <form action="/api/auth/logout" method="post" className={styles.mobileLink}>
-              <button type="submit">Logout</button>
-            </form>
-          </>
+          <Link href="/dashboard" className={styles.mobileLink} onClick={() => setOpen(false)}>Dashboard</Link>
         ) : (
-          <>
-            <Link href="/login" className={styles.mobileLink} onClick={() => setOpen(false)}>Sign in</Link>
-            <Link href="/join" className={styles.mobileLink} onClick={() => setOpen(false)}>Join</Link>
-          </>
+          <Link href="/login" className={styles.mobileLink} onClick={() => setOpen(false)}>Sign in</Link>
         )}
       </div>
     </header>
