@@ -197,7 +197,7 @@ export default function LoginClient() {
 
       // 2) WebAuthn ceremony in browser
       const publicKey = normalizeRequestOptions(options?.publicKey ?? options);
-      const cred = (await navigator.credentials.get({ publicKey })) as PublicKeyCredential;
+      const cred = (await (navigator as any).credentials.get({ publicKey })) as PublicKeyCredential;
 
       // 3) Send assertion to server for verification
       const verifyRes = await fetch('/api/webauthn/login/verify', {
@@ -260,14 +260,17 @@ export default function LoginClient() {
   return (
     <div className="min-h-[80vh] grid place-items-center bg-neutral-950 text-white p-6">
       <div className="w-full max-w-md rounded-2xl border border-white/10 bg-black/40 p-6">
-        {/* --- Updated heading + subline --- */}
+        {/* --- Heading + subline with orange CTA --- */}
         <h1 className="text-2xl font-bold">Sign in to your Gatishil Movement account</h1>
-        <p className="mt-2 text-sm text-slate-300/85">
-          Not a member yet?{' '}
-          <Link href="/join" className="underline underline-offset-4 hover:text-white">
-            Join Us→ join
+        <div className="mt-2 flex items-center gap-3">
+          <p className="text-sm text-slate-300/85">Not a member yet?</p>
+          <Link
+            href="/join"
+            className="inline-flex items-center rounded-full bg-amber-500 px-3 py-1.5 text-sm font-semibold text-black shadow hover:bg-amber-600 focus:outline-none focus:ring-2 focus:ring-amber-400"
+          >
+            Join Us
           </Link>
-        </p>
+        </div>
 
         <form onSubmit={onSubmit} className="mt-6 space-y-4">
           <div>
