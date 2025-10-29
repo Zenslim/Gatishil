@@ -9,47 +9,6 @@ import { useI18n } from '@/lib/i18n';
 
 type SessionState = 'unknown' | 'signedOut' | 'signedIn';
 
-/** Blue circular “account” icon */
-function BlueLoginIcon({ className = '' }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 48 48" width="26" height="26" className={className} aria-hidden>
-      <circle cx="24" cy="24" r="22" fill="#25A7E1" />
-      <circle cx="24" cy="19" r="7" fill="none" stroke="#0A2430" strokeWidth="3" />
-      <path d="M12 36c2.5-6 8-9 12-9s9.5 3 12 9" fill="none" stroke="#0A2430" strokeWidth="3" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-/** Locale toggle:
- * EN UI → show Nepal flag (from /public/nepal.svg) to switch to Nepali
- * NP UI → show EN text to switch back to English
- */
-function InlineLocaleToggle() {
-  const { lang, setLang } = useI18n();
-  if (lang === 'en') {
-    return (
-      <button
-        onClick={() => setLang('np')}
-        aria-label="Switch to Nepali"
-        className={styles.localeBtn}
-        title="Switch to नेपाली"
-      >
-        <img src="/nepal.svg" alt="" width={26} height={26} className={styles.flagImg} />
-      </button>
-    );
-  }
-  return (
-    <button
-      onClick={() => setLang('en')}
-      aria-label="Switch to English"
-      className={styles.localeBtn}
-      title="Switch to English"
-    >
-      <span className={styles.enBadge}>EN</span>
-    </button>
-  );
-}
-
 export default function Nav() {
   const [open, setOpen] = useState(false);
   const [auth, setAuth] = useState<SessionState>('unknown');
@@ -107,35 +66,63 @@ export default function Nav() {
           </div>
         </Link>
 
-        {/* Right: language, login/dashboard icon, hamburger — same across breakpoints */}
-        <div className={styles.actions}>
-          <InlineLocaleToggle />
+        {/* Desktop links */}
+        <nav className={styles.navDesktop} aria-label="Primary">
+          <Link href="/why" className={styles.link}>Why</Link>
+          <Link href="/how" className={styles.link}>How</Link>
+          <Link href="/what" className={styles.link}>What</Link>
+          <Link href="/#manifesto" className={styles.link}>Manifesto</Link>
+          <Link href="/polls" className={styles.link}>Polls</Link>
+          <Link href="/proposals" className={styles.link}>Proposals</Link>
+          <Link href="/members" className={styles.link}>Members</Link>
+          <Link href="/blog" className={styles.link}>Blog</Link>
+          <Link href="/faq#dao" className={styles.link}>FAQ</Link>
+        </nav>
 
+        {/* Right side: language + auth */}
+        <div className={styles.navDesktop} aria-label="Actions" style={{ gap: 12 }}>
+          <LocaleSwitch />
           {auth === 'signedIn' ? (
-            <Link href="/dashboard" aria-label="Dashboard" className={styles.iconBtn}>
-              <BlueLoginIcon />
-            </Link>
+            <>
+              <Link href="/dashboard" className={styles.link}>Dashboard</Link>
+              <form action="/api/auth/logout" method="post">
+                <button className={styles.link} type="submit">Logout</button>
+              </form>
+            </>
           ) : (
-            <Link href="/login" aria-label="Sign in" className={styles.iconBtn}>
-              <BlueLoginIcon />
-            </Link>
+            <>
+              <Link href="/login" className={styles.link}>Login</Link>
+              <Link
+                href="/join"
+                className={styles.link}
+                style={{ background: 'rgb(251 191 36)', color: '#111', padding: '6px 12px', borderRadius: 9999, fontWeight: 700 }}
+              >
+                Join
+              </Link>
+            </>
           )}
 
-          {/* Hamburger always visible */}
-          <button
-            ref={btnRef}
-            className={styles.burger}
-            aria-label="Menu"
-            aria-controls="global-drawer"
-            aria-expanded={open}
-            onClick={() => setOpen(v => !v)}
-          >
-            <span className={styles.burgerBar} />
-            <span className={styles.burgerBar} />
-            <span className={styles.burgerBar} />
-          </button>
-        </div>
+        {/* Mobile burger */}
+        <button
+          ref={btnRef}
+          className={styles.burger}
+          aria-label="Menu"
+          aria-controls="mobile-menu"
+          aria-expanded={open}
+          onClick={() => setOpen((v) => !v)}
+        >
+          <span className={styles.burgerBar} />
+          <span className={styles.burgerBar} />
+          <span className={styles.burgerBar} />
+        </button>
       </div>
+
+      {/* Mobile drawer */}
+      <div id="mobile-menu" ref={menuRef} className={`${styles.navMobile} ${open ? styles.open : ''}`}>
+        <div className={styles.mobileLink} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span>Language</span>
+          <LocaleSwitch />
+        </div>
 
       {/* Drawer — works on desktop & mobile */}
       <div id="global-drawer" ref={menuRef} className={`${styles.drawer} ${open ? styles.open : ''}`}>
@@ -152,20 +139,19 @@ export default function Nav() {
 
           <div className={styles.drawerDivider} />
 
-          {auth === 'signedIn' ? (
-            <Link href="/dashboard" className={styles.drawerLink} onClick={() => setOpen(false)}>Dashboard</Link>
-          ) : (
-            <Link href="/login" className={styles.drawerLink} onClick={() => setOpen(false)}>Sign in</Link>
-          )}
-
-          <div className={styles.drawerDivider} />
-
-          <div className={styles.drawerRow}>
-            <span>Language</span>
-            <InlineLocaleToggle />
-          </div>
-        </nav>
-        <button className={styles.backdrop} aria-label="Close menu" onClick={() => setOpen(false)} />
+        {auth === 'signedIn' ? (
+          <>
+            <Link href="/dashboard" className={styles.mobileLink} onClick={() => setOpen(false)}>Dashboard</Link>
+            <form action="/api/auth/logout" method="post" className={styles.mobileLink}>
+              <button type="submit">Logout</button>
+            </form>
+          </>
+        ) : (
+          <>
+            <Link href="/login" className={styles.mobileLink} onClick={() => setOpen(false)}>Login</Link>
+            <Link href="/join" className={styles.mobileLink} onClick={() => setOpen(false)}>Join</Link>
+          </>
+        )}
       </div>
     </header>
   );
