@@ -45,6 +45,7 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
   const [lang, setLangState] = useState<Lang>('en');
   const [dyn, setDyn] = useState<Record<Lang, Dict>>({ en: {}, np: {} });
   const inflight = useRef(new Set<string>());
+  const hasFetchedCache = useRef(false);
 
   const logMissing = useCallback((key: string, english: string) => {
     try {
@@ -72,12 +73,42 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => { setLangState(detectInitialLang()); }, []);
 
-  function setLang(next: Lang) {
-    setLangState(next);
-    try { window.localStorage.setItem('lang', next); } catch {}
-  }
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (lang !== 'np') return;
+    if (hasFetchedCache.current) return;
+    hasFetchedCache.current = true;
 
-  const t = (key: string, fallback?: string) => {
+    let cancelled = false;
+
+    fetch('/api/i18n/cache', { cache: 'no-store' })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: Record<string, string> | null) => {
+        if (cancelled || !data) return;
+        setDyn((prev) => ({
+          ...prev,
+          np: { ...prev.np, ...data },
+        }));
+      })
+      .catch(() => {
+        /* ignore fetch failures */
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [lang]);
+
+  const setLang = useCallback((next: Lang) => {
+    setLangState(next);
+    try {
+      if (typeof window !== 'undefined') {
+        window.localStorage.setItem('lang', next);
+      }
+    } catch {}
+  }, []);
+
+  const t = useCallback((key: string, fallback?: string) => {
     const dict = { ...base[lang], ...dyn[lang] };
     if (dict[key]) return dict[key];
     // if missing NP, auto-translate from EN (or provided fallback)
@@ -101,9 +132,9 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
     }
     // default EN
     return base.en[key] ?? fallback ?? key;
-  };
+  }, [dyn, lang]);
 
-  const value = useMemo(() => ({ lang, setLang, t }), [lang, dyn]);
+  const value = useMemo(() => ({ lang, setLang, t }), [lang, setLang, t, dyn]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
