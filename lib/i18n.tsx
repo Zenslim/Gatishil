@@ -105,8 +105,12 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
 
   function setLang(next: Lang) {
     setLangState(next);
-    try { window.localStorage.setItem('lang', next); } catch {}
-  }
+    try {
+      if (typeof window !== 'undefined') {
+        window.localStorage.setItem('lang', next);
+      }
+    } catch {}
+  }, []);
 
   const t = (key: string, fallback?: string) => {
     const overrideDict = overrides[lang] ?? {};
@@ -118,6 +122,7 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
       const enText = base.en[key] ?? fallback ?? key;
       if (!inflight.current.has(key)) {
         inflight.current.add(key);
+        logMissing(key, enText);
         autoTranslate(key, enText).then((translated) => {
           inflight.current.delete(key);
           if (translated) {
@@ -136,7 +141,7 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
     }
     // default EN
     return base.en[key] ?? fallback ?? key;
-  };
+  }, [dyn, lang]);
 
   const value = useMemo(() => ({ lang, setLang, t }), [lang, dyn, overrides]);
 

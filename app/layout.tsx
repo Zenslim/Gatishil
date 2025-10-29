@@ -7,9 +7,9 @@ import Nav from "@/components/Nav";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Gatishil — DAO · Guthi · Movement",
+  title: "Gatishil — DAO · Guthi · Movement | गतिशील — DAO · गुठी · आन्दोलन",
   description:
-    "The DAO Party of the Powerless. Build parallel life, restore culture, and grow cooperative wealth.",
+    "The DAO Party of the Powerless. Build parallel life, restore culture, and grow cooperative wealth. शक्तिहीनहरूको DAO पार्टी। समानान्तर जीवन निर्माण गरौं, संस्कृतिको पुनर्जागरण गरौं, सहकारी समृद्धि बढाऔं।",
   keywords: [
     "Gatishil Nepal",
     "DAO",
@@ -19,9 +19,9 @@ export const metadata: Metadata = {
     "Cooperative Democracy",
   ],
   openGraph: {
-    title: "Gatishil — DAO · Guthi · Movement",
+    title: "Gatishil — DAO · Guthi · Movement | गतिशील — DAO · गुठी · आन्दोलन",
     description:
-      "Not another party of faces, but a movement that makes thrones irrelevant.",
+      "Not another party of faces, but a movement that makes thrones irrelevant. यो अनुहारहरूको अर्को पार्टी होइन, सिंहासनलाई निरर्थक बनाउने आन्दोलन हो।",
     url: "https://www.gatishilnepal.org",
     siteName: "Gatishil Nepal",
     images: [
@@ -29,7 +29,7 @@ export const metadata: Metadata = {
         url: "/og-image.png",
         width: 1200,
         height: 630,
-        alt: "Gatishil Nepal — DAO · Guthi · Movement",
+        alt: "Gatishil Nepal — DAO · Guthi · Movement | गतिशील नेपाल — DAO · गुठी · आन्दोलन",
       },
     ],
     locale: "en_US",
@@ -37,8 +37,8 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "Gatishil — DAO · Guthi · Movement",
-    description: "Democracy That Flows — Not Stagnates.",
+    title: "Gatishil — DAO · Guthi · Movement | गतिशील — DAO · गुठी · आन्दोलन",
+    description: "Democracy That Flows — Not Stagnates. जसमा लोकतन्त्र बग्छ — रोकिन्न।",
     images: ["/og-image.png"],
   },
   icons: {

@@ -36,16 +36,26 @@ function BlueLoginIcon({ className = '' }: { className?: string }) {
 }
 
 function InlineLocaleToggle() {
-  const { lang, setLang } = useI18n();
+  const { lang, setLang, t } = useI18n();
   if (lang === 'en') {
     return (
-      <button onClick={() => setLang('np')} aria-label="Switch to Nepali" className={styles.localeBtn} title="Switch to नेपाली">
+      <button
+        onClick={() => setLang('np')}
+        aria-label={t('nav.locale.switchToNepali', 'Switch to Nepali')}
+        className={styles.localeBtn}
+        title={t('nav.locale.switchToNepaliTitle', 'Switch to नेपाली')}
+      >
         <img src="/nepal.svg" alt="" className={styles.flagImg} />
       </button>
     );
   }
   return (
-    <button onClick={() => setLang('en')} aria-label="Switch to English" className={styles.localeBtn} title="Switch to English">
+    <button
+      onClick={() => setLang('en')}
+      aria-label={t('nav.locale.switchToEnglish', 'Switch to English')}
+      className={styles.localeBtn}
+      title={t('nav.locale.switchToEnglishTitle', 'Switch to English')}
+    >
       <span className={styles.enBadge}>EN</span>
     </button>
   );
@@ -56,6 +66,7 @@ export default function Nav() {
   const [auth, setAuth] = useState<SessionState>('unknown');
   const panelRef = useRef<HTMLDivElement>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
+  const { t } = useI18n();
 
   // Supabase auth
   useEffect(() => {
@@ -96,12 +107,22 @@ export default function Nav() {
   return (
     <header className={styles.header}>
       <div className={styles.bar}>
-        <Link href="/" className={styles.brand} aria-label="Gatishil Nepal — Home">
+        <Link
+          href="/"
+          className={styles.brand}
+          aria-label={t('nav.brand.ariaHome', 'Gatishil Nepal — Home')}
+        >
           <div className={styles.brandRow}>
-            <img src="/logo.svg" onError={(e) => { (e.currentTarget as HTMLImageElement).src = '/logo.png'; }} alt="Gatishil Nepal" width={28} height={28} />
+            <img
+              src="/logo.svg"
+              onError={(e) => { (e.currentTarget as HTMLImageElement).src = '/logo.png'; }}
+              alt={t('nav.brand.alt', 'Gatishil Nepal logo')}
+              width={28}
+              height={28}
+            />
             <div className={styles.brandText}>
-              <div className={styles.brandTitle}>Gatishil Nepal</div>
-              <div className={styles.brandSub}>DAO · Guthi · Movement</div>
+              <div className={styles.brandTitle}>{t('nav.brand.title', 'Gatishil Nepal')}</div>
+              <div className={styles.brandSub}>{t('nav.brand.subtitle', 'DAO · Guthi · Movement')}</div>
             </div>
           </div>
         </Link>
@@ -109,14 +130,14 @@ export default function Nav() {
         <div className={styles.actions}>
           <InlineLocaleToggle />
           {auth === 'signedIn' ? (
-            <Link href="/dashboard" aria-label="Dashboard"><BlueLoginIcon /></Link>
+            <Link href="/dashboard" aria-label={t('nav.actions.dashboard', 'Dashboard')}><BlueLoginIcon /></Link>
           ) : (
-            <Link href="/login" aria-label="Sign in"><BlueLoginIcon /></Link>
+            <Link href="/login" aria-label={t('nav.actions.signIn', 'Sign in')}><BlueLoginIcon /></Link>
           )}
           <button
             ref={btnRef}
             className={styles.burger}
-            aria-label="Menu"
+            aria-label={t('nav.burger.label', 'Menu')}
             aria-controls="global-drawer"
             aria-expanded={open}
             onClick={() => setOpen(v => !v)}
@@ -134,39 +155,51 @@ export default function Nav() {
       {/* FIX: use styles.isOpen (matches .isOpen in CSS) instead of the bare string "open" */}
       <div id="global-drawer" className={`${styles.drawer} ${open ? styles.isOpen : ''}`}>
         <div className={styles.backdrop} onClick={() => setOpen(false)} />
-        <div ref={panelRef} className={styles.panel} role="dialog" aria-modal="true" aria-label="Main menu">
+        <div
+          ref={panelRef}
+          className={styles.panel}
+          role="dialog"
+          aria-modal="true"
+          aria-label={t('nav.drawer.ariaLabel', 'Main menu')}
+        >
           <div className={styles.panelHead}>
-            <div className={styles.panelTitle}>Menu</div>
-            <button className={styles.closeBtn} onClick={() => setOpen(false)} aria-label="Close menu">✕</button>
+            <div className={styles.panelTitle}>{t('nav.drawer.title', 'Menu')}</div>
+            <button
+              className={styles.closeBtn}
+              onClick={() => setOpen(false)}
+              aria-label={t('nav.drawer.close', 'Close menu')}
+            >
+              ✕
+            </button>
           </div>
 
           <div className={styles.list}>
             <details className={styles.group}>
-              <summary><Icon name="about" /> About Us</summary>
+              <summary><Icon name="about" /> {t('nav.links.about', 'About Us')}</summary>
               <div className={styles.groupInner}>
-                <Link href="/why" className={styles.link} onClick={() => setOpen(false)}>Why</Link>
-                <Link href="/how" className={styles.link} onClick={() => setOpen(false)}>How</Link>
-                <Link href="/what" className={styles.link} onClick={() => setOpen(false)}>What</Link>
+                <Link href="/why" className={styles.link} onClick={() => setOpen(false)}>{t('nav.links.why', 'Why')}</Link>
+                <Link href="/how" className={styles.link} onClick={() => setOpen(false)}>{t('nav.links.how', 'How')}</Link>
+                <Link href="/what" className={styles.link} onClick={() => setOpen(false)}>{t('nav.links.what', 'What')}</Link>
               </div>
             </details>
 
-            <Link href="/blog" className={styles.link} onClick={() => setOpen(false)}><Icon name="blog" /> Blog</Link>
-            <Link href="/polls" className={styles.link} onClick={() => setOpen(false)}><Icon name="polls" /> Polls</Link>
-            <Link href="/proposals" className={styles.link} onClick={() => setOpen(false)}><Icon name="proposals" /> Proposals</Link>
-            <Link href="/members" className={styles.link} onClick={() => setOpen(false)}><Icon name="members" /> Members</Link>
-            <Link href="/#manifesto" className={styles.link} onClick={() => setOpen(false)}><Icon name="manifesto" /> Manifesto</Link>
-            <Link href="/faq#dao" className={styles.link} onClick={() => setOpen(false)}><Icon name="faq" /> FAQ</Link>
+            <Link href="/blog" className={styles.link} onClick={() => setOpen(false)}><Icon name="blog" /> {t('nav.links.blog', 'Blog')}</Link>
+            <Link href="/polls" className={styles.link} onClick={() => setOpen(false)}><Icon name="polls" /> {t('nav.links.polls', 'Polls')}</Link>
+            <Link href="/proposals" className={styles.link} onClick={() => setOpen(false)}><Icon name="proposals" /> {t('nav.links.proposals', 'Proposals')}</Link>
+            <Link href="/members" className={styles.link} onClick={() => setOpen(false)}><Icon name="members" /> {t('nav.links.members', 'Members')}</Link>
+            <Link href="/#manifesto" className={styles.link} onClick={() => setOpen(false)}><Icon name="manifesto" /> {t('nav.links.manifesto', 'Manifesto')}</Link>
+            <Link href="/faq#dao" className={styles.link} onClick={() => setOpen(false)}><Icon name="faq" /> {t('nav.links.faq', 'FAQ')}</Link>
 
             <div className={styles.divider} />
 
             {auth === 'signedIn' ? (
-              <Link href="/dashboard" className={styles.link} onClick={() => setOpen(false)}><Icon name="dashboard" /> Dashboard</Link>
+              <Link href="/dashboard" className={styles.link} onClick={() => setOpen(false)}><Icon name="dashboard" /> {t('nav.links.dashboard', 'Dashboard')}</Link>
             ) : (
-              <Link href="/login" className={styles.link} onClick={() => setOpen(false)}><Icon name="login" /> Sign in</Link>
+              <Link href="/login" className={styles.link} onClick={() => setOpen(false)}><Icon name="login" /> {t('nav.links.signIn', 'Sign in')}</Link>
             )}
 
             <div className={styles.footerRow}>
-              <span>Language</span>
+              <span>{t('nav.drawer.language', 'Language')}</span>
               <InlineLocaleToggle />
             </div>
           </div>
