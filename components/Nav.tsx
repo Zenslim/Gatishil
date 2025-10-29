@@ -20,31 +20,18 @@ function BlueLoginIcon({ className = '' }: { className?: string }) {
   );
 }
 
-/** Locale toggle:
- * EN UI → show Nepal flag (/public/nepal.svg) to switch to Nepali
- * NP UI → show EN text to switch back to English
- */
+/** Locale toggle: EN view → Nepal flag (from /public/nepal.svg). NP view → EN badge. */
 function InlineLocaleToggle() {
   const { lang, setLang } = useI18n();
   if (lang === 'en') {
     return (
-      <button
-        onClick={() => setLang('np')}
-        aria-label="Switch to Nepali"
-        className={styles.localeBtn}
-        title="Switch to नेपाली"
-      >
+      <button onClick={() => setLang('np')} aria-label="Switch to Nepali" className={styles.localeBtn} title="Switch to नेपाली">
         <img src="/nepal.svg" alt="" className={styles.flagImg} />
       </button>
     );
   }
   return (
-    <button
-      onClick={() => setLang('en')}
-      aria-label="Switch to English"
-      className={styles.localeBtn}
-      title="Switch to English"
-    >
+    <button onClick={() => setLang('en')} aria-label="Switch to English" className={styles.localeBtn} title="Switch to English">
       <span className={styles.enBadge}>EN</span>
     </button>
   );
@@ -60,9 +47,7 @@ export default function Nav() {
   useEffect(() => {
     const supa = createBrowserSupabase();
     supa.auth.getSession().then(({ data }) => setAuth(data.session ? 'signedIn' : 'signedOut'));
-    const { data: sub } = supa.auth.onAuthStateChange((_e, session) =>
-      setAuth(session ? 'signedIn' : 'signedOut')
-    );
+    const { data: sub } = supa.auth.onAuthStateChange((_e, session) => setAuth(session ? 'signedIn' : 'signedOut'));
     return () => { sub.subscription.unsubscribe(); };
   }, []);
 
@@ -92,13 +77,7 @@ export default function Nav() {
         {/* Brand */}
         <Link href="/" className={styles.brand} aria-label="Gatishil Nepal — Home">
           <div className={styles.brandRow}>
-            <img
-              src="/logo.svg"
-              onError={(e) => { (e.currentTarget as HTMLImageElement).src = '/logo.png'; }}
-              alt="Gatishil Nepal"
-              width={28}
-              height={28}
-            />
+            <img src="/logo.svg" onError={(e) => { (e.currentTarget as HTMLImageElement).src = '/logo.png'; }} alt="Gatishil Nepal" width={28} height={28} />
             <div className={styles.brandText}>
               <div className={styles.brandTitle}>Gatishil Nepal</div>
               <div className={styles.brandSub}>DAO · Guthi · Movement</div>
@@ -106,18 +85,14 @@ export default function Nav() {
           </div>
         </Link>
 
-        {/* Right: language, login/dashboard icon, hamburger */}
+        {/* Right actions */}
         <div className={styles.actions}>
           <InlineLocaleToggle />
 
           {auth === 'signedIn' ? (
-            <Link href="/dashboard" aria-label="Dashboard" className={styles.iconBtn}>
-              <BlueLoginIcon />
-            </Link>
+            <Link href="/dashboard" aria-label="Dashboard" className={styles.iconBtn}><BlueLoginIcon /></Link>
           ) : (
-            <Link href="/login" aria-label="Sign in" className={styles.iconBtn}>
-              <BlueLoginIcon />
-            </Link>
+            <Link href="/login" aria-label="Sign in" className={styles.iconBtn}><BlueLoginIcon /></Link>
           )}
 
           <button
@@ -128,34 +103,33 @@ export default function Nav() {
             aria-expanded={open}
             onClick={() => setOpen(v => !v)}
           >
-            <span className={styles.burgerBar} aria-hidden="true" />
-            <span className={styles.burgerBar} aria-hidden="true" />
-            <span className={styles.burgerBar} aria-hidden="true" />
+            <span className={styles.burgerBar} />
+            <span className={styles.burgerBar} />
+            <span className={styles.burgerBar} />
           </button>
         </div>
       </div>
 
       {/* Drawer */}
       <div id="global-drawer" ref={menuRef} className={`${styles.drawer} ${open ? styles.open : ''}`}>
-        <button className={styles.backdrop} aria-label="Close menu" onClick={() => setOpen(false)} />
+        <div className={styles.backdrop} onClick={() => setOpen(false)} />
         <nav className={styles.drawerBody} aria-label="Menu">
           <Link href="/why" className={styles.drawerLink} onClick={() => setOpen(false)}>Why</Link>
           <Link href="/how" className={styles.drawerLink} onClick={() => setOpen(false)}>How</Link>
           <Link href="/what" className={styles.drawerLink} onClick={() => setOpen(false)}>What</Link>
-                    <Link href="/polls" className={styles.drawerLink} onClick={() => setOpen(false)}>Polls</Link>
+          <Link href="/#manifesto" className={styles.drawerLink} onClick={() => setOpen(false)}>Manifesto</Link>
+          <Link href="/polls" className={styles.drawerLink} onClick={() => setOpen(false)}>Polls</Link>
           <Link href="/proposals" className={styles.drawerLink} onClick={() => setOpen(false)}>Proposals</Link>
           <Link href="/members" className={styles.drawerLink} onClick={() => setOpen(false)}>Members</Link>
           <Link href="/blog" className={styles.drawerLink} onClick={() => setOpen(false)}>Blog</Link>
           <Link href="/faq#dao" className={styles.drawerLink} onClick={() => setOpen(false)}>FAQ</Link>
 
           <div className={styles.drawerDivider} />
-
           {auth === 'signedIn' ? (
             <Link href="/dashboard" className={styles.drawerLink} onClick={() => setOpen(false)}>Dashboard</Link>
           ) : (
             <Link href="/login" className={styles.drawerLink} onClick={() => setOpen(false)}>Sign in</Link>
           )}
-
           <div className={styles.drawerDivider} />
 
           <div className={styles.drawerRow}>
