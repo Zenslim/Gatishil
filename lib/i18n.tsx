@@ -1,13 +1,5 @@
 'use client';
-import React, {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from 'react';
+import React, { createContext, useContext, useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import en from '@/locales/en.json';
 import np from '@/locales/np.json';
 
@@ -55,6 +47,30 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
   const inflight = useRef(new Set<string>());
   const hasFetchedCache = useRef(false);
 
+  const logMissing = useCallback((key: string, english: string) => {
+    try {
+      const context =
+        typeof window !== 'undefined'
+          ? `${window.location.pathname}${window.location.search ?? ''}`
+          : undefined;
+
+      const body = JSON.stringify({
+        key,
+        text: english,
+        ...(context ? { context } : {}),
+      });
+
+      void fetch('/api/i18n/missing', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body,
+        keepalive: true,
+      }).catch(() => {});
+    } catch {
+      // ignore logging errors entirely to avoid UI impact
+    }
+  }, []);
+
   useEffect(() => { setLangState(detectInitialLang()); }, []);
 
   useEffect(() => {
@@ -100,6 +116,7 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
       const enText = base.en[key] ?? fallback ?? key;
       if (!inflight.current.has(key)) {
         inflight.current.add(key);
+        logMissing(key, enText);
         autoTranslate(key, enText).then((translated) => {
           inflight.current.delete(key);
           if (translated) {

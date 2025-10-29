@@ -13,6 +13,7 @@ create table if not exists public.i18n_missing (
   key        text not null,
   en_text    text not null,
   en_hash    text not null, -- sha256 short for dedupe when English wording changes
+  context    text,
   first_seen timestamptz not null default now(),
   last_seen  timestamptz not null default now(),
   seen_count int not null default 1,
@@ -32,6 +33,12 @@ drop trigger if exists trg_i18n_missing_bump on public.i18n_missing;
 create trigger trg_i18n_missing_bump
 before update on public.i18n_missing
 for each row execute procedure public.i18n_missing_bump();
+
+-- convenience view: prioritize most frequently seen misses first
+create or replace view public.v_i18n_missing_priority as
+select key, en_text, en_hash, context, first_seen, last_seen, seen_count
+from public.i18n_missing
+order by seen_count desc, last_seen desc;
 
 -- 2) UI: approved NP overrides used at runtime by the app
 create table if not exists public.i18n_overrides (
