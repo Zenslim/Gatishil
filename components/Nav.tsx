@@ -8,18 +8,18 @@ import { useI18n } from '@/lib/i18n';
 
 type SessionState = 'unknown' | 'signedOut' | 'signedIn';
 
-function SignInIcon({ className = '' }: { className?: string }) {
+/** Blue circular “account” icon like your screenshot */
+function BlueLoginIcon({ className = '' }: { className?: string }) {
   return (
-    <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden className={className} fill="currentColor">
-      <path d="M12 12c2.76 0 5-2.69 5-6S14.76 0 12 0 7 2.69 7 6s2.24 6 5 6zm0 2c-4.42 0-8 2.24-8 5v1a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-1c0-2.76-3.58-5-8-5z"/>
+    <svg viewBox="0 0 48 48" width="26" height="26" className={className} aria-hidden>
+      <circle cx="24" cy="24" r="22" fill="#25A7E1" />
+      <circle cx="24" cy="19" r="7" fill="none" stroke="#0A2430" strokeWidth="3" />
+      <path d="M12 36c2.5-6 8-9 12-9s9.5 3 12 9" fill="none" stroke="#0A2430" strokeWidth="3" strokeLinecap="round" />
     </svg>
   );
 }
 
-/** Universal language toggle:
- * EN → shows 🇳🇵 (tap to switch to Nepali)
- * NP → shows EN (tap to switch back to English)
- */
+/** Locale toggle: EN UI → show 🇳🇵 flag only; NP UI → show EN text only */
 function InlineLocaleToggle() {
   const { lang, setLang } = useI18n();
   if (lang === 'en') {
@@ -27,10 +27,9 @@ function InlineLocaleToggle() {
       <button
         onClick={() => setLang('np')}
         aria-label="Switch to Nepali"
-        className="inline-flex items-center gap-1 rounded-full border border-white/15 px-2 py-1 text-sm hover:bg-white/5"
+        className="inline-flex items-center justify-center rounded-full border border-white/15 px-2 py-1 text-sm hover:bg-white/5"
       >
         <span aria-hidden>🇳🇵</span>
-        <span className="hidden sm:inline">NP</span>
       </button>
     );
   }
@@ -38,9 +37,9 @@ function InlineLocaleToggle() {
     <button
       onClick={() => setLang('en')}
       aria-label="Switch to English"
-      className="inline-flex items-center gap-1 rounded-full border border-white/15 px-2 py-1 text-sm hover:bg-white/5"
+      className="inline-flex items-center justify-center rounded-full border border-white/15 px-2 py-1 text-sm hover:bg-white/5 font-semibold"
     >
-      <span className="font-semibold">EN</span>
+      EN
     </button>
   );
 }
@@ -61,7 +60,7 @@ export default function Nav() {
     return () => { sub.subscription.unsubscribe(); };
   }, []);
 
-  // Close mobile drawer on outside click
+  // Close drawer on outside click
   useEffect(() => {
     function onDocClick(e: MouseEvent) {
       if (!open) return;
@@ -84,7 +83,7 @@ export default function Nav() {
   return (
     <header className={styles.header}>
       <div className={styles.bar}>
-        {/* BRAND: Logo + Title + Subline (always) */}
+        {/* Brand: Logo + Title + Subline */}
         <Link href="/" className={styles.brand} aria-label="Gatishil Nepal — Home">
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <img
@@ -102,49 +101,39 @@ export default function Nav() {
           </div>
         </Link>
 
-        {/* Desktop links (center) */}
-        <nav className={styles.navDesktop} aria-label="Primary">
-          <Link href="/why" className={styles.link}>Why</Link>
-          <Link href="/how" className={styles.link}>How</Link>
-          <Link href="/what" className={styles.link}>What</Link>
-          <Link href="/#manifesto" className={styles.link}>Manifesto</Link>
-          <Link href="/polls" className={styles.link}>Polls</Link>
-          <Link href="/proposals" className={styles.link}>Proposals</Link>
-          <Link href="/members" className={styles.link}>Members</Link>
-          <Link href="/blog" className={styles.link}>Blog</Link>
-          <Link href="/faq#dao" className={styles.link}>FAQ</Link>
-        </nav>
-
-        {/* Right side (desktop): Language + Auth */}
-        <div className={styles.navDesktop} aria-label="Actions" style={{ gap: 12 }}>
+        {/* Right actions (same on desktop & mobile): language, login icon, burger */}
+        <div className="flex items-center gap-3">
           <InlineLocaleToggle />
+
+          {/* Signed-out: blue login icon → /login; Signed-in: blue icon → /dashboard */}
           {auth === 'signedIn' ? (
-            <Link href="/dashboard" className={styles.link}>Dashboard</Link>
+            <Link href="/dashboard" aria-label="Dashboard">
+              <BlueLoginIcon />
+            </Link>
           ) : (
-            <Link href="/login" className={styles.link} aria-label="Sign in">
-              <SignInIcon />
+            <Link href="/login" aria-label="Sign in">
+              <BlueLoginIcon />
             </Link>
           )}
-        </div>
 
-        {/* Burger (mobile) */}
-        <button
-          ref={btnRef}
-          className={styles.burger}
-          aria-label="Menu"
-          aria-controls="mobile-menu"
-          aria-expanded={open}
-          onClick={() => setOpen(v => !v)}
-        >
-          <span className={styles.burgerBar} />
-          <span className={styles.burgerBar} />
-          <span className={styles.burgerBar} />
-        </button>
+          {/* Hamburger (always visible) */}
+          <button
+            ref={btnRef}
+            className={styles.burger}
+            aria-label="Menu"
+            aria-controls="mobile-menu"
+            aria-expanded={open}
+            onClick={() => setOpen(v => !v)}
+          >
+            <span className={styles.burgerBar} />
+            <span className={styles.burgerBar} />
+            <span className={styles.burgerBar} />
+          </button>
+        </div>
       </div>
 
-      {/* Mobile drawer */}
+      {/* Drawer menu (used on all breakpoints) */}
       <div id="mobile-menu" ref={menuRef} className={`${styles.navMobile} ${open ? styles.open : ''}`}>
-        {/* Language first on mobile */}
         <div className={styles.mobileLink} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <span>Language</span>
           <InlineLocaleToggle />
@@ -160,7 +149,6 @@ export default function Nav() {
         <Link href="/blog" className={styles.mobileLink} onClick={() => setOpen(false)}>Blog</Link>
         <Link href="/faq#dao" className={styles.mobileLink} onClick={() => setOpen(false)}>FAQ</Link>
 
-        {/* Auth row on mobile */}
         {auth === 'signedIn' ? (
           <Link href="/dashboard" className={styles.mobileLink} onClick={() => setOpen(false)}>Dashboard</Link>
         ) : (
