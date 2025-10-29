@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 
 /* ---------- minimal SVG icons (no extra deps) ---------- */
@@ -259,9 +260,13 @@ export default function LoginClient() {
   return (
     <div className="min-h-[80vh] grid place-items-center bg-neutral-950 text-white p-6">
       <div className="w-full max-w-md rounded-2xl border border-white/10 bg-black/40 p-6">
-        <h1 className="text-xl font-semibold">Sign in with PIN</h1>
-        <p className="text-sm text-white/70 mt-1">
-          Use your email or phone and the 4–8 digit PIN you set during Trust.
+        {/* --- Updated heading + subline --- */}
+        <h1 className="text-2xl font-bold">Sign in to your Gatishil Movement account</h1>
+        <p className="mt-2 text-sm text-slate-300/85">
+          Not a member yet?{' '}
+          <Link href="/join" className="underline underline-offset-4 hover:text-white">
+            Join Us→ join
+          </Link>
         </p>
 
         <form onSubmit={onSubmit} className="mt-6 space-y-4">
