@@ -113,7 +113,14 @@ export default function Nav() {
           ) : (
             <Link href="/login" aria-label="Sign in"><BlueLoginIcon /></Link>
           )}
-          <button ref={btnRef} className={styles.burger} aria-label="Menu" aria-controls="global-drawer" aria-expanded={open} onClick={() => setOpen(v => !v)}>
+          <button
+            ref={btnRef}
+            className={styles.burger}
+            aria-label="Menu"
+            aria-controls="global-drawer"
+            aria-expanded={open}
+            onClick={() => setOpen(v => !v)}
+          >
             <span className={styles.burgerInner}>
               <span className={styles.burgerBar} />
               <span className={styles.burgerBar} />
@@ -124,7 +131,8 @@ export default function Nav() {
       </div>
 
       {/* Full-screen Drawer */}
-      <div id="global-drawer" className={`${styles.drawer} ${open ? 'open' : ''}`}>
+      {/* FIX: use styles.isOpen (matches .isOpen in CSS) instead of the bare string "open" */}
+      <div id="global-drawer" className={`${styles.drawer} ${open ? styles.isOpen : ''}`}>
         <div className={styles.backdrop} onClick={() => setOpen(false)} />
         <div ref={panelRef} className={styles.panel} role="dialog" aria-modal="true" aria-label="Main menu">
           <div className={styles.panelHead}>
