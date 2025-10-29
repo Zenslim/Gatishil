@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { Inter } from "next/font/google";
+import Providers from "@/components/Providers";
+import Nav from "@/components/Nav";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -14,7 +16,7 @@ export const metadata: Metadata = {
     "Guthi",
     "Nepal Movement",
     "Decentralized Governance",
-    "Cooperative Democracy"
+    "Cooperative Democracy",
   ],
   openGraph: {
     title: "Gatishil — DAO · Guthi · Movement",
@@ -27,43 +29,43 @@ export const metadata: Metadata = {
         url: "/og-image.png",
         width: 1200,
         height: 630,
-        alt: "Gatishil Nepal — DAO · Guthi · Movement"
-      }
+        alt: "Gatishil Nepal — DAO · Guthi · Movement",
+      },
     ],
     locale: "en_US",
-    type: "website"
+    type: "website",
   },
   twitter: {
     card: "summary_large_image",
     title: "Gatishil — DAO · Guthi · Movement",
     description: "Democracy That Flows — Not Stagnates.",
-    images: ["/og-image.png"]
+    images: ["/og-image.png"],
   },
   icons: {
     icon: "/favicon.ico",
     shortcut: "/favicon.ico",
-    apple: "/apple-touch-icon.png"
+    apple: "/apple-touch-icon.png",
   },
   manifest: "/site.webmanifest",
-  metadataBase: new URL("https://www.gatishilnepal.org")
+  metadataBase: new URL("https://www.gatishilnepal.org"),
 };
 
 export default function RootLayout({
-  children
+  children,
 }: {
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
+      {/* Extra head tags are optional because Metadata covers most cases */}
       <head>
-        {/* Explicit <link> tags help Google and Apple detect the favicon faster */}
-        <link rel="icon" href="/favicon.ico" type="image/x-icon" />
-        <link rel="shortcut icon" href="/favicon.ico" />
-        <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
         <meta name="theme-color" content="#000000" />
       </head>
       <body className={`${inter.className} bg-black text-white antialiased`}>
-        {children}
+        <Providers>
+          <Nav />
+          {children}
+        </Providers>
       </body>
     </html>
   );

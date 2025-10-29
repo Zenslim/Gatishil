@@ -4,6 +4,7 @@
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 import styles from './Nav.module.css';
+import LocaleSwitch from '@/components/LocaleSwitch';
 
 type Item = { href: string; label: string };
 
@@ -25,7 +26,7 @@ export default function Nav() {
   const menuRef = useRef<HTMLDivElement>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
 
-  // Close on route change (client-side)
+  // Close on route change (browser history)
   useEffect(() => {
     const handler = () => setOpen(false);
     window.addEventListener('popstate', handler);
@@ -37,7 +38,10 @@ export default function Nav() {
     function onDocClick(e: MouseEvent) {
       if (!open) return;
       const t = e.target as Node;
-      if (menuRef.current && !menuRef.current.contains(t) && btnRef.current && !btnRef.current.contains(t)) {
+      if (
+        menuRef.current && !menuRef.current.contains(t) &&
+        btnRef.current && !btnRef.current.contains(t)
+      ) {
         setOpen(false);
       }
     }
@@ -61,6 +65,7 @@ export default function Nav() {
           ✅ Gatishil
         </Link>
 
+        {/* Desktop nav */}
         <nav className={styles.navDesktop} aria-label="Primary">
           {items.map((i) => (
             <Link key={i.href} href={i.href} className={styles.link}>
@@ -69,6 +74,12 @@ export default function Nav() {
           ))}
         </nav>
 
+        {/* Language toggle visible on all sizes */}
+        <div aria-label="Language" className={styles.navDesktop}>
+          <LocaleSwitch />
+        </div>
+
+        {/* Mobile menu button */}
         <button
           ref={btnRef}
           className={styles.burger}
@@ -83,11 +94,18 @@ export default function Nav() {
         </button>
       </div>
 
+      {/* Mobile drawer */}
       <div
         id="mobile-menu"
         ref={menuRef}
         className={`${styles.navMobile} ${open ? styles.open : ''}`}
       >
+        {/* Put the language switcher at top of drawer on mobile */}
+        <div className={styles.mobileLink} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span>Language</span>
+          <LocaleSwitch />
+        </div>
+
         {items.map((i) => (
           <Link
             key={i.href}
