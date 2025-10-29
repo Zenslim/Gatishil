@@ -21,7 +21,7 @@ function BlueLoginIcon({ className = '' }: { className?: string }) {
 }
 
 /** Locale toggle:
- * EN UI → show Nepal flag (from /public/nepal.svg) to switch to Nepali
+ * EN UI → show Nepal flag (/public/nepal.svg) to switch to Nepali
  * NP UI → show EN text to switch back to English
  */
 function InlineLocaleToggle() {
@@ -34,7 +34,7 @@ function InlineLocaleToggle() {
         className={styles.localeBtn}
         title="Switch to नेपाली"
       >
-        <img src="/nepal.svg" alt="" width={26} height={26} className={styles.flagImg} />
+        <img src="/nepal.svg" alt="" className={styles.flagImg} />
       </button>
     );
   }
@@ -89,25 +89,24 @@ export default function Nav() {
   return (
     <header className={styles.header}>
       <div className={styles.bar}>
-        {/* Brand: Logo + Title + Subline */}
+        {/* Brand */}
         <Link href="/" className={styles.brand} aria-label="Gatishil Nepal — Home">
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div className={styles.brandRow}>
             <img
               src="/logo.svg"
               onError={(e) => { (e.currentTarget as HTMLImageElement).src = '/logo.png'; }}
               alt="Gatishil Nepal"
               width={28}
               height={28}
-              style={{ display: 'block' }}
             />
-            <div style={{ lineHeight: 1 }}>
-              <div style={{ fontWeight: 700 }}>Gatishil Nepal</div>
-              <div style={{ fontSize: 12, opacity: 0.8 }}>DAO · Guthi · Movement</div>
+            <div className={styles.brandText}>
+              <div className={styles.brandTitle}>Gatishil Nepal</div>
+              <div className={styles.brandSub}>DAO · Guthi · Movement</div>
             </div>
           </div>
         </Link>
 
-        {/* Right: language, login/dashboard icon, hamburger — same across breakpoints */}
+        {/* Right: language, login/dashboard icon, hamburger */}
         <div className={styles.actions}>
           <InlineLocaleToggle />
 
@@ -121,7 +120,6 @@ export default function Nav() {
             </Link>
           )}
 
-          {/* Hamburger always visible */}
           <button
             ref={btnRef}
             className={styles.burger}
@@ -130,21 +128,21 @@ export default function Nav() {
             aria-expanded={open}
             onClick={() => setOpen(v => !v)}
           >
-            <span className={styles.burgerBar} />
-            <span className={styles.burgerBar} />
-            <span className={styles.burgerBar} />
+            <span className={styles.burgerBar} aria-hidden="true" />
+            <span className={styles.burgerBar} aria-hidden="true" />
+            <span className={styles.burgerBar} aria-hidden="true" />
           </button>
         </div>
       </div>
 
-      {/* Drawer — works on desktop & mobile */}
+      {/* Drawer */}
       <div id="global-drawer" ref={menuRef} className={`${styles.drawer} ${open ? styles.open : ''}`}>
+        <button className={styles.backdrop} aria-label="Close menu" onClick={() => setOpen(false)} />
         <nav className={styles.drawerBody} aria-label="Menu">
           <Link href="/why" className={styles.drawerLink} onClick={() => setOpen(false)}>Why</Link>
           <Link href="/how" className={styles.drawerLink} onClick={() => setOpen(false)}>How</Link>
           <Link href="/what" className={styles.drawerLink} onClick={() => setOpen(false)}>What</Link>
-          <Link href="/#manifesto" className={styles.drawerLink} onClick={() => setOpen(false)}>Manifesto</Link>
-          <Link href="/polls" className={styles.drawerLink} onClick={() => setOpen(false)}>Polls</Link>
+                    <Link href="/polls" className={styles.drawerLink} onClick={() => setOpen(false)}>Polls</Link>
           <Link href="/proposals" className={styles.drawerLink} onClick={() => setOpen(false)}>Proposals</Link>
           <Link href="/members" className={styles.drawerLink} onClick={() => setOpen(false)}>Members</Link>
           <Link href="/blog" className={styles.drawerLink} onClick={() => setOpen(false)}>Blog</Link>
@@ -165,7 +163,6 @@ export default function Nav() {
             <InlineLocaleToggle />
           </div>
         </nav>
-        <button className={styles.backdrop} aria-label="Close menu" onClick={() => setOpen(false)} />
       </div>
     </header>
   );

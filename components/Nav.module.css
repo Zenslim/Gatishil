@@ -1,10 +1,11 @@
 /* components/Nav.module.css */
+
+/* Header: solid dark (not overly transparent), same tone everywhere */
 .header {
   position: sticky;
   top: 0;
   z-index: 50;
-  backdrop-filter: blur(8px);
-  background: rgba(0,0,0,0.7);
+  background: #0b0b0b; /* solid to avoid 'darker' blur look */
   border-bottom: 1px solid rgba(255,255,255,0.06);
 }
 .bar {
@@ -14,51 +15,82 @@
   align-items: center;
   justify-content: space-between;
   padding: 10px 16px;
+  min-height: 56px;
 }
 .brand { color: #fff; text-decoration: none; }
+.brandRow { display: flex; align-items: center; gap: 10px; }
+.brandText { line-height: 1; }
+.brandTitle { font-weight: 700; }
+.brandSub { font-size: 12px; opacity: 0.8; }
+
 .actions { display: inline-flex; align-items: center; gap: 10px; }
+
+/* Locale toggle visuals */
 .localeBtn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   border-radius: 9999px;
-  border: 1px solid rgba(255,255,255,0.15);
+  border: 1px solid rgba(255,255,255,0.18);
   padding: 4px 8px;
   background: transparent;
   color: #fff;
+  line-height: 0;
 }
-.flagImg { display: block; width: 26px; height: 26px; object-fit: contain; }
+.flagImg {
+  display: block;
+  width: 26px;
+  height: auto;         /* prevents distortion */
+  object-fit: contain;  /* crisp flag */
+}
 .enBadge { font-weight: 700; letter-spacing: 0.4px; }
+
 .iconBtn { display: inline-flex; align-items: center; justify-content: center; }
 
-/* Hamburger is ALWAYS visible (desktop & mobile) */
+/* Hamburger: fixed box, lines not stretched */
 .burger {
   display: inline-flex !important;
   width: 42px; height: 36px;
   align-items: center; justify-content: center;
   border-radius: 12px;
-  background: rgba(255,255,255,0.06);
-  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.18);
+  line-height: 0;       /* avoid vertical centering artifacts */
 }
-.burgerBar { display: block; width: 20px; height: 2px; background: #fff; border-radius: 2px; }
+.burgerBar {
+  display: block;
+  width: 20px; height: 2px;
+  background: #fff;
+  border-radius: 2px;
+}
 .burgerBar + .burgerBar { margin-top: 4px; }
 
-/* Drawer works on desktop too */
+/* Drawer: solid panel and solid backdrop (not transparent) */
 .drawer { position: fixed; inset: 0; pointer-events: none; }
 .drawer.open { pointer-events: auto; }
-.backdrop { position: absolute; inset: 0; background: rgba(0,0,0,0.45); }
+
+.backdrop {
+  position: absolute; inset: 0;
+  background: rgba(0,0,0,0.6); /* darker overlay */
+}
+
 .drawerBody {
   position: absolute; top: 0; right: 0;
   width: min(92vw, 360px); height: 100%;
-  background: rgba(12,12,12,0.98);
-  border-left: 1px solid rgba(255,255,255,0.08);
+  background: #0c0c0c;  /* SOLID panel */
+  border-left: 1px solid rgba(255,255,255,0.12);
   transform: translateX(100%);
   transition: transform 220ms ease;
-  padding: 14px;
+  padding: 16px;
   display: flex; flex-direction: column; gap: 2px;
+  box-shadow: -12px 0 24px rgba(0,0,0,0.5);
 }
 .drawer.open .drawerBody { transform: translateX(0); }
-.drawerLink { color: #ddd; text-decoration: none; padding: 10px 8px; border-radius: 8px; }
+
+.drawerLink {
+  color: #ddd; text-decoration: none; padding: 12px 10px; border-radius: 8px;
+}
 .drawerLink:hover { background: rgba(255,255,255,0.06); color: #fff; }
-.drawerDivider { height: 1px; background: rgba(255,255,255,0.08); margin: 10px 0; }
+
+.drawerDivider { height: 1px; background: rgba(255,255,255,0.12); margin: 12px 0; }
 .drawerRow { display: flex; align-items: center; justify-content: space-between; color: #bbb; padding: 8px 4px; }
