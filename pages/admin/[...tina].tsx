@@ -1,7 +1,6 @@
-import tinaConfig from "@/tina/config";
-import { TinaAdmin } from "tinacms/dist/studio";
-export { getStaticProps } from "tinacms/dist/studio";
-
-export default function TinaAdminPage() {
-  return <TinaAdmin config={tinaConfig} />;
+// Next.js Pages Router entry for Tina Studio.
+// Force server-side rendering so Next.js does not require getStaticPaths.
+export { default } from 'tinacms/dist/next/studio';
+export async function getServerSideProps() {
+  return { props: {} };
 }
