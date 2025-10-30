@@ -1,380 +1,100 @@
-import { defineConfig } from "tinacms";
-
-type LocalizedStringField = {
-  name: string;
-  label: string;
-};
-
-const localizedString = ({ name, label }: LocalizedStringField) => ({
-  type: "string" as const,
-  name,
-  label,
-});
-
-const localizedRichText = ({ name, label }: LocalizedStringField) => ({
-  type: "rich-text" as const,
-  name,
-  label,
-});
-
-const isLocal = process.env.TINA_PUBLIC_IS_LOCAL === "true";
-const branch =
-  process.env.TINA_BRANCH ||
-  process.env.VERCEL_GIT_COMMIT_REF ||
-  process.env.HEAD ||
-  "main";
+import { defineConfig } from 'tinacms';
 
 export default defineConfig({
-  branch,
-  clientId: isLocal ? undefined : process.env.TINA_PUBLIC_CLIENT_ID,
-  token: isLocal ? undefined : process.env.TINA_TOKEN,
+  clientId: process.env.TINA_PUBLIC_CLIENT_ID || '',
+  token: process.env.TINA_TOKEN || '',
+  // Local mode works without Tina Cloud; keep build minimal
   build: {
-    outputFolder: "admin",
-    publicFolder: "public",
+    outputFolder: 'admin',
+    publicFolder: 'public',
   },
   media: {
     tina: {
-      mediaRoot: "uploads",
-      publicFolder: "public",
+      mediaRoot: 'uploads',
+      publicFolder: 'public',
     },
   },
   schema: {
     collections: [
       {
-        name: "pages",
-        label: "Pages",
-        path: "content/pages",
-        format: "json",
-        ui: {
-          router: ({ document }) => {
-            if (document._sys.filename === "home") {
-              return "/";
-            }
-            return `/${document._sys.filename}`;
-          },
-        },
+        name: 'pages',
+        label: 'Pages',
+        path: 'content/pages',
+        format: 'json',
+        ui: { allowedActions: { create: true, delete: false } },
         fields: [
-          localizedString({ name: "title_en", label: "Title (English)" }),
-          localizedString({ name: "title_np", label: "Title (Nepali)" }),
-          localizedRichText({ name: "body_en", label: "Body (English)" }),
-          localizedRichText({ name: "body_np", label: "Body (Nepali)" }),
+          { type: 'string', name: 'slug', label: 'Slug', isTitle: true, required: true },
+          { type: 'string', name: 'title_en', label: 'Title (EN)' },
+          { type: 'string', name: 'title_np', label: 'Title (NP)' },
+          { type: 'rich-text', name: 'body_en', label: 'Body (EN)' },
+          // Blocks field with TEMPLATES AS ARRAY (fixes TinaSchemaValidationError)
           {
-            type: "object",
-            name: "blocks",
-            label: "Blocks",
+            type: 'object',
+            name: 'blocks',
+            label: 'Blocks',
             list: true,
-            ui: {
-              itemProps: (item) => {
-                const templateLabel =
-                  item?._template === "hero"
-                    ? "Hero"
-                    : item?._template === "manifesto"
-                      ? "Manifesto"
-                      : item?._template === "foundations"
-                        ? "Foundations"
-                        : item?._template === "footer"
-                          ? "Footer"
-                          : "Block";
-                return {
-                  label: templateLabel,
-                };
-              },
-            },
-            templates: {
-              hero: {
-                label: "Hero",
+            ui: { visualSelector: true },
+            templates: [
+              {
+                name: 'hero',
+                label: 'Hero',
                 fields: [
-                  localizedString({ name: "badge_en", label: "Badge (English)" }),
-                  localizedString({ name: "badge_np", label: "Badge (Nepali)" }),
-                  localizedString({
-                    name: "headline_prefix_en",
-                    label: "Headline Prefix (English)",
-                  }),
-                  localizedString({
-                    name: "headline_prefix_np",
-                    label: "Headline Prefix (Nepali)",
-                  }),
-                  localizedString({
-                    name: "headline_suffix_en",
-                    label: "Headline Suffix (English)",
-                  }),
-                  localizedString({
-                    name: "headline_suffix_np",
-                    label: "Headline Suffix (Nepali)",
-                  }),
-                  localizedString({ name: "tagline_en", label: "Tagline (English)" }),
-                  localizedString({ name: "tagline_np", label: "Tagline (Nepali)" }),
-                  localizedRichText({
-                    name: "description_en",
-                    label: "Description (English)",
-                  }),
-                  localizedRichText({
-                    name: "description_np",
-                    label: "Description (Nepali)",
-                  }),
-                  {
-                    type: "object",
-                    name: "primary_cta",
-                    label: "Primary CTA",
-                    fields: [
-                      localizedString({
-                        name: "label_en",
-                        label: "Label (English)",
-                      }),
-                      localizedString({
-                        name: "label_np",
-                        label: "Label (Nepali)",
-                      }),
-                      {
-                        type: "string",
-                        name: "href",
-                        label: "Href",
-                      },
-                    ],
-                  },
-                  {
-                    type: "object",
-                    name: "secondary_cta",
-                    label: "Secondary CTA",
-                    fields: [
-                      localizedString({
-                        name: "label_en",
-                        label: "Label (English)",
-                      }),
-                      localizedString({
-                        name: "label_np",
-                        label: "Label (Nepali)",
-                      }),
-                      {
-                        type: "string",
-                        name: "href",
-                        label: "Href",
-                      },
-                    ],
-                  },
-                  localizedString({
-                    name: "disclaimer_en",
-                    label: "Disclaimer (English)",
-                  }),
-                  localizedString({
-                    name: "disclaimer_np",
-                    label: "Disclaimer (Nepali)",
-                  }),
-                  {
-                    type: "object",
-                    name: "daily_pulse",
-                    label: "Daily Pulse",
-                    fields: [
-                      localizedString({
-                        name: "title_en",
-                        label: "Title (English)",
-                      }),
-                      localizedString({
-                        name: "title_np",
-                        label: "Title (Nepali)",
-                      }),
-                      localizedString({
-                        name: "subtitle_en",
-                        label: "Subtitle (English)",
-                      }),
-                      localizedString({
-                        name: "subtitle_np",
-                        label: "Subtitle (Nepali)",
-                      }),
-                      {
-                        type: "object",
-                        name: "cards",
-                        label: "Cards",
-                        list: true,
-                        fields: [
-                          localizedString({
-                            name: "eyebrow_en",
-                            label: "Eyebrow (English)",
-                          }),
-                          localizedString({
-                            name: "eyebrow_np",
-                            label: "Eyebrow (Nepali)",
-                          }),
-                          localizedString({
-                            name: "title_en",
-                            label: "Title (English)",
-                          }),
-                          localizedString({
-                            name: "title_np",
-                            label: "Title (Nepali)",
-                          }),
-                          localizedString({
-                            name: "cta_label_en",
-                            label: "CTA Label (English)",
-                          }),
-                          localizedString({
-                            name: "cta_label_np",
-                            label: "CTA Label (Nepali)",
-                          }),
-                          {
-                            type: "string",
-                            name: "href",
-                            label: "Href",
-                          },
-                          {
-                            type: "boolean",
-                            name: "highlight",
-                            label: "Highlight Card",
-                            ui: {
-                              defaultValue: false,
-                            },
-                          },
-                          {
-                            type: "object",
-                            name: "secondary_cta",
-                            label: "Secondary CTA",
-                            ui: {
-                              defaultItem: {
-                                href: "",
-                              },
-                            },
-                            fields: [
-                              localizedString({
-                                name: "label_en",
-                                label: "Label (English)",
-                              }),
-                              localizedString({
-                                name: "label_np",
-                                label: "Label (Nepali)",
-                              }),
-                              {
-                                type: "string",
-                                name: "href",
-                                label: "Href",
-                              },
-                            ],
-                          },
-                        ],
-                      },
-                    ],
-                  },
+                  { type: 'string', name: 'eyebrow_en', label: 'Eyebrow (EN)' },
+                  { type: 'string', name: 'eyebrow_np', label: 'Eyebrow (NP)' },
+                  { type: 'string', name: 'heading_en', label: 'Heading (EN)' },
+                  { type: 'string', name: 'heading_np', label: 'Heading (NP)' },
+                  { type: 'rich-text', name: 'sub_en', label: 'Subcopy (EN)' },
+                  { type: 'rich-text', name: 'sub_np', label: 'Subcopy (NP)' },
                 ],
               },
-              manifesto: {
-                label: "Manifesto Grid",
+              {
+                name: 'manifestoGrid',
+                label: 'Manifesto Grid',
                 fields: [
-                  localizedString({ name: "kicker_en", label: "Kicker (English)" }),
-                  localizedString({ name: "kicker_np", label: "Kicker (Nepali)" }),
-                  localizedString({ name: "title_en", label: "Title (English)" }),
-                  localizedString({ name: "title_np", label: "Title (Nepali)" }),
-                  localizedRichText({
-                    name: "subtitle_en",
-                    label: "Subtitle (English)",
-                  }),
-                  localizedRichText({
-                    name: "subtitle_np",
-                    label: "Subtitle (Nepali)",
-                  }),
-                  localizedString({ name: "closer_en", label: "Closer (English)" }),
-                  localizedString({ name: "closer_np", label: "Closer (Nepali)" }),
                   {
-                    type: "object",
-                    name: "items",
-                    label: "Items",
+                    type: 'object',
+                    name: 'items',
+                    label: 'Items',
                     list: true,
                     fields: [
-                      localizedString({ name: "title_en", label: "Title (English)" }),
-                      localizedString({ name: "title_np", label: "Title (Nepali)" }),
-                      localizedRichText({
-                        name: "body_en",
-                        label: "Body (English)",
-                      }),
-                      localizedRichText({
-                        name: "body_np",
-                        label: "Body (Nepali)",
-                      }),
+                      { type: 'string', name: 'title_en', label: 'Title (EN)' },
+                      { type: 'string', name: 'title_np', label: 'Title (NP)' },
+                      { type: 'rich-text', name: 'body_en', label: 'Body (EN)' },
+                      { type: 'rich-text', name: 'body_np', label: 'Body (NP)' },
                     ],
                   },
                 ],
               },
-              foundations: {
-                label: "Foundations",
+              {
+                name: 'foundations',
+                label: 'Foundations',
                 fields: [
-                  localizedString({ name: "kicker_en", label: "Kicker (English)" }),
-                  localizedString({ name: "kicker_np", label: "Kicker (Nepali)" }),
-                  localizedString({ name: "title_en", label: "Title (English)" }),
-                  localizedString({ name: "title_np", label: "Title (Nepali)" }),
-                  localizedRichText({
-                    name: "subtitle_en",
-                    label: "Subtitle (English)",
-                  }),
-                  localizedRichText({
-                    name: "subtitle_np",
-                    label: "Subtitle (Nepali)",
-                  }),
-                  localizedString({ name: "closer_en", label: "Closer (English)" }),
-                  localizedString({ name: "closer_np", label: "Closer (Nepali)" }),
+                  { type: 'string', name: 'heading_en', label: 'Heading (EN)' },
+                  { type: 'string', name: 'heading_np', label: 'Heading (NP)' },
                   {
-                    type: "object",
-                    name: "stones",
-                    label: "Foundational Stones",
+                    type: 'object',
+                    name: 'pillars',
+                    label: 'Pillars',
                     list: true,
                     fields: [
-                      localizedString({ name: "title_en", label: "Title (English)" }),
-                      localizedString({ name: "title_np", label: "Title (Nepali)" }),
-                      localizedRichText({
-                        name: "description_en",
-                        label: "Description (English)",
-                      }),
-                      localizedRichText({
-                        name: "description_np",
-                        label: "Description (Nepali)",
-                      }),
+                      { type: 'string', name: 'title_en', label: 'Title (EN)' },
+                      { type: 'string', name: 'title_np', label: 'Title (NP)' },
+                      { type: 'rich-text', name: 'body_en', label: 'Body (EN)' },
+                      { type: 'rich-text', name: 'body_np', label: 'Body (NP)' },
                     ],
                   },
                 ],
               },
-              footer: {
-                label: "Footer",
+              {
+                name: 'footer',
+                label: 'Footer',
                 fields: [
-                  localizedString({ name: "site_en", label: "Site Label (English)" }),
-                  localizedString({ name: "site_np", label: "Site Label (Nepali)" }),
-                  localizedString({ name: "tagline_en", label: "Tagline (English)" }),
-                  localizedString({ name: "tagline_np", label: "Tagline (Nepali)" }),
-                  localizedString({
-                    name: "copyright_suffix_en",
-                    label: "Copyright Suffix (English)",
-                  }),
-                  localizedString({
-                    name: "copyright_suffix_np",
-                    label: "Copyright Suffix (Nepali)",
-                  }),
-                  {
-                    type: "object",
-                    name: "links",
-                    label: "Links",
-                    list: true,
-                    fields: [
-                      localizedString({ name: "label_en", label: "Label (English)" }),
-                      localizedString({ name: "label_np", label: "Label (Nepali)" }),
-                      {
-                        type: "string",
-                        name: "href",
-                        label: "Href",
-                      },
-                    ],
-                  },
+                  { type: 'string', name: 'cta_en', label: 'CTA (EN)' },
+                  { type: 'string', name: 'cta_np', label: 'CTA (NP)' },
                 ],
               },
-            },
+            ],
           },
-        ],
-      },
-      {
-        name: "blocks",
-        label: "Reusable Blocks",
-        path: "content/blocks",
-        format: "json",
-        fields: [
-          localizedString({ name: "title_en", label: "Title (English)" }),
-          localizedString({ name: "title_np", label: "Title (Nepali)" }),
-          localizedRichText({ name: "body_en", label: "Body (English)" }),
-          localizedRichText({ name: "body_np", label: "Body (Nepali)" }),
         ],
       },
     ],
