@@ -44,6 +44,16 @@
     }
   },
   "home": {
+    "content": {
+      "header": "Movement Home Page",
+      "enterEdit": "Edit Content",
+      "exitEdit": "Exit Edit Mode",
+      "saved": "Content updated successfully.",
+      "saveError": "Could not save changes. Please try again.",
+      "fallbackNotice": "Nepali translation not available yet — displaying English copy until it is provided.",
+      "saving": "Saving changes…",
+      "editingHelp": "Inline edits update only the active language. Switch languages to localize."
+    },
     "daoWord": {
       "label": "DAO",
       "definition": "DAO = Decentralized Autonomous Organization",

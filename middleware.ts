@@ -52,11 +52,15 @@ export async function middleware(req: NextRequest) {
       getAll: () => req.cookies.getAll(),
       setAll: (cookiesToSet) => {
         for (const cookie of cookiesToSet) {
+          const { name, value, options } = cookie;
+          const normalizedOptions = options ?? {};
           res.cookies.set({
-            ...cookie,
+            name,
+            value,
+            ...normalizedOptions,
             // Normalize secure defaults on the edge
-            sameSite: cookie.sameSite ?? 'lax',
-            secure: cookie.secure ?? true,
+            sameSite: normalizedOptions.sameSite ?? 'lax',
+            secure: normalizedOptions.secure ?? true,
           });
         }
       },

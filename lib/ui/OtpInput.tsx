@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useRef } from 'react';
+import type { KeyboardEvent } from 'react';
 import '@/styles/otp.css';
 
 type Props = {
@@ -23,7 +24,7 @@ export default function OtpInput({ value, onChange, length = 6 }: Props) {
     if (ch && i < length - 1) inputs.current[i + 1]?.focus();
   };
 
-  const onKey = (i: number, e: React.KeyboardEvent<HTMLInputElement>) => {
+  const onKey = (i: number, e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Backspace' && !value[i] && i > 0) {
       inputs.current[i - 1]?.focus();
     }
@@ -34,7 +35,9 @@ export default function OtpInput({ value, onChange, length = 6 }: Props) {
       {Array.from({ length }).map((_, i) => (
         <input
           key={i}
-          ref={(el) => (inputs.current[i] = el)}
+          ref={(el) => {
+            inputs.current[i] = el;
+          }}
           inputMode="numeric"
           maxLength={1}
           className="otp-cell"

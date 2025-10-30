@@ -13,14 +13,18 @@
     "noEmit": true,
     "allowJs": true,
     "incremental": true,
-    "types": [
-      "node",
-       ],
+    "types": ["node"],
     "baseUrl": ".",
     "paths": {
       "@/*": [
         "./*",
         "./src/*"
+      ],
+      "tinacms": [
+        "./types/tina/tinacms"
+      ],
+      "react-tinacms-inline": [
+        "./types/tina/react-inline"
       ]
     },
     "esModuleInterop": true,
@@ -36,9 +40,15 @@
     "next-env.d.ts",
     "**/*.ts",
     "**/*.tsx",
+    "**/*.d.ts",
     ".next/types/**/*.ts"
   ],
   "exclude": [
-    "node_modules"
+    "node_modules",
+    "coverage",
+    "sql",
+    "supabase/migrations",
+    "supabase_sql",
+    "vendor"
   ]
 }

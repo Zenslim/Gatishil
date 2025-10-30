@@ -1,10 +1,12 @@
 'use client';
-import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { createBrowserSupabase } from '@/lib/supa';
 import en from '@/locales/en.json';
 import np from '@/locales/np.json';
 
-type Dict = Record<string, string>;
+interface Dict {
+  [key: string]: string | Dict;
+}
 type Lang = 'en' | 'np';
 
 const base: Record<'en'|'np', Dict> = { en, np };
@@ -24,6 +26,12 @@ function detectInitialLang(): Lang {
   const nav = window.navigator?.language?.toLowerCase() || '';
   if (nav.startsWith('ne') || nav.startsWith('hi')) return 'np';
   return 'en';
+}
+
+function logMissing(key: string, fallback: string) {
+  if (process.env.NODE_ENV !== 'production') {
+    console.warn('[i18n] missing translation', key, '→ using', fallback);
+  }
 }
 
 async function autoTranslate(key: string, english: string): Promise<string | null> {
@@ -103,7 +111,7 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
     return () => { cancelled = true; };
   }, []);
 
-  function setLang(next: Lang) {
+  const setLang = useCallback((next: Lang) => {
     setLangState(next);
     try {
       if (typeof window !== 'undefined') {
@@ -112,38 +120,44 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
     } catch {}
   }, []);
 
-  const t = (key: string, fallback?: string) => {
-    const overrideDict = overrides[lang] ?? {};
-    if (overrideDict[key]) return overrideDict[key];
-    const dict = { ...base[lang], ...dyn[lang] };
-    if (dict[key]) return dict[key];
-    // if missing NP, auto-translate from EN (or provided fallback)
-    if (lang === 'np') {
-      const enText = base.en[key] ?? fallback ?? key;
-      if (!inflight.current.has(key)) {
-        inflight.current.add(key);
-        logMissing(key, enText);
-        autoTranslate(key, enText).then((translated) => {
-          inflight.current.delete(key);
-          if (translated) {
-            setDyn(prev => {
-              if (overridesRef.current.np[key]) return prev;
-              return {
-                ...prev,
-                np: { ...prev.np, [key]: translated }
-              };
-            });
-          }
-        });
-      }
-      // show EN until NP arrives
-      return enText;
-    }
-    // default EN
-    return base.en[key] ?? fallback ?? key;
-  }, [dyn, lang]);
+  const t = useCallback((key: string, fallback?: string) => {
+      const overrideCandidate = overrides[lang]?.[key];
+      if (typeof overrideCandidate === 'string') return overrideCandidate;
 
-  const value = useMemo(() => ({ lang, setLang, t }), [lang, dyn, overrides]);
+      const dynamicCandidate = dyn[lang]?.[key];
+      if (typeof dynamicCandidate === 'string') return dynamicCandidate;
+
+      const baseCandidate = base[lang]?.[key];
+      if (typeof baseCandidate === 'string') return baseCandidate;
+      // if missing NP, auto-translate from EN (or provided fallback)
+      if (lang === 'np') {
+        const enSource = base.en?.[key];
+        const enText = typeof enSource === 'string' ? enSource : fallback ?? key;
+        if (!inflight.current.has(key)) {
+          inflight.current.add(key);
+          logMissing(key, enText);
+          autoTranslate(key, enText).then((translated) => {
+            inflight.current.delete(key);
+            if (translated) {
+              setDyn(prev => {
+                if (overridesRef.current.np[key]) return prev;
+                return {
+                  ...prev,
+                  np: { ...prev.np, [key]: translated }
+                };
+              });
+            }
+          });
+        }
+        // show EN until NP arrives
+        return enText;
+      }
+      // default EN
+      const defaultSource = base.en?.[key];
+      return typeof defaultSource === 'string' ? defaultSource : fallback ?? key;
+  }, [dyn, lang, overrides]);
+
+  const value = useMemo(() => ({ lang, setLang, t }), [lang, setLang, t]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
