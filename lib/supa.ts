@@ -1,5 +1,6 @@
 // lib/supa.ts
 import { createClient } from '@supabase/supabase-js';
+import { getSupabaseBrowser } from '@/lib/supabase/browser';
 
 export function createServerSupabase() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -8,7 +9,5 @@ export function createServerSupabase() {
 }
 
 export function createBrowserSupabase() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-  return createClient(url, key);
+  return getSupabaseBrowser();
 }

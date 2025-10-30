@@ -4,7 +4,7 @@
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 import styles from './Nav.module.css';
-import { createBrowserSupabase } from '@/lib/supa';
+import { getSupabaseBrowser } from '@/lib/supabaseClient';
 import { useI18n } from '@/lib/i18n';
 
 type SessionState = 'unknown' | 'signedOut' | 'signedIn';
@@ -70,7 +70,7 @@ export default function Nav() {
 
   // Supabase auth
   useEffect(() => {
-    const supa = createBrowserSupabase();
+    const supa = getSupabaseBrowser();
     supa.auth.getSession().then(({ data }) => setAuth(data.session ? 'signedIn' : 'signedOut'));
     const { data: sub } = supa.auth.onAuthStateChange((_e, session) => setAuth(session ? 'signedIn' : 'signedOut'));
     return () => { sub.subscription.unsubscribe(); };
@@ -187,7 +187,7 @@ export default function Nav() {
             <Link href="/polls" className={styles.link} onClick={() => setOpen(false)}><Icon name="polls" /> {t('nav.links.polls', 'Polls')}</Link>
             <Link href="/proposals" className={styles.link} onClick={() => setOpen(false)}><Icon name="proposals" /> {t('nav.links.proposals', 'Proposals')}</Link>
             <Link href="/members" className={styles.link} onClick={() => setOpen(false)}><Icon name="members" /> {t('nav.links.members', 'Members')}</Link>
-            <Link href="/#manifesto" className={styles.link} onClick={() => setOpen(false)}><Icon name="manifesto" /> {t('nav.links.manifesto', 'Manifesto')}</Link>
+            <Link href="/manifesto" className={styles.link} onClick={() => setOpen(false)}><Icon name="manifesto" /> {t('nav.links.manifesto', 'Manifesto')}</Link>
             <Link href="/faq#dao" className={styles.link} onClick={() => setOpen(false)}><Icon name="faq" /> {t('nav.links.faq', 'FAQ')}</Link>
 
             <div className={styles.divider} />

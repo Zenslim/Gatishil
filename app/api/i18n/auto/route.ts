@@ -1,103 +1,74 @@
 // app/api/i18n/auto/route.ts
-import { NextResponse } from 'next/server';
-import crypto from 'crypto';
-import { createServerSupabase } from '@/lib/supa';
+import { NextResponse, NextRequest } from 'next/server';
 
-type Body = { key: string; source: 'en'; target: 'np'; text: string; context?: string };
+export const runtime = 'edge';
 
-function stableHash(input: string) {
-  return crypto.createHash('sha256').update(input).digest('base64url').slice(0, 16);
+type Lang = 'en' | 'np';
+
+// Map Accept-Language like "ne-NP" → "np", otherwise default to "en".
+function detectLangFromHeader(al?: string): Lang {
+  if (!al) return 'en';
+  const lc = al.toLowerCase();
+
+  // Treat Nepali tags as np (some browsers send "ne" or "ne-np")
+  if (/\b(ne|ne-np|ne_np|np)\b/.test(lc)) return 'np';
+
+  // Explicit English tags
+  if (/\b(en|en-us|en-gb)\b/.test(lc)) return 'en';
+
+  // Fallback: prefer Nepali if clearly present anywhere
+  if (lc.includes('ne') || lc.includes('np')) return 'np';
+
+  return 'en';
 }
 
-// Provider: Google Translate (v2) — requires GOOGLE_TRANSLATE_API_KEY
-async function googleTranslate(text: string, target: string) {
-  const key = process.env.GOOGLE_TRANSLATE_API_KEY;
-  if (!key) throw new Error('Missing GOOGLE_TRANSLATE_API_KEY');
-  const url = `https://translation.googleapis.com/language/translate/v2?key=${key}`;
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ q: text, target, source: 'en', format: 'text' }),
-    cache: 'no-store',
-  });
-  if (!res.ok) throw new Error('google translate failed');
-  const data = await res.json() as any;
-  return data?.data?.translations?.[0]?.translatedText as string;
-}
-
-// Provider: Azure Translator — requires AZURE_TRANSLATOR_KEY & AZURE_TRANSLATOR_REGION
-async function azureTranslate(text: string, target: string) {
-  const key = process.env.AZURE_TRANSLATOR_KEY;
-  const region = process.env.AZURE_TRANSLATOR_REGION;
-  if (!key || !region) throw new Error('Missing AZURE translator env');
-  const url = `https://api.cognitive.microsofttranslator.com/translate?api-version=3.0&from=en&to=${target}`;
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Ocp-Apim-Subscription-Key': key,
-      'Ocp-Apim-Subscription-Region': region,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify([{ Text: text }]),
-    cache: 'no-store',
-  });
-  if (!res.ok) throw new Error('azure translate failed');
-  const data = await res.json() as any;
-  return data?.[0]?.translations?.[0]?.text as string;
-}
-
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   try {
-    const body = (await req.json()) as Body;
-    const { key, source, target, text, context } = body;
-    if (!key || !text) return NextResponse.json({ error: 'missing key/text' }, { status: 400 });
-
-    const supa = createServerSupabase();
-    const hash = stableHash(`${text}::${context ?? ''}::${target}`);
-
-    const { data: overrideRow } = await supa
-      .from('i18n_overrides')
-      .select('np_text')
-      .eq('key', key)
-      .maybeSingle();
-
-    if (overrideRow?.np_text) {
-      return NextResponse.json({ translated: overrideRow.np_text, override: true });
+    // Optional JSON payload can override language explicitly: { "override": "en" | "np" }
+    let override: Lang | undefined;
+    try {
+      const body = await req.json().catch(() => null);
+      if (body && (body.override === 'en' || body.override === 'np')) {
+        override = body.override;
+      }
+    } catch {
+      // ignore malformed JSON; proceed using headers
     }
 
-    // 1) Check cache
-    const { data: found, error: findErr } = await supa
-      .from('i18n_cache')
-      .select('translated_text')
-      .eq('lang', target)
-      .eq('key', key)
-      .eq('hash', hash)
-      .maybeSingle();
-    if (found?.translated_text) {
-      return NextResponse.json({ translated: found.translated_text, cached: true });
-    }
+    const acceptLang = req.headers.get('accept-language') ?? undefined;
+    const chosen: Lang = override ?? detectLangFromHeader(acceptLang);
 
-    // 2) Translate
-    const provider = process.env.TRANSLATOR_PROVIDER || 'google';
-    let translated: string;
-    if (provider === 'azure') translated = await azureTranslate(text, target);
-    else translated = await googleTranslate(text, target);
+    const res = NextResponse.json({ ok: true, lang: chosen });
 
-    // 3) Store cache (unless an override was added meanwhile)
-    const { data: overrideExists } = await supa
-      .from('i18n_overrides')
-      .select('key')
-      .eq('key', key)
-      .maybeSingle();
+    // Set a robust cookie for 1 year
+    res.cookies.set({
+      name: 'lang',
+      value: chosen,
+      path: '/',
+      sameSite: 'lax',
+      httpOnly: false,
+      secure: true,
+      maxAge: 60 * 60 * 24 * 365,
+    });
 
-    if (!overrideExists?.key) {
-      await supa.from('i18n_cache').upsert({
-        key, lang: target, source_text: text, translated_text: translated, hash
-      });
-    }
-
-    return NextResponse.json({ translated, cached: false });
-  } catch (e: any) {
-    return NextResponse.json({ error: e?.message ?? 'failed' }, { status: 500 });
+    return res;
+  } catch {
+    // Never leak a 500 to the client; respond gracefully and still set a cookie
+    const res = NextResponse.json({ ok: false, lang: 'en' as Lang, error: 'fallback' }, { status: 200 });
+    res.cookies.set({
+      name: 'lang',
+      value: 'en',
+      path: '/',
+      sameSite: 'lax',
+      httpOnly: false,
+      secure: true,
+      maxAge: 60 * 60 * 24 * 365,
+    });
+    return res;
   }
+}
+
+export function GET() {
+  // Optional: allow GET for quick manual checks
+  return NextResponse.json({ ok: true, message: 'POST here to set lang cookie (en|np).' });
 }
