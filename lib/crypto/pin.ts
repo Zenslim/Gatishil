@@ -1,8 +1,14 @@
 
 import crypto from 'crypto';
+import type { BinaryLike, ScryptOptions } from 'crypto';
 import { promisify } from 'util';
 
-const scryptAsync = promisify(crypto.scrypt);
+const scryptAsync = promisify(crypto.scrypt) as unknown as (
+  password: BinaryLike,
+  salt: BinaryLike,
+  keylen: number,
+  options: ScryptOptions & { N?: number; r?: number; p?: number },
+) => Promise<Buffer>;
 
 /** Base64url encode a Buffer. */
 export function b64u(buf: Buffer): string {

@@ -1,3 +1,9 @@
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const here = path.dirname(fileURLToPath(import.meta.url));
+const resolveVendor = (relativePath) => path.join(here, relativePath);
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
@@ -33,6 +39,13 @@ const nextConfig = {
 
   // Extra guard: force argon2 to stay external in the server webpack build
   webpack: (config, { isServer }) => {
+    config.resolve = config.resolve || {};
+    config.resolve.alias = {
+      ...(config.resolve.alias ?? {}),
+      tinacms: resolveVendor('./vendor/tina/tinacms.tsx'),
+      'react-tinacms-inline': resolveVendor('./vendor/tina/react-inline.tsx'),
+    };
+
     if (isServer) {
       config.externals = config.externals || [];
       // Keep the package as a runtime require (CommonJS) so the native binary isn't parsed by webpack
