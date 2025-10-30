@@ -4,7 +4,7 @@
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 import styles from './Nav.module.css';
-import { getSupabaseBrowser } from '@/lib/supabaseClient';
+import { getSupabaseBrowser } from '@/lib/supa';
 import { useI18n } from '@/lib/i18n';
 
 type SessionState = 'unknown' | 'signedOut' | 'signedIn';

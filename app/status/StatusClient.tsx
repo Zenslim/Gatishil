@@ -1,6 +1,6 @@
 'use client';
 import React, { useEffect, useState } from 'react';
-import { getSupabaseBrowserClient } from '@/lib/supabaseClient';
+import { getSupabaseBrowserClient } from '@/lib/supa';
 
 export default function StatusClient() {
   const [ready, setReady] = useState(false);
