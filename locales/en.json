@@ -52,7 +52,10 @@
       "saveError": "Could not save changes. Please try again.",
       "fallbackNotice": "Nepali translation not available yet — displaying English copy until it is provided.",
       "saving": "Saving changes…",
-      "editingHelp": "Inline edits update only the active language. Switch languages to localize."
+      "editingHelp": "Inline edits update only the active language. Switch languages to localize.",
+      "translateFromEnglish": "Translate from English",
+      "translateMissingEnglish": "Add English copy first, then translate.",
+      "translateCopied": "Copied English text into Nepali. Adjust and save."
     },
     "daoWord": {
       "label": "DAO",

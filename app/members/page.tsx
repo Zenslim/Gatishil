@@ -1,9 +1,11 @@
 // app/members/page.tsx
 'use client';
 
+export const dynamic = 'force-dynamic';
+
 import { useEffect, useMemo, useState } from 'react';
 import { User } from '@supabase/supabase-js';
-import { getSupabaseBrowser } from '@/lib/supabaseClient';
+import { getSupabaseBrowserClient } from '@/lib/supabaseClient';
 
 type PublicCard = {
   id: string;
@@ -28,7 +30,7 @@ export default function MembersPage() {
   const [region, setRegion] = useState('');
   const [skillsCsv, setSkillsCsv] = useState(''); // "farmer, designer"
 
-  const supabase = useMemo(() => getSupabaseBrowser(), []);
+  const supabase = useMemo(() => getSupabaseBrowserClient(), []);
 
   // 1) find current signed-in user (needed for RPC)
   useEffect(() => {
