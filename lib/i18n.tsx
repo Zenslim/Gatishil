@@ -1,171 +1,162 @@
 'use client';
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { createBrowserSupabase } from '@/lib/supa';
+
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import en from '@/locales/en.json';
 import np from '@/locales/np.json';
 
-interface Dict {
-  [key: string]: string | Dict;
-}
-type Lang = 'en' | 'np';
+type Dict = Record<string, string | Dict>;
+export type Lang = 'en' | 'np';
 
-const base: Record<'en'|'np', Dict> = { en, np };
-
-type CtxType = {
+type I18nContextValue = {
   lang: Lang;
-  setLang: (l: Lang) => void;
+  setLang: (next: Lang) => void;
   t: (key: string, fallback?: string) => string;
 };
 
-const Ctx = createContext<CtxType | null>(null);
+const base: Record<Lang, Dict> = { en, np };
+const LANG_COOKIE = 'lang';
+const STORAGE_KEY = 'lang';
+const ONE_YEAR_SECONDS = 60 * 60 * 24 * 365;
+
+const I18nContext = createContext<I18nContextValue | null>(null);
+
+function readCookie(name: string): string | null {
+  if (typeof document === 'undefined') return null;
+  const cookies = document.cookie ? document.cookie.split(';') : [];
+  for (const cookie of cookies) {
+    const [rawName, ...rest] = cookie.trim().split('=');
+    if (rawName === name) {
+      return decodeURIComponent(rest.join('='));
+    }
+  }
+  return null;
+}
+
+function setCookie(name: string, value: string) {
+  if (typeof document === 'undefined') return;
+  const secure = typeof window !== 'undefined' && window.location?.protocol === 'https:' ? ';Secure' : '';
+  document.cookie = `${name}=${value};Path=/;Max-Age=${ONE_YEAR_SECONDS};SameSite=Lax${secure}`;
+}
+
+function getFromDict(dict: Dict | undefined, path: string): string | undefined {
+  if (!dict) return undefined;
+  const segments = path.split('.');
+  let current: string | Dict | undefined = dict;
+  for (const segment of segments) {
+    if (!current || typeof current !== 'object') {
+      return undefined;
+    }
+    current = current[segment];
+  }
+  return typeof current === 'string' ? current : undefined;
+}
 
 function detectInitialLang(): Lang {
   if (typeof window === 'undefined') return 'en';
-  const stored = window.localStorage.getItem('lang');
-  if (stored === 'en' || stored === 'np') return stored;
-  const nav = window.navigator?.language?.toLowerCase() || '';
-  if (nav.startsWith('ne') || nav.startsWith('hi')) return 'np';
-  return 'en';
-}
 
-function logMissing(key: string, fallback: string) {
-  if (process.env.NODE_ENV !== 'production') {
-    console.warn('[i18n] missing translation', key, '→ using', fallback);
+  const cookieLang = readCookie(LANG_COOKIE);
+  if (cookieLang === 'en' || cookieLang === 'np') {
+    return cookieLang;
   }
-}
 
-async function autoTranslate(key: string, english: string): Promise<string | null> {
   try {
-    const res = await fetch('/api/i18n/auto', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ key, source: 'en', target: 'np', text: english }),
-      cache: 'no-store'
-    });
-    if (!res.ok) return null;
-    const data = await res.json();
-    return data.translated ?? null;
-  } catch {
-    return null;
-  }
+    const stored = window.localStorage.getItem(STORAGE_KEY);
+    if (stored === 'en' || stored === 'np') {
+      return stored;
+    }
+  } catch {}
+
+  return 'en';
 }
 
 export function I18nProvider({ children }: { children: React.ReactNode }) {
   const [lang, setLangState] = useState<Lang>('en');
-  const [dyn, setDyn] = useState<Record<Lang, Dict>>({ en: {}, np: {} });
-  const [overrides, setOverrides] = useState<Record<Lang, Dict>>({ en: {}, np: {} });
-  const inflight = useRef(new Set<string>());
-  const overridesRef = useRef<Record<Lang, Dict>>(overrides);
-
-  useEffect(() => { setLangState(detectInitialLang()); }, []);
-
-  useEffect(() => { overridesRef.current = overrides; }, [overrides]);
+  const [overrides] = useState<Record<Lang, Record<string, string>>>(() => ({ en: {}, np: {} }));
 
   useEffect(() => {
-    let cancelled = false;
-    async function preload() {
-      try {
-        const supa = createBrowserSupabase();
-        const [cacheRes, overridesRes] = await Promise.all([
-          supa.from('i18n_cache').select('key, lang, translated_text'),
-          supa.from('i18n_overrides').select('key, np_text'),
-        ]);
-        if (cancelled) return;
-
-        if (!cacheRes.error && cacheRes.data) {
-          setDyn(prev => {
-            const next: Record<Lang, Dict> = {
-              en: { ...prev.en },
-              np: { ...prev.np },
-            };
-            for (const row of cacheRes.data) {
-              if (!row?.key || !row?.lang) continue;
-              const lang = row.lang as Lang;
-              if (lang !== 'en' && lang !== 'np') continue;
-              if (typeof row.translated_text !== 'string') continue;
-              next[lang][row.key] = row.translated_text;
-            }
-            return next;
-          });
-        }
-
-        if (!overridesRes.error && overridesRes.data) {
-          setOverrides(prev => {
-            const next: Record<Lang, Dict> = {
-              en: { ...prev.en },
-              np: { ...prev.np },
-            };
-            for (const row of overridesRes.data) {
-              if (!row?.key) continue;
-              next.np[row.key] = row.np_text ?? '';
-            }
-            return next;
-          });
-        }
-      } catch (err) {
-        console.error('Failed to preload i18n cache', err);
-      }
-    }
-
-    preload();
-    return () => { cancelled = true; };
+    setLangState(detectInitialLang());
   }, []);
 
-  const setLang = useCallback((next: Lang) => {
-    setLangState(next);
+  useEffect(() => {
+    if (typeof document !== 'undefined') {
+      document.documentElement.lang = lang;
+    }
     try {
       if (typeof window !== 'undefined') {
-        window.localStorage.setItem('lang', next);
+        window.localStorage.setItem(STORAGE_KEY, lang);
       }
     } catch {}
-  }, []);
+  }, [lang]);
 
-  const t = useCallback((key: string, fallback?: string) => {
-      const overrideCandidate = overrides[lang]?.[key];
-      if (typeof overrideCandidate === 'string') return overrideCandidate;
-
-      const dynamicCandidate = dyn[lang]?.[key];
-      if (typeof dynamicCandidate === 'string') return dynamicCandidate;
-
-      const baseCandidate = base[lang]?.[key];
-      if (typeof baseCandidate === 'string') return baseCandidate;
-      // if missing NP, auto-translate from EN (or provided fallback)
-      if (lang === 'np') {
-        const enSource = base.en?.[key];
-        const enText = typeof enSource === 'string' ? enSource : fallback ?? key;
-        if (!inflight.current.has(key)) {
-          inflight.current.add(key);
-          logMissing(key, enText);
-          autoTranslate(key, enText).then((translated) => {
-            inflight.current.delete(key);
-            if (translated) {
-              setDyn(prev => {
-                if (overridesRef.current.np[key]) return prev;
-                return {
-                  ...prev,
-                  np: { ...prev.np, [key]: translated }
-                };
-              });
-            }
-          });
+  const setLang = useCallback(
+    (next: Lang) => {
+      if (lang === next) return;
+      setLangState(next);
+      try {
+        setCookie(LANG_COOKIE, next);
+        if (typeof window !== 'undefined') {
+          window.localStorage.setItem(STORAGE_KEY, next);
         }
-        // show EN until NP arrives
-        return enText;
+      } catch {}
+      fetch('/api/i18n/auto', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ override: next }),
+        cache: 'no-store',
+      }).catch(() => {});
+    },
+    [lang],
+  );
+
+  const t = useCallback(
+    (key: string, fallback?: string) => {
+      const overrideCandidate = overrides[lang]?.[key];
+      if (typeof overrideCandidate === 'string' && overrideCandidate.length > 0) {
+        return overrideCandidate;
       }
-      // default EN
-      const defaultSource = base.en?.[key];
-      return typeof defaultSource === 'string' ? defaultSource : fallback ?? key;
-  }, [dyn, lang, overrides]);
+
+      const localized = getFromDict(base[lang], key);
+      if (typeof localized === 'string') {
+        return localized;
+      }
+
+      const english = overrides.en[key] ?? getFromDict(base.en, key);
+      if (typeof english === 'string') {
+        if (lang === 'np' && process.env.NODE_ENV !== 'production') {
+          console.warn(`[i18n] missing Nepali translation for "${key}" — falling back to English.`);
+        }
+        return english;
+      }
+
+      if (fallback) {
+        if (process.env.NODE_ENV !== 'production') {
+          console.warn(`[i18n] missing key "${key}" — using fallback.`);
+        }
+        return fallback;
+      }
+
+      if (process.env.NODE_ENV !== 'production') {
+        console.warn(`[i18n] missing key "${key}" with no fallback provided.`);
+      }
+
+      return key;
+    },
+    [lang, overrides],
+  );
 
   const value = useMemo(() => ({ lang, setLang, t }), [lang, setLang, t]);
 
-  return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
+  return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
 }
 
 export function useI18n() {
-  const ctx = useContext(Ctx);
-  if (!ctx) throw new Error('useI18n must be used within <I18nProvider>');
+  const ctx = useContext(I18nContext);
+  if (!ctx) {
+    throw new Error('useI18n must be used within <I18nProvider>.');
+  }
   return ctx;
 }
 
-export function useT() { return useI18n().t; }
+export function useT() {
+  return useI18n().t;
+}

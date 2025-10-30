@@ -1,6 +1,8 @@
 // app/members/page.tsx
 'use client';
 
+export const dynamic = 'force-dynamic';
+
 import { useEffect, useMemo, useState } from 'react';
 import { User } from '@supabase/supabase-js';
 import { getSupabaseBrowser } from '@/lib/supabaseClient';

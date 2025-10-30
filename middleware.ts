@@ -83,5 +83,5 @@ export async function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: PROTECTED.map((p) => `${p}/:path*`),
+  matcher: ['/dashboard/:path*', '/onboard/:path*', '/people/:path*'],
 };

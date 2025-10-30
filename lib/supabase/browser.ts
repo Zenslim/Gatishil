@@ -72,3 +72,5 @@ export const supabase: SupabaseClient = new Proxy({} as SupabaseClient, {
     return typeof value === 'function' ? value.bind(instance) : value;
   },
 });
+
+export const getSupabaseBrowserClient = getSupabaseBrowser;
