@@ -1,3 +1,4 @@
+// app/layout.tsx
 import type { Metadata } from "next";
 import "./globals.css";
 import { Inter } from "next/font/google";
@@ -57,9 +58,25 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" suppressHydrationWarning>
-      {/* Extra head tags are optional because Metadata covers most cases */}
+      {/* Metadata handles most head needs */}
       <head>
         <meta name="theme-color" content="#000000" />
+        {/* Client-only i18n auto: runs after hydration; never touches server */}
+        <script
+          // eslint-disable-next-line react/no-danger
+          dangerouslySetInnerHTML={{
+            __html: `
+(function(){
+  try {
+    if (typeof window !== 'undefined') {
+      // Fire and forget; avoid blocking render and swallow any network errors
+      fetch('/api/i18n/auto', { method: 'POST' }).catch(function(){});
+    }
+  } catch(_) {}
+})();
+`,
+          }}
+        />
       </head>
       <body className={`${inter.className} bg-black text-white antialiased`}>
         <Providers>
