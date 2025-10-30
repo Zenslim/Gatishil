@@ -1,20 +1,28 @@
-// Unified Supabase exports used across the app.
-// We adapt to what's actually exported by '@/lib/supabaseClient' so other files can import stable names.
-//
-// Existing available exports there (per build logs):
-//   - __serverOnlySupabase__
-//   - getSupabaseBrowser
-//   - getSupabaseBrowserClient
-//   - supabase
-//
-// We provide the symbols other modules expect:
-//   - createServerSupabase (alias of __serverOnlySupabase__)
-//   - getSupabaseBrowser (re-export)
-//   - getSupabaseBrowserClient (re-export)
-//   - supabase (re-export)
+import {
+  __serverOnlySupabase__,
+  getSupabaseBrowser as exportedGetSupabaseBrowser,
+  getSupabaseBrowserClient,
+  supabase as exportedSupabase,
+} from '@/lib/supabaseClient';
 
-export { getSupabaseBrowser, getSupabaseBrowserClient, supabase } from '@/lib/supabaseClient';
-export { __serverOnlySupabase__ as createServerSupabase } from '@/lib/supabaseClient';
+export const getSupabaseBrowser =
+  typeof exportedGetSupabaseBrowser === 'function'
+    ? exportedGetSupabaseBrowser
+    : (...args: any[]) => (getSupabaseBrowserClient as any)(...args);
 
-// If some code imports getSupabaseServer, expose the same server alias:
-export { __serverOnlySupabase__ as getSupabaseServer } from '@/lib/supabaseClient';
+// Make it available to any legacy code that forgot to import:
+(globalThis as any).getSupabaseBrowser ??= getSupabaseBrowser;
+
+// Aliases expected around the app:
+export { getSupabaseBrowserClient } from '@/lib/supabaseClient';
+export const createServerSupabase = __serverOnlySupabase__;
+export const getSupabaseServer = __serverOnlySupabase__;
+export const supabase = exportedSupabase;
+
+export default {
+  getSupabaseBrowser,
+  getSupabaseBrowserClient,
+  getSupabaseServer: __serverOnlySupabase__,
+  createServerSupabase: __serverOnlySupabase__,
+  supabase: exportedSupabase,
+};
