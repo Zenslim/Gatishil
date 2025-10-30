@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { supabaseBrowser } from '@/lib/supabaseBrowser';
+import { supabase } from '@/lib/supabaseBrowser';
 import Card from '@/components/Card';
 
 export default function Client() {
@@ -17,7 +17,7 @@ export default function Client() {
 
   useEffect(() => {
     (async () => {
-      const { data: { user } } = await supabaseBrowser.auth.getUser();
+      const { data: { user } } = await supabase.auth.getUser();
       if (!user?.email) {
         setMsg('No user session');
         return;
@@ -28,7 +28,7 @@ export default function Client() {
       // Attempt initial upsert (insert-once; ignore duplicate)
       try {
         const fullName = (user.user_metadata as any)?.full_name || user.email;
-        const { error } = await supabaseBrowser
+        const { error } = await supabase
           .from('people')
           .insert([
             {
@@ -47,7 +47,7 @@ export default function Client() {
       }
 
       // Read back the record to populate outputs
-      const { data } = await supabaseBrowser
+      const { data } = await supabase
         .from('people')
         .select('*')
         .eq('email', user.email)

@@ -4,6 +4,7 @@ import "./globals.css";
 import { Inter } from "next/font/google";
 import Providers from "@/components/Providers";
 import Nav from "@/components/Nav";
+import TinaProvider from "@/components/tina/TinaProvider";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -79,10 +80,12 @@ export default function RootLayout({
         />
       </head>
       <body className={`${inter.className} bg-black text-white antialiased`}>
-        <Providers>
-          <Nav />
-          {children}
-        </Providers>
+        <TinaProvider>
+          <Providers>
+            <Nav />
+            {children}
+          </Providers>
+        </TinaProvider>
       </body>
     </html>
   );

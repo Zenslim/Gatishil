@@ -21,10 +21,16 @@
         "./src/*"
       ],
       "tinacms": [
-        "./types/tina/tinacms"
+        "./lib/tina/stubs/index"
       ],
-      "react-tinacms-inline": [
-        "./types/tina/react-inline"
+      "tinacms/dist/react": [
+        "./lib/tina/stubs/react"
+      ],
+      "tinacms/dist/rich-text": [
+        "./lib/tina/stubs/rich-text"
+      ],
+      "tinacms/dist/studio": [
+        "./lib/tina/stubs/studio"
       ]
     },
     "esModuleInterop": true,

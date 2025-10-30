@@ -12,7 +12,9 @@
     "start": "next start",
     "lint": "eslint . --max-warnings=0",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run --reporter=verbose"
+    "test": "vitest run --reporter=verbose",
+    "tina:dev": "tinacms dev -c ./tina/config.ts",
+    "tina:build": "tinacms build -c ./tina/config.ts"
   },
   "dependencies": {
     "@supabase/ssr": "0.5.0",
@@ -33,6 +35,7 @@
     "react-markdown": "9.0.1",
     "remark-gfm": "4.0.0",
     "three": "0.169.0",
+    "tinacms": "^2.5.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {
@@ -52,6 +55,8 @@
     "globals": "13.24.0",
     "jsdom": "24.0.0",
     "postcss": "8.4.47",
+    "@tinacms/cli": "^1.6.7",
+    "@tinacms/mdx": "^1.5.25",
     "prettier": "3.3.3",
     "tailwindcss": "3.4.13",
     "typescript": "5.6.2",

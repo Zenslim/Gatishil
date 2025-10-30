@@ -4,7 +4,10 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useS
 import en from '@/locales/en.json';
 import np from '@/locales/np.json';
 
-type Dict = Record<string, string | Dict>;
+type DictValue = string | Dict;
+interface Dict {
+  [key: string]: DictValue;
+}
 export type Lang = 'en' | 'np';
 
 type I18nContextValue = {
