@@ -1,6 +1,7 @@
 'use client';
 
 import dynamic from 'next/dynamic';
+import type { ReactNode } from 'react';
 import { useEffect, useMemo, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
@@ -61,6 +62,9 @@ export default function HomePageClient({ initialContent, canEdit, onSave }: Home
     );
   }, [content.body_en, content.body_np, lang]);
 
+  const englishTitle = content.title_en ?? '';
+  const englishBody = content.body_en ?? '';
+
   const titleField: keyof HomeContentPatch = lang === 'np' ? 'title_np' : 'title_en';
   const bodyField: keyof HomeContentPatch = lang === 'np' ? 'body_np' : 'body_en';
 
@@ -104,7 +108,48 @@ export default function HomePageClient({ initialContent, canEdit, onSave }: Home
     }
   };
 
+  const handleTranslateFromEnglish = (target: 'title' | 'body') => {
+    const field: keyof HomeContentPatch = target === 'title' ? 'title_np' : 'body_np';
+    const englishSource = target === 'title' ? englishTitle : englishBody;
+
+    if (!englishSource.trim()) {
+      setToast({
+        type: 'error',
+        text: t('home.content.translateMissingEnglish', 'Add English copy first, then translate.'),
+      });
+      return;
+    }
+
+    setContent((prev) => ({
+      ...prev,
+      [field]: englishSource,
+    }));
+
+    setToast({
+      type: 'success',
+      text: t('home.content.translateCopied', 'Copied English text into Nepali. Adjust and save.'),
+    });
+  };
+
   const usingNepaliFallback = lang === 'np' && (!content.title_np?.trim() || !content.body_np?.trim());
+
+  const translateTitleAction = canEdit && editMode && lang === 'np'
+    ? (
+        <TranslateButton
+          onClick={() => handleTranslateFromEnglish('title')}
+          label={t('home.content.translateFromEnglish', 'Translate from English')}
+        />
+      )
+    : undefined;
+
+  const translateBodyAction = canEdit && editMode && lang === 'np'
+    ? (
+        <TranslateButton
+          onClick={() => handleTranslateFromEnglish('body')}
+          label={t('home.content.translateFromEnglish', 'Translate from English')}
+        />
+      )
+    : undefined;
 
   return (
     <TinaInlineProvider canEdit={canEdit} editMode={editMode}>
@@ -199,7 +244,7 @@ export default function HomePageClient({ initialContent, canEdit, onSave }: Home
                 <span className="block text-xl uppercase tracking-[0.4em] text-amber-300/80 sm:text-2xl">
                   {t('home.hero.headline.beforeDao', 'The')}
                 </span>
-                <EditableTitle value={title} onSave={handleTitleSave} />
+                <EditableTitle value={title} onSave={handleTitleSave} translateAction={translateTitleAction} />
                 <span className="block text-lg font-normal uppercase tracking-[0.32em] text-amber-200/80 sm:text-xl">
                   {t('home.hero.headline.afterDao', 'Party of the Powerless.')}
                 </span>
@@ -222,7 +267,7 @@ export default function HomePageClient({ initialContent, canEdit, onSave }: Home
               </p>
 
               <div className="space-y-6">
-                <EditableBody value={body} onSave={handleBodySave} />
+                <EditableBody value={body} onSave={handleBodySave} translateAction={translateBodyAction} />
 
                 <div className="flex flex-wrap gap-3 text-sm font-semibold">
                   <Link
@@ -302,19 +347,53 @@ export default function HomePageClient({ initialContent, canEdit, onSave }: Home
   );
 }
 
-function EditableTitle({ value, onSave }: { value: string; onSave: (value: string) => Promise<void> }) {
+function EditableTitle({
+  value,
+  onSave,
+  translateAction,
+}: {
+  value: string;
+  onSave: (value: string) => Promise<void>;
+  translateAction?: ReactNode;
+}) {
   return (
-    <span className="mt-3 block bg-gradient-to-r from-amber-200 via-orange-300 to-rose-300 bg-clip-text text-4xl font-bold text-transparent sm:text-5xl lg:text-6xl">
-      <TinaInline value={value} onSave={onSave} />
-    </span>
+    <div className="mt-3 space-y-2">
+      <span className="block bg-gradient-to-r from-amber-200 via-orange-300 to-rose-300 bg-clip-text text-4xl font-bold text-transparent sm:text-5xl lg:text-6xl">
+        <TinaInline value={value} onSave={onSave} />
+      </span>
+      {translateAction}
+    </div>
   );
 }
 
-function EditableBody({ value, onSave }: { value: string; onSave: (value: string) => Promise<void> }) {
+function EditableBody({
+  value,
+  onSave,
+  translateAction,
+}: {
+  value: string;
+  onSave: (value: string) => Promise<void>;
+  translateAction?: ReactNode;
+}) {
   return (
-    <div className="rounded-2xl border border-white/10 bg-black/30 p-6">
-      <TinaInline value={value} onSave={onSave} multiline />
+    <div className="space-y-2">
+      <div className="rounded-2xl border border-white/10 bg-black/30 p-6">
+        <TinaInline value={value} onSave={onSave} multiline />
+      </div>
+      {translateAction}
     </div>
+  );
+}
+
+function TranslateButton({ onClick, label }: { onClick: () => void; label: string }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="inline-flex items-center gap-2 rounded-full border border-amber-300/40 bg-amber-200/10 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-amber-100 transition hover:bg-amber-200/20 hover:text-amber-50"
+    >
+      {label}
+    </button>
   );
 }
 
