@@ -1,5 +1,6 @@
 'use client';
 
+import dynamic from 'next/dynamic';
 import { useEffect, useMemo, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
@@ -7,6 +8,8 @@ import ClientOnly from '@/components/ClientOnly';
 import TinaInline, { TinaInlineProvider } from '@/components/TinaInline';
 import type { HomeContentPatch, HomeContentRecord } from '@/lib/content';
 import { useI18n, useT } from '@/lib/i18n';
+
+const Starfield = dynamic(() => import('./StarfieldClient'), { ssr: false });
 
 type ToastState = { type: 'success' | 'error'; text: string } | null;
 type Translate = (key: string, fallback?: string) => string;
@@ -34,6 +37,12 @@ export default function HomePageClient({ initialContent, canEdit, onSave }: Home
       setEditMode(false);
     }
   }, [canEdit]);
+
+  useEffect(() => {
+    if (!toast) return;
+    const id = setTimeout(() => setToast(null), 4000);
+    return () => clearTimeout(id);
+  }, [toast]);
 
   const title = useMemo(() => {
     if (lang === 'np' && content.title_np?.trim()) {
@@ -100,9 +109,7 @@ export default function HomePageClient({ initialContent, canEdit, onSave }: Home
   return (
     <TinaInlineProvider canEdit={canEdit} editMode={editMode}>
       <div className="relative min-h-screen overflow-hidden bg-slate-950 text-slate-100">
-        <ClientOnly>
-          <Starfield />
-        </ClientOnly>
+        <Starfield />
 
         <header className="relative z-20 border-b border-white/5 bg-slate-950/70 backdrop-blur">
           <div className="mx-auto flex max-w-6xl flex-col gap-4 px-4 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8">
@@ -307,42 +314,6 @@ function EditableBody({ value, onSave }: { value: string; onSave: (value: string
   return (
     <div className="rounded-2xl border border-white/10 bg-black/30 p-6">
       <TinaInline value={value} onSave={onSave} multiline />
-    </div>
-  );
-}
-
-function Starfield() {
-  const stars = useMemo(
-    () =>
-      Array.from({ length: 120 }).map((_, index) => ({
-        id: index,
-        top: Math.random() * 100,
-        left: Math.random() * 100,
-        size: Math.random() * 1.5 + 0.4,
-        duration: Math.random() * 6 + 6,
-        delay: Math.random() * 4,
-      })),
-    [],
-  );
-
-  return (
-    <div className="pointer-events-none absolute inset-0 overflow-hidden">
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(248,250,252,0.08),_rgba(15,23,42,0.95))]" />
-      {stars.map((star) => (
-        <motion.span
-          key={star.id}
-          className="absolute rounded-full bg-white/70"
-          style={{ top: `${star.top}%`, left: `${star.left}%`, width: star.size, height: star.size }}
-          initial={{ opacity: 0 }}
-          animate={{ opacity: [0, 1, 0.2], scale: [1, 1.3, 1] }}
-          transition={{
-            duration: star.duration,
-            delay: star.delay,
-            repeat: Infinity,
-            ease: 'easeInOut',
-          }}
-        />
-      ))}
     </div>
   );
 }
