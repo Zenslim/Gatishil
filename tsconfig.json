@@ -21,6 +21,12 @@
       "@/*": [
         "./*",
         "./src/*"
+      ],
+      "tinacms": [
+        "./vendor/tina/tinacms"
+      ],
+      "react-tinacms-inline": [
+        "./vendor/tina/react-inline"
       ]
     },
     "esModuleInterop": true,
