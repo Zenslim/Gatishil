@@ -1,36 +1,39 @@
-// app/status/page.tsx
 'use client';
-
 export const dynamic = 'force-dynamic';
 
-import { useEffect, useMemo, useState } from 'react';
-import { getSupabaseBrowserClient } from '@/lib/supabaseClient';
-
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { getSupabaseBrowserClient } from '@/lib/supabaseClient';
 
 export default function StatusPage() {
   const [ready, setReady] = useState(false);
+  const [authStatus, setAuthStatus] = useState<'signed_in' | 'signed_out' | 'unknown'>('unknown');
+
+  const supabase = useMemo(() => getSupabaseBrowserClient(), []);
 
   useEffect(() => {
-    try {
-      const sb = getSupabaseBrowserClient();
-      // optional: ping or status checks
-    } catch {
-      // ignore
-    } finally {
-      setReady(true);
-    }
-  }, []);
+    let alive = true;
+    (async () => {
+      try {
+        const { data } = await supabase.auth.getUser();
+        if (!alive) return;
+        setAuthStatus(data?.user ? 'signed_in' : 'signed_out');
+      } catch {
+        if (alive) setAuthStatus('unknown');
+      } finally {
+        if (alive) setReady(true);
+      }
+    })();
+    return () => { alive = false; };
+  }, [supabase]);
 
   return (
-    <main className="min-h-[60vh] px-6 py-10">
+    <main className="p-6">
       <h1 className="text-2xl font-semibold mb-2">Status</h1>
-      {!ready ? (
-        <p className="opacity-70">Checking…</p>
-      ) : (
-        <p className="opacity-80">All systems nominal (placeholder).</p>
-      )}
+      <p className="text-sm text-gray-500 mb-4">Fixed duplicate imports; client-only page.</p>
+      <div className="rounded border p-4 font-mono text-sm">
+        <div>ready: {String(ready)}</div>
+        <div>auth: {authStatus}</div>
+      </div>
     </main>
   );
 }
