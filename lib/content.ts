@@ -1,4 +1,6 @@
+import { createServerClient } from '@supabase/ssr';
 import { revalidatePath } from 'next/cache';
+import { cookies } from 'next/headers';
 import { getSupabaseServer } from '@/lib/supabase/server';
 
 export type HomeContentRecord = {
@@ -10,9 +12,11 @@ export type HomeContentRecord = {
   body_np: string | null;
 };
 
-export type HomeContentPatch = Partial<Pick<HomeContentRecord, 'title_en' | 'title_np' | 'body_en' | 'body_np'>>;
+export type HomeContentPatch = Partial<Record<'title_en' | 'title_np' | 'body_en' | 'body_np', string>>;
 
 const CONTENT_FIELDS = 'slug, category, title_en, title_np, body_en, body_np';
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
 export async function getContentBySlug(slug: string): Promise<HomeContentRecord | null> {
   const supabase = getSupabaseServer();
@@ -39,7 +43,12 @@ export async function updateContentBySlug(slug: string, patch: HomeContentPatch)
   }
 
   const updatePayload = Object.fromEntries(entries);
-  const supabase = getSupabaseServer();
+  const cookieStore = cookies();
+  const supabase = createServerClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    cookies: {
+      get: (name: string) => cookieStore.get(name)?.value,
+    },
+  });
 
   const { data, error } = await supabase
     .from('content')
@@ -49,10 +58,15 @@ export async function updateContentBySlug(slug: string, patch: HomeContentPatch)
     .maybeSingle<HomeContentRecord>();
 
   if (error) {
-    console.error('updateContentBySlug error', error);
-    throw error;
+    console.error('updateContentBySlug', error);
+    throw new Error('UPDATE_FAILED');
   }
 
-  revalidatePath('/');
+  if (slug === 'home') {
+    revalidatePath('/');
+  } else {
+    revalidatePath(`/${slug}`);
+  }
+
   return data ?? null;
 }
