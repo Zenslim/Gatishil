@@ -1,6 +1,6 @@
 // Next.js Pages Router entry for Tina Studio.
-// Force server-side rendering so Next.js does not require getStaticPaths.
-export { default } from 'tinacms/dist/next/studio';
+// Use the correct import for current Tina versions.
+export { default } from 'tinacms/dist/studio';
 export async function getServerSideProps() {
   return { props: {} };
 }
