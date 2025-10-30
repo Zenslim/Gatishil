@@ -1,0 +1,676 @@
+{
+  "title_en": "Gatishil Nepal",
+  "title_np": "गतिशील नेपाल",
+  "body_en": {
+    "type": "root",
+    "children": [
+      {
+        "type": "element",
+        "name": "p",
+        "children": [
+          {
+            "type": "text",
+            "text": "We build a parallel system of service, culture, and cooperative wealth. Every ward member, artisan, and farmer earns voice through contribution. Gatishil keeps decisions transparent and the flow unstoppable."
+          }
+        ]
+      },
+      {
+        "type": "element",
+        "name": "p",
+        "children": [
+          {
+            "type": "text",
+            "text": "Use the Daily Pulse to vote, review proposals, and onboard neighbors. Every action is logged so the powerless stay powerful together."
+          }
+        ]
+      }
+    ]
+  },
+  "body_np": {
+    "type": "root",
+    "children": [
+      {
+        "type": "element",
+        "name": "p",
+        "children": [
+          {
+            "type": "text",
+            "text": "हामी सेवा, संस्कार र सहकारी सम्पदाको समानान्तर प्रणाली निर्माण गर्दैछौं। प्रत्येक वडा सदस्य, सीपालु र कृषकले योगदानबाट आवाज कमाउँछन्। गतिशीलले निर्णय पारदर्शी र वहाव अवरुद्ध नहोस् भन्ने सुनिश्चित गर्छ।"
+          }
+        ]
+      },
+      {
+        "type": "element",
+        "name": "p",
+        "children": [
+          {
+            "type": "text",
+            "text": "डेली पल्स प्रयोग गरेर मतदान गर्नुहोस्, प्रस्ताव समीक्षा गर्नुहोस् र छिमेकीहरूलाई समावेश गर्नुहोस्। प्रत्येक काम अभिलेखित हुन्छ ताकि शक्तिहीनहरू मिलेर शक्तिशाली रहून्।"
+          }
+        ]
+      }
+    ]
+  },
+  "blocks": [
+    {
+      "_template": "hero",
+      "badge_en": "GatishilNepal.org",
+      "badge_np": "GatishilNepal.org",
+      "headline_prefix_en": "The",
+      "headline_prefix_np": "त्यो",
+      "headline_suffix_en": "Party of the Powerless.",
+      "headline_suffix_np": "शक्तिहीनहरूको पार्टी।",
+      "tagline_en": "Service, Not Career. Community, Not Power.",
+      "tagline_np": "सेवा, करियर होइन। समुदाय, सत्ता होइन।",
+      "description_en": {
+        "type": "root",
+        "children": [
+          {
+            "type": "element",
+            "name": "p",
+            "children": [
+              {
+                "type": "text",
+                "text": "Not another party of faces, but a movement that makes thrones irrelevant."
+              }
+            ]
+          },
+          {
+            "type": "element",
+            "name": "p",
+            "children": [
+              {
+                "type": "text",
+                "text": "Live free without fear. Create together. Restore the flow. Rise as one."
+              }
+            ]
+          }
+        ]
+      },
+      "description_np": {
+        "type": "root",
+        "children": [
+          {
+            "type": "element",
+            "name": "p",
+            "children": [
+              {
+                "type": "text",
+                "text": "यो अनुहारहरूको अर्को पार्टी होइन, सिंहासनलाई निरर्थक बनाउने आन्दोलन हो।"
+              }
+            ]
+          },
+          {
+            "type": "element",
+            "name": "p",
+            "children": [
+              {
+                "type": "text",
+                "text": "डर बिना जिउँ। मिलेर सिर्जना गरौँ। वहाव पुनःस्थापना गरौँ। एक भएर उठौँ।"
+              }
+            ]
+          }
+        ]
+      },
+      "primary_cta": {
+        "label_en": "Join Us to Restore the Flow",
+        "label_np": "प्रवाह पुनःस्थापना गर्न जोडिनुहोस्",
+        "href": "/join"
+      },
+      "secondary_cta": {
+        "label_en": "Read Our Manifesto",
+        "label_np": "हाम्रो घोषणापत्र पढ्नुहोस्",
+        "href": "/manifesto"
+      },
+      "disclaimer_en": "By joining you agree to transparent, tamper-proof decisions.",
+      "disclaimer_np": "सदस्य बनेर तपाईँ पारदर्शी र छेडछाड नहुने निर्णयमा सहमत हुनुहुन्छ।",
+      "daily_pulse": {
+        "title_en": "🫀 Daily Pulse",
+        "title_np": "🫀 डेली पल्स",
+        "subtitle_en": "Gatishil moves every day — small decisions, big rhythm.",
+        "subtitle_np": "गतिशील प्रत्येक दिन चलायमान छ — साना निर्णय, ठूलो ताल।",
+        "cards": [
+          {
+            "eyebrow_en": "Today’s Poll",
+            "eyebrow_np": "आजको मतदान",
+            "title_en": "Should ward meetings livestream?",
+            "title_np": "वडा बैठकहरू प्रत्यक्ष प्रशारण हुनुपर्छ?",
+            "cta_label_en": "Vote now →",
+            "cta_label_np": "अहिले मतदान गर्नुहोस् →",
+            "href": "/polls"
+          },
+          {
+            "eyebrow_en": "Active Proposal",
+            "eyebrow_np": "सक्रिय प्रस्ताव",
+            "title_en": "Publish MLA attendance weekly",
+            "title_np": "सांसदको हाजिरी साप्ताहिक प्रकाशित गरौँ",
+            "cta_label_en": "Review →",
+            "cta_label_np": "समीक्षा गर्नुहोस् →",
+            "href": "/proposals"
+          },
+          {
+            "eyebrow_en": "Quick Join",
+            "eyebrow_np": "छिटो सहभागिता",
+            "title_en": "Get started or explore onboarding",
+            "title_np": "सुरु गर्नुहोस् वा अनबोर्डिङ अन्वेषण गर्नुहोस्",
+            "cta_label_en": "Start",
+            "cta_label_np": "सुरु गर्नुहोस्",
+            "href": "/join",
+            "highlight": true,
+            "secondary_cta": {
+              "label_en": "Explore",
+              "label_np": "अन्वेषण गर्नुहोस्",
+              "href": "/onboard"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "_template": "manifesto",
+      "kicker_en": "Movement Manifesto",
+      "kicker_np": "आन्दोलनको घोषणापत्र",
+      "title_en": "Eight vows to keep power flowing",
+      "title_np": "शक्ति बगिरहने आठ प्रतिज्ञा",
+      "subtitle_en": {
+        "type": "root",
+        "children": [
+          {
+            "type": "element",
+            "name": "p",
+            "children": [
+              {
+                "type": "text",
+                "text": "These vows guide every ward, guild, and cooperative we stand up together."
+              }
+            ]
+          }
+        ]
+      },
+      "subtitle_np": {
+        "type": "root",
+        "children": [
+          {
+            "type": "element",
+            "name": "p",
+            "children": [
+              {
+                "type": "text",
+                "text": "यी प्रतिज्ञाहरूले हाम्रा सबै वडा, पेशागत समूह र सहकारीलाई एकै तालमा अघि बढाउँछन्।"
+              }
+            ]
+          }
+        ]
+      },
+      "closer_en": "Each vow binds us to transparent, unstoppable service.",
+      "closer_np": "हरेक प्रतिज्ञाले पारदर्शी र अवरुद्ध नहुने सेवामा बाँध्छ।",
+      "items": [
+        {
+          "title_en": "Serve Before Power",
+          "title_np": "सत्ता भन्दा अघि सेवा",
+          "body_en": {
+            "type": "root",
+            "children": [
+              {
+                "type": "element",
+                "name": "p",
+                "children": [
+                  {
+                    "type": "text",
+                    "text": "Every member offers service weekly before asking for leadership. Authority flows from contribution."
+                  }
+                ]
+              }
+            ]
+          },
+          "body_np": {
+            "type": "root",
+            "children": [
+              {
+                "type": "element",
+                "name": "p",
+                "children": [
+                  {
+                    "type": "text",
+                    "text": "हरेक सदस्यले नेतृत्व माग्नु अघि हप्तामा सेवा दिन्छन्। अधिकार योगदानबाट बग्छ।"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "title_en": "Radical Transparency",
+          "title_np": "कट्टर पारदर्शिता",
+          "body_en": {
+            "type": "root",
+            "children": [
+              {
+                "type": "element",
+                "name": "p",
+                "children": [
+                  {
+                    "type": "text",
+                    "text": "Budgets, attendance, and agreements publish to an open ledger that the people can audit."
+                  }
+                ]
+              }
+            ]
+          },
+          "body_np": {
+            "type": "root",
+            "children": [
+              {
+                "type": "element",
+                "name": "p",
+                "children": [
+                  {
+                    "type": "text",
+                    "text": "बजेट, उपस्थिति र सम्झौताहरू खुला अभिलेखमा प्रकाशित हुन्छन् जसलाई जनताले जाँच गर्न सक्छन्।"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "title_en": "One Voice, One Vote",
+          "title_np": "एक आवाज, एक मत",
+          "body_en": {
+            "type": "root",
+            "children": [
+              {
+                "type": "element",
+                "name": "p",
+                "children": [
+                  {
+                    "type": "text",
+                    "text": "Verified assemblies decide policy, not backroom deals. Digital signatures keep every vote tamper-proof."
+                  }
+                ]
+              }
+            ]
+          },
+          "body_np": {
+            "type": "root",
+            "children": [
+              {
+                "type": "element",
+                "name": "p",
+                "children": [
+                  {
+                    "type": "text",
+                    "text": "प्रमाणित सभाहरूले नीति तय गर्छन्, गुप्त सौदाहरूले होइन। डिजिटल हस्ताक्षरले प्रत्येक मत छेडछाड हुन दिँदैन।"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "title_en": "Protect the Commons",
+          "title_np": "साझा सम्पदाको रक्षा",
+          "body_en": {
+            "type": "root",
+            "children": [
+              {
+                "type": "element",
+                "name": "p",
+                "children": [
+                  {
+                    "type": "text",
+                    "text": "Forests, water, and culture are guarded collectively. No private throne can sell what belongs to all."
+                  }
+                ]
+              }
+            ]
+          },
+          "body_np": {
+            "type": "root",
+            "children": [
+              {
+                "type": "element",
+                "name": "p",
+                "children": [
+                  {
+                    "type": "text",
+                    "text": "वन, पानी र संस्कृतिको सामूहिक सुरक्षा हुन्छ। सबैको सम्पदा कुनै निजी सिंहासनले बेच्न सक्दैन।"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "title_en": "Build Parallel Life",
+          "title_np": "समानान्तर जीवन निर्माण",
+          "body_en": {
+            "type": "root",
+            "children": [
+              {
+                "type": "element",
+                "name": "p",
+                "children": [
+                  {
+                    "type": "text",
+                    "text": "Cooperative homes, clinics, and schools free the powerless from patronage dependence."
+                  }
+                ]
+              }
+            ]
+          },
+          "body_np": {
+            "type": "root",
+            "children": [
+              {
+                "type": "element",
+                "name": "p",
+                "children": [
+                  {
+                    "type": "text",
+                    "text": "सहकारी आवास, क्लिनिक र विद्यालयहरूले शक्तिहीनलाई आश्रितताबाट मुक्त गर्छन्।"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "title_en": "Shared Wealth Tools",
+          "title_np": "साझा समृद्धिका औजार",
+          "body_en": {
+            "type": "root",
+            "children": [
+              {
+                "type": "element",
+                "name": "p",
+                "children": [
+                  {
+                    "type": "text",
+                    "text": "Mutual credit, rotating savings, and solidarity funds keep cash flowing in the neighborhoods that need it most."
+                  }
+                ]
+              }
+            ]
+          },
+          "body_np": {
+            "type": "root",
+            "children": [
+              {
+                "type": "element",
+                "name": "p",
+                "children": [
+                  {
+                    "type": "text",
+                    "text": "परस्पर ऋण, घुम्ती बचत र एकता कोषले सबैभन्दा आवश्यकता भएका टोलमा पैसाको वहाव राख्छन्।"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "title_en": "Safety Without Fear",
+          "title_np": "डरविहीन सुरक्षा",
+          "body_en": {
+            "type": "root",
+            "children": [
+              {
+                "type": "element",
+                "name": "p",
+                "children": [
+                  {
+                    "type": "text",
+                    "text": "Community justice circles end impunity, prioritize survivors, and restore harmony with accountability."
+                  }
+                ]
+              }
+            ]
+          },
+          "body_np": {
+            "type": "root",
+            "children": [
+              {
+                "type": "element",
+                "name": "p",
+                "children": [
+                  {
+                    "type": "text",
+                    "text": "सामुदायिक न्याय वृतले उन्मुक्ति अन्त्य गर्छ, पीडितलाई प्राथमिकता दिन्छ र जवाफदेहितासहित समरसता फर्काउँछ।"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "title_en": "Diaspora in the Circle",
+          "title_np": "प्रवासीहरू घेराभित्र",
+          "body_en": {
+            "type": "root",
+            "children": [
+              {
+                "type": "element",
+                "name": "p",
+                "children": [
+                  {
+                    "type": "text",
+                    "text": "Global Nepalis fuel cooperative ventures at home instead of remitting into corrupt patronage networks."
+                  }
+                ]
+              }
+            ]
+          },
+          "body_np": {
+            "type": "root",
+            "children": [
+              {
+                "type": "element",
+                "name": "p",
+                "children": [
+                  {
+                    "type": "text",
+                    "text": "विश्वभरका नेपालीहरूले भ्रष्ट आश्रय सञ्जालमा रकम पठाउने सट्टा घरमै सहकारी उद्यममा लगानी गर्छन्।"
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "_template": "foundations",
+      "kicker_en": "Foundations",
+      "kicker_np": "आधार",
+      "title_en": "Four stones of the flow",
+      "title_np": "वहावका चार शिला",
+      "subtitle_en": {
+        "type": "root",
+        "children": [
+          {
+            "type": "element",
+            "name": "p",
+            "children": [
+              {
+                "type": "text",
+                "text": "Our movement rests on four stones that hold service, structure, trust, and wealth together."
+              }
+            ]
+          }
+        ]
+      },
+      "subtitle_np": {
+        "type": "root",
+        "children": [
+          {
+            "type": "element",
+            "name": "p",
+            "children": [
+              {
+                "type": "text",
+                "text": "हाम्रो आन्दोलन चार शिलामा टिकेको छ जसले सेवा, संरचना, विश्वास र समृद्धिलाई जोडेर राख्छ।"
+              }
+            ]
+          }
+        ]
+      },
+      "closer_en": "When one stone cracks, the flow falters — so we guard them together.",
+      "closer_np": "कुनै एक शिला चर्किँदा वहाव कमजोर हुन्छ — त्यसैले हामी सबै मिलेर जोगाउँछौं।",
+      "stones": [
+        {
+          "title_en": "Stone I · Service First",
+          "title_np": "शिला १ · सेवा पहिलो",
+          "description_en": {
+            "type": "root",
+            "children": [
+              {
+                "type": "element",
+                "name": "p",
+                "children": [
+                  {
+                    "type": "text",
+                    "text": "Leaders prove themselves through open service ledgers, not slogans or patronage."
+                  }
+                ]
+              }
+            ]
+          },
+          "description_np": {
+            "type": "root",
+            "children": [
+              {
+                "type": "element",
+                "name": "p",
+                "children": [
+                  {
+                    "type": "text",
+                    "text": "नेताहरू नारा वा आश्रय होइन, खुला सेवा अभिलेखबाट प्रमाणित हुन्छन्।"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "title_en": "Stone II · Structure the Flow",
+          "title_np": "शिला २ · वहाव संरचना",
+          "description_en": {
+            "type": "root",
+            "children": [
+              {
+                "type": "element",
+                "name": "p",
+                "children": [
+                  {
+                    "type": "text",
+                    "text": "Ward sabhas, digital commons, and citizen juries keep decisions moving and accountable."
+                  }
+                ]
+              }
+            ]
+          },
+          "description_np": {
+            "type": "root",
+            "children": [
+              {
+                "type": "element",
+                "name": "p",
+                "children": [
+                  {
+                    "type": "text",
+                    "text": "वडा सभाहरू, डिजिटल साझा क्षेत्र र नागरिक ज्यूरीहरूले निर्णयलाई गतिशील र जवाफदेही बनाउँछन्।"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "title_en": "Stone III · Technology with Trust",
+          "title_np": "शिला ३ · विश्वासयुक्त प्रविधि",
+          "description_en": {
+            "type": "root",
+            "children": [
+              {
+                "type": "element",
+                "name": "p",
+                "children": [
+                  {
+                    "type": "text",
+                    "text": "Open-source, Nepali-first tools secure identities and votes without selling data."
+                  }
+                ]
+              }
+            ]
+          },
+          "description_np": {
+            "type": "root",
+            "children": [
+              {
+                "type": "element",
+                "name": "p",
+                "children": [
+                  {
+                    "type": "text",
+                    "text": "मुक्त-स्रोत, नेपाली-प्रथम औजारले डाटा बेचे बिना पहिचान र मत सुरक्षित राख्छन्।"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "title_en": "Stone IV · Shared Wealth Engine",
+          "title_np": "शिला ४ · साझा समृद्धि इन्जिन",
+          "description_en": {
+            "type": "root",
+            "children": [
+              {
+                "type": "element",
+                "name": "p",
+                "children": [
+                  {
+                    "type": "text",
+                    "text": "Cooperative finance, land trusts, and maker guilds keep prosperity circulating in every ward."
+                  }
+                ]
+              }
+            ]
+          },
+          "description_np": {
+            "type": "root",
+            "children": [
+              {
+                "type": "element",
+                "name": "p",
+                "children": [
+                  {
+                    "type": "text",
+                    "text": "सहकारी वित्त, जग्गा ट्रस्ट र सिर्जनशील समूहले हरेक वडामा समृद्धि बगाइरहन्छ।"
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "_template": "footer",
+      "site_en": "GatishilNepal.org",
+      "site_np": "GatishilNepal.org",
+      "tagline_en": "Democracy That Flows — Not Stagnates.",
+      "tagline_np": "बग्ने लोकतन्त्र — रोकिन्न।",
+      "copyright_suffix_en": "Party of the Powerless.",
+      "copyright_suffix_np": "शक्तिहीनहरूको पार्टी।",
+      "links": [
+        { "label_en": "Join", "label_np": "जोडिनुहोस्", "href": "/join" },
+        { "label_en": "Polls", "label_np": "मतदान", "href": "/polls" },
+        { "label_en": "Proposals", "label_np": "प्रस्ताव", "href": "/proposals" },
+        { "label_en": "Blog", "label_np": "ब्लग", "href": "/blog" },
+        { "label_en": "FAQ", "label_np": "FAQ", "href": "/faq" }
+      ]
+    }
+  ]
+}
