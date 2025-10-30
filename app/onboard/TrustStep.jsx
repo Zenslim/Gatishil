@@ -2,18 +2,10 @@
 
 import React, { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { createClient } from '@supabase/supabase-js';
+import { getSupabaseBrowser } from '@/lib/supa';
 
 // Read build-time feature flag
 const ENABLE_TRUST_PIN = process.env.NEXT_PUBLIC_ENABLE_TRUST_PIN === 'true';
-
-// Minimal browser Supabase client (no SSR helpers needed here)
-function getSupabaseBrowser() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!url || !anon) throw new Error('Supabase env not configured');
-  return createClient(url, anon);
-}
 
 /** Wait for a Supabase session to exist (immediately or within a short timeout). */
 async function waitForSession(ms = 15000) {

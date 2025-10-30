@@ -1,3 +1,4 @@
+import "@/lib/supa";
 // app/layout.tsx
 import type { Metadata } from "next";
 import "./globals.css";

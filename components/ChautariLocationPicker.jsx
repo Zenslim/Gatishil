@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { getSupabaseBrowser } from "@/lib/supabaseClient";
+import { getSupabaseBrowser } from "@/lib/supa";
 
 /**
  * ChautariLocationPicker.jsx — Auto-Approve Edition
