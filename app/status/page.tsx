@@ -3,6 +3,9 @@
 
 export const dynamic = 'force-dynamic';
 
+import { useEffect, useMemo, useState } from 'react';
+import { getSupabaseBrowserClient } from '@/lib/supabaseClient';
+
 import React, { useEffect, useState } from 'react';
 import { getSupabaseBrowserClient } from '@/lib/supabaseClient';
 
