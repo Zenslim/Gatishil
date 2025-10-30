@@ -1,14 +1,6 @@
-// lib/supa.ts
-import { createClient } from '@supabase/supabase-js';
+// Single source of truth for Supabase clients.
+// We re-export the browser/server getters from the existing supabaseClient util
+// to avoid accidental imports from '@/lib/supabase/browser' which don't exist.
 
-export function createServerSupabase() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-  const key = process.env.SUPABASE_SERVICE_ROLE!; // server only
-  return createClient(url, key, { auth: { persistSession: false } });
-}
-
-export function createBrowserSupabase() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-  return createClient(url, key);
-}
+export { getSupabaseBrowserClient as getSupabaseBrowser } from '@/lib/supabaseClient';
+export { getSupabaseServerClient as getSupabaseServer } from '@/lib/supabaseClient';
