@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 
-const API_URL = process.env.NEXT_PUBLIC_TINA_API_URL || "";
+const API_URL = (process.env.NEXT_PUBLIC_TINA_API_URL || "").replace(/\/+$/, "");
 
 type Doc = {
   slug: string;
@@ -15,81 +15,135 @@ type Doc = {
 };
 
 export default function AdminPage() {
-  const [collection, setCollection] = useState("pages");
-  const [slugs, setSlugs] = useState<string[]>([]);
-  const [slug, setSlug] = useState("home");
-  const [doc, setDoc] = useState<Doc | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState<string>("");
+  // sensible defaults
+  const [collection, setCollection] = useState<string>("pages");
+  const [slug, setSlug] = useState<string>("home");
 
-  const base = useMemo(() => (API_URL || "").replace(/\/+$/, ""), []);
+  const [slugs, setSlugs] = useState<string[]>([]);
+  const [doc, setDoc] = useState<Partial<Doc> | null>(null);
+
+  const [loading, setLoading] = useState(false);
+  const [msg, setMsg] = useState<string>("");
+
+  const base = useMemo(() => API_URL, []);
+
+  function warn(s: string) {
+    setMsg(s);
+    console.warn("[admin]", s);
+  }
+
+  function must(val: string, label: string) {
+    const v = (val || "").trim();
+    if (!v) throw new Error(`${label} is required`);
+    if (!/^[a-z0-9-]+$/i.test(v)) throw new Error(`${label} must be letters, numbers or '-'`);
+    return v.toLowerCase();
+  }
+
+  async function fetchJSON(url: string, init?: RequestInit) {
+    const res = await fetch(url, init);
+    let json: any = {};
+    try {
+      json = await res.json();
+    } catch {
+      // ignore parse errors; surface status below
+    }
+    if (!res.ok) {
+      const why =
+        json?.error ||
+        `${res.status} ${res.statusText} (from ${new URL(url).pathname})`;
+      throw new Error(why);
+    }
+    return json;
+  }
 
   async function list() {
-    setLoading(true);
-    setMessage("");
     try {
-      const res = await fetch(`${base}/content/${collection}`);
-      const json = await res.json();
-      setSlugs(json.slugs || []);
+      setLoading(true);
+      setMsg("");
+      const col = must(collection, "Collection");
+      const url = `${base}/content/${encodeURIComponent(col)}`;
+      const data = await fetchJSON(url);
+      setSlugs(Array.isArray(data.slugs) ? data.slugs : []);
+      setMsg(`Found ${data.slugs?.length ?? 0} slugs in "${col}"`);
     } catch (e: any) {
-      setMessage(e?.message || "Failed to list");
+      warn(e?.message || "List failed");
+      setSlugs([]);
     } finally {
       setLoading(false);
     }
   }
 
   async function load() {
-    setLoading(true);
-    setMessage("");
     try {
-      const res = await fetch(`${base}/content/${collection}/${slug}`);
-      const json = await res.json();
-      setDoc(json.data || {});
+      setLoading(true);
+      setMsg("");
+      const col = must(collection, "Collection");
+      const s = must(slug, "Slug");
+      const url = `${base}/content/${encodeURIComponent(col)}/${encodeURIComponent(s)}`;
+      const data = await fetchJSON(url);
+      setDoc({ ...(data.data || {}), collection: col, slug: s });
+      setMsg(`Loaded "${s}" from "${col}"`);
+      // keep dropdown in sync
+      if (!slugs.includes(s)) setSlugs((prev) => [...prev, s]);
     } catch (e: any) {
-      setMessage(e?.message || "Failed to load");
+      warn(e?.message || "Load failed");
+      setDoc({ collection, slug });
     } finally {
       setLoading(false);
     }
   }
 
   async function save() {
-    setLoading(true);
-    setMessage("");
     try {
+      setLoading(true);
+      setMsg("");
+      const col = must(collection, "Collection");
+      const s = must(slug, "Slug");
+
       const headers: Record<string, string> = { "Content-Type": "application/json" };
       if (process.env.NEXT_PUBLIC_TINA_HMAC) {
         headers["x-gatishil-hmac"] = process.env.NEXT_PUBLIC_TINA_HMAC!;
       }
-      const res = await fetch(`${base}/content/${collection}/${slug}`, {
-        method: "PUT",
-        headers,
-        body: JSON.stringify(doc || {}),
-      });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || "Save failed");
-      setMessage("Saved ✓");
+
+      const url = `${base}/content/${encodeURIComponent(col)}/${encodeURIComponent(s)}`;
+      const body = JSON.stringify(
+        {
+          ...(doc || {}),
+          collection: col,
+          slug: s,
+        },
+        null,
+        2
+      );
+
+      await fetchJSON(url, { method: "PUT", headers, body });
+      setMsg("Saved ✓");
     } catch (e: any) {
-      setMessage(e?.message || "Failed to save");
+      warn(e?.message || "Save failed");
     } finally {
       setLoading(false);
     }
   }
 
   useEffect(() => {
-    if (!API_URL) setMessage("NEXT_PUBLIC_TINA_API_URL is not set");
-  }, []);
+    if (!base) warn("NEXT_PUBLIC_TINA_API_URL is not set");
+  }, [base]);
 
   return (
     <div className="mx-auto max-w-4xl p-6 space-y-4">
       <h1 className="text-2xl font-semibold">Gatishil Admin (M1)</h1>
       <p className="text-sm opacity-70">
-        Backend: <code>{API_URL || "(missing env)"}</code>
+        Backend: <code>{base || "(missing env)"}</code>{" "}
+        <a className="underline ml-2" href={`${base}/tina/health`} target="_blank">Health</a>{" "}
+        <a className="underline ml-2" href={`${base}/tina/version`} target="_blank">Version</a>{" "}
+        <a className="underline ml-2" href={`${base}/tina/graphql`} target="_blank">GraphQL (501)</a>
       </p>
 
       <div className="flex gap-2 items-end">
         <div>
           <label className="block text-sm">Collection</label>
           <input
+            placeholder="pages"
             value={collection}
             onChange={(e) => setCollection(e.target.value)}
             className="border px-2 py-1 rounded"
@@ -98,20 +152,19 @@ export default function AdminPage() {
         <button
           onClick={list}
           className="px-3 py-2 border rounded hover:bg-gray-50"
-          disabled={!API_URL || loading}
+          disabled={!base || loading}
+          title="List slugs in this collection"
         >
           List
         </button>
         <div className="flex-1" />
-        <a href={`${base}/tina/health`} target="_blank" className="text-sm underline">Health</a>
-        <a href={`${base}/tina/version`} target="_blank" className="text-sm underline">Version</a>
-        <a href={`${base}/tina/graphql`} target="_blank" className="text-sm underline">GraphQL (501)</a>
       </div>
 
       <div className="flex gap-2 items-end">
         <div>
           <label className="block text-sm">Slug</label>
           <input
+            placeholder="home"
             value={slug}
             onChange={(e) => setSlug(e.target.value)}
             className="border px-2 py-1 rounded"
@@ -120,7 +173,8 @@ export default function AdminPage() {
         <button
           onClick={load}
           className="px-3 py-2 border rounded hover:bg-gray-50"
-          disabled={!API_URL || loading}
+          disabled={!base || loading}
+          title="Load this document"
         >
           Load
         </button>
@@ -128,8 +182,9 @@ export default function AdminPage() {
           value={slug}
           onChange={(e) => setSlug(e.target.value)}
           className="border px-2 py-1 rounded"
+          title="Known slugs"
         >
-          {slugs.map((s) => (
+          {slugs.length === 0 ? <option>(none)</option> : slugs.map((s) => (
             <option key={s} value={s}>{s}</option>
           ))}
         </select>
@@ -182,15 +237,17 @@ export default function AdminPage() {
         <button
           onClick={save}
           className="px-3 py-2 border rounded hover:bg-gray-50"
-          disabled={!API_URL || loading}
+          disabled={!base || loading}
         >
           Save
         </button>
-        <span className="text-sm">{message}</span>
+        <span className={`text-sm ${msg.startsWith("Saved") ? "text-green-500" : "text-red-400"}`}>
+          {msg}
+        </span>
       </div>
 
       <p className="text-xs opacity-60">
-        M1 note: same backend URL later serves Tina Studio at <code>/tina/graphql</code>.
+        Tip: Valid examples → Collection: <code>pages</code>, Slug: <code>home</code>
       </p>
     </div>
   );
