@@ -4,7 +4,7 @@ import React, { useEffect, useMemo, useState } from "react";
 
 /**
  * Gatishil Admin (M3)
- * - Adds live preview (basic Markdown), Published toggle, and "Translate EN → NP"
+ * - Live preview (basic Markdown), Published toggle, EN→NP copy helper
  * - Same endpoints as M2 (GET/PUT content, list slugs)
  * - No new deps; Tailwind only
  * - Shortcuts: ⌘/Ctrl+L = Load, ⌘/Ctrl+S = Save
@@ -34,14 +34,17 @@ function mdLite(src: string): string {
   html = html.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   html = html.replace(/^###### (.*)$/gm, "<h6>$1</h6>");
   html = html.replace(/^##### (.*)$/gm, "<h5>$1</h5>");
-  html = html.replace/^#### (.*)$/gm, "<h4>$1</h4>");
+  html = html.replace(/^#### (.*)$/gm, "<h4>$1</h4>");
   html = html.replace(/^### (.*)$/gm, "<h3>$1</h3>");
   html = html.replace(/^## (.*)$/gm, "<h2>$1</h2>");
   html = html.replace(/^# (.*)$/gm, "<h1>$1</h1>");
   html = html.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
   html = html.replace(/\*(.+?)\*/g, "<em>$1</em>");
   html = html.replace(/`(.+?)`/g, "<code>$1</code>");
-  html = html.replace(/\[(.+?)\]\((https?:\/\/[^\s)]+)\)/g, `<a href="$2" target="_blank" class="underline">$1</a>`);
+  html = html.replace(
+    /\[(.+?)\]\((https?:\/\/[^\s)]+)\)/g,
+    `<a href="$2" target="_blank" class="underline">$1</a>`
+  );
   html = html.replace(/\n{2,}/g, "</p><p>");
   html = "<p>" + html.replace(/\n/g, "<br/>") + "</p>";
   return html;
@@ -75,9 +78,12 @@ export default function AdminPage() {
     try {
       const res = await fetch(url, init);
       let json: any = {};
-      try { json = await res.json(); } catch {}
+      try {
+        json = await res.json();
+      } catch {}
       if (!res.ok) {
-        const why = json?.error || `${res.status} ${res.statusText} (${new URL(url).pathname})`;
+        const why =
+          json?.error || `${res.status} ${res.statusText} (${new URL(url).pathname})`;
         throw new Error(why);
       }
       return json;
@@ -146,7 +152,8 @@ export default function AdminPage() {
       const col = must(collection, "Collection");
       const s = must(slug, "Slug");
       const headers: Record<string, string> = { "Content-Type": "application/json" };
-      if (process.env.NEXT_PUBLIC_TINA_HMAC) headers["x-gatishil-hmac"] = process.env.NEXT_PUBLIC_TINA_HMAC!;
+      if (process.env.NEXT_PUBLIC_TINA_HMAC)
+        headers["x-gatishil-hmac"] = process.env.NEXT_PUBLIC_TINA_HMAC!;
       const body = JSON.stringify({ ...(doc || {}), collection: col, slug: s }, null, 2);
       await fetchJSON(
         `${api}/content/${encodeURIComponent(col)}/${encodeURIComponent(s)}`,
@@ -164,8 +171,14 @@ export default function AdminPage() {
     function onKey(e: KeyboardEvent) {
       const meta = e.metaKey || e.ctrlKey;
       if (!meta) return;
-      if (e.key.toLowerCase() === "s") { e.preventDefault(); void save(); }
-      if (e.key.toLowerCase() === "l") { e.preventDefault(); void load(); }
+      if (e.key.toLowerCase() === "s") {
+        e.preventDefault();
+        void save();
+      }
+      if (e.key.toLowerCase() === "l") {
+        e.preventDefault();
+        void load();
+      }
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -179,7 +192,8 @@ export default function AdminPage() {
   const langTitleKey = activeLang === "en" ? "title_en" : "title_np";
   const langBodyKey = activeLang === "en" ? "body_en" : "body_np";
 
-  const previewTitle = (doc as any)?.[langTitleKey] || (activeLang === "en" ? "Untitled (EN)" : "शीर्षक छैन (NP)");
+  const previewTitle =
+    (doc as any)?.[langTitleKey] || (activeLang === "en" ? "Untitled (EN)" : "शीर्षक छैन (NP)");
   const previewBody = mdLite((doc as any)?.[langBodyKey] || "");
 
   return (
@@ -195,22 +209,48 @@ export default function AdminPage() {
             <span className="rounded-full bg-white/5 border border-white/10 px-3 py-1 text-xs text-white/80">
               Backend: {api || "(missing env)"}
             </span>
-            <a className="rounded-full bg-white/5 border border-white/10 px-3 py-1 text-xs hover:bg-white/10" href={`${api}/tina/health`} target="_blank">Health</a>
-            <a className="rounded-full bg-white/5 border border-white/10 px-3 py-1 text-xs hover:bg-white/10" href={`${api}/tina/version`} target="_blank">Version</a>
-            <a className="rounded-full bg-white/5 border border-white/10 px-3 py-1 text-xs hover:bg-white/10" href={`${api}/tina/graphql`} target="_blank">GraphQL</a>
+            <a
+              className="rounded-full bg-white/5 border border-white/10 px-3 py-1 text-xs hover:bg-white/10"
+              href={`${api}/tina/health`}
+              target="_blank"
+            >
+              Health
+            </a>
+            <a
+              className="rounded-full bg-white/5 border border-white/10 px-3 py-1 text-xs hover:bg-white/10"
+              href={`${api}/tina/version`}
+              target="_blank"
+            >
+              Version
+            </a>
+            <a
+              className="rounded-full bg-white/5 border border-white/10 px-3 py-1 text-xs hover:bg-white/10"
+              href={`${api}/tina/graphql`}
+              target="_blank"
+            >
+              GraphQL
+            </a>
           </div>
         </div>
 
         {(hint || error) && (
-          <div className={cx("mt-6 rounded-xl border px-4 py-3 backdrop-blur-sm",
-            hint && !error && "border-emerald-500/30 bg-emerald-500/10",
-            error && "border-red-500/30 bg-red-500/10")}>
+          <div
+            className={cx(
+              "mt-6 rounded-xl border px-4 py-3 backdrop-blur-sm",
+              hint && !error && "border-emerald-500/30 bg-emerald-500/10",
+              error && "border-red-500/30 bg-red-500/10"
+            )}
+          >
             <p className={cx("text-sm", error ? "text-red-200" : "text-emerald-200")}>
               {error || hint}
             </p>
             {error?.toLowerCase().includes("cors") && (
               <p className="mt-1 text-xs text-red-200/80">
-                Add header on Worker: <code className="rounded bg-black/40 px-1 py-0.5">Access-Control-Allow-Origin: https://www.gatishilnepal.org</code> and allow <code className="rounded bg-black/40 px-1 py-0.5">GET, PUT</code>.
+                Add header on Worker:{" "}
+                <code className="rounded bg-black/40 px-1 py-0.5">
+                  Access-Control-Allow-Origin: https://www.gatishilnepal.org
+                </code>{" "}
+                and allow <code className="rounded bg-black/40 px-1 py-0.5">GET, PUT</code>.
               </p>
             )}
           </div>
@@ -223,7 +263,9 @@ export default function AdminPage() {
             {/* Row: Collection + Slug + Actions */}
             <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
               <div className="md:col-span-4">
-                <label className="mb-1 block text-xs uppercase tracking-wide text-white/60">Collection</label>
+                <label className="mb-1 block text-xs uppercase tracking-wide text-white/60">
+                  Collection
+                </label>
                 <input
                   className="w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 outline-none focus:border-white/30"
                   placeholder="pages"
@@ -241,37 +283,64 @@ export default function AdminPage() {
                 />
               </div>
               <div className="md:col-span-4 flex items-end gap-2">
-                <button onClick={list} disabled={!baseOk || loading}
-                        className="h-10 flex-1 rounded-lg border border-white/10 bg-white/10 px-4 font-medium hover:bg-white/20 disabled:opacity-50"
-                        title="⌘/Ctrl+L">{loading ? "Listing…" : "List"}</button>
-                <button onClick={load} disabled={!baseOk || loading}
-                        className="h-10 flex-1 rounded-lg border border-white/10 bg-white/10 px-4 font-medium hover:bg-white/20 disabled:opacity-50"
-                        title="⌘/Ctrl+L">{loading ? "Loading…" : "Load"}</button>
+                <button
+                  onClick={list}
+                  disabled={!baseOk || loading}
+                  className="h-10 flex-1 rounded-lg border border-white/10 bg-white/10 px-4 font-medium hover:bg-white/20 disabled:opacity-50"
+                  title="⌘/Ctrl+L"
+                >
+                  {loading ? "Listing…" : "List"}
+                </button>
+                <button
+                  onClick={load}
+                  disabled={!baseOk || loading}
+                  className="h-10 flex-1 rounded-lg border border-white/10 bg-white/10 px-4 font-medium hover:bg-white/20 disabled:opacity-50"
+                  title="⌘/Ctrl+L"
+                >
+                  {loading ? "Loading…" : "Load"}
+                </button>
               </div>
             </div>
 
             {/* Known slugs */}
             <div className="mt-4">
-              <label className="mb-1 block text-xs uppercase tracking-wide text-white/60">Known Slugs</label>
+              <label className="mb-1 block text-xs uppercase tracking-wide text-white/60">
+                Known Slugs
+              </label>
               <select
                 className="w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 outline-none focus:border-white/30"
                 value={slug}
                 onChange={(e) => setSlug(e.target.value)}
               >
-                {slugs.length === 0 ? <option>(none)</option> : slugs.map((s) => <option key={s} value={s}>{s}</option>)}
+                {slugs.length === 0 ? (
+                  <option>(none)</option>
+                ) : (
+                  slugs.map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))
+                )}
               </select>
-              <p className="mt-1 text-xs text-white/50">Example: Collection <code>pages</code>, Slug <code>home</code></p>
+              <p className="mt-1 text-xs text-white/50">
+                Example: Collection <code>pages</code>, Slug <code>home</code>
+              </p>
             </div>
 
             {/* Top row: Lang tabs + Published */}
             <div className="mt-6 flex items-center gap-3 border-b border-white/10 pb-2">
               <nav className="flex gap-2">
                 {(["en", "np"] as const).map((lng) => (
-                  <button key={lng} onClick={() => setActiveLang(lng)}
-                          className={cx("rounded-t-lg px-4 py-2 text-sm",
-                            activeLang === lng
-                              ? "bg-white/15 border-x border-t border-white/10 font-semibold"
-                              : "text-white/60 hover:text-white")}>
+                  <button
+                    key={lng}
+                    onClick={() => setActiveLang(lng)}
+                    className={cx(
+                      "rounded-t-lg px-4 py-2 text-sm",
+                      activeLang === lng
+                        ? "bg-white/15 border-x border-t border-white/10 font-semibold"
+                        : "text-white/60 hover:text-white"
+                    )}
+                  >
                     {lng === "en" ? "English" : "नेपाली"}
                   </button>
                 ))}
@@ -282,7 +351,9 @@ export default function AdminPage() {
                   type="checkbox"
                   className="h-4 w-4 accent-emerald-500"
                   checked={!!doc?.published}
-                  onChange={(e) => setDoc({ ...(doc || { collection, slug }), published: e.target.checked })}
+                  onChange={(e) =>
+                    setDoc({ ...(doc || { collection, slug }), published: e.target.checked })
+                  }
                 />
                 Published
               </label>
@@ -297,7 +368,9 @@ export default function AdminPage() {
                 <input
                   className="w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 outline-none focus:border-white/30"
                   value={(doc as any)?.[langTitleKey] || ""}
-                  onChange={(e) => setDoc({ ...(doc || { collection, slug }), [langTitleKey]: e.target.value })}
+                  onChange={(e) =>
+                    setDoc({ ...(doc || { collection, slug }), [langTitleKey]: e.target.value })
+                  }
                 />
               </div>
 
@@ -324,7 +397,9 @@ export default function AdminPage() {
                 <textarea
                   className="h-56 w-full resize-y rounded-lg border border-white/10 bg-black/30 px-3 py-2 outline-none focus:border-white/30"
                   value={(doc as any)?.[langBodyKey] || ""}
-                  onChange={(e) => setDoc({ ...(doc || { collection, slug }), [langBodyKey]: e.target.value })}
+                  onChange={(e) =>
+                    setDoc({ ...(doc || { collection, slug }), [langBodyKey]: e.target.value })
+                  }
                 />
                 <div className="mt-1 text-right text-xs text-white/50">
                   {(doc as any)?.[langBodyKey]?.length || 0} characters
@@ -334,11 +409,26 @@ export default function AdminPage() {
 
             {/* Actions */}
             <div className="mt-6 flex flex-wrap items-center gap-3">
-              <button onClick={save} disabled={!baseOk || saving}
-                      className="h-11 rounded-xl border border-emerald-400/40 bg-emerald-500/15 px-5 font-semibold text-emerald-200 hover:bg-emerald-500/25 disabled:opacity-60"
-                      title="⌘/Ctrl+S">{saving ? "Saving…" : "Save"}</button>
               <button
-                onClick={() => setDoc({ collection, slug, title_en: "", title_np: "", body_en: "", body_np: "", published: false })}
+                onClick={save}
+                disabled={!baseOk || saving}
+                className="h-11 rounded-xl border border-emerald-400/40 bg-emerald-500/15 px-5 font-semibold text-emerald-200 hover:bg-emerald-500/25 disabled:opacity-60"
+                title="⌘/Ctrl+S"
+              >
+                {saving ? "Saving…" : "Save"}
+              </button>
+              <button
+                onClick={() =>
+                  setDoc({
+                    collection,
+                    slug,
+                    title_en: "",
+                    title_np: "",
+                    body_en: "",
+                    body_np: "",
+                    published: false,
+                  })
+                }
                 className="h-11 rounded-xl border border-white/10 bg-white/5 px-5 text-white/80 hover:bg-white/10"
               >
                 Reset Draft
@@ -351,8 +441,10 @@ export default function AdminPage() {
                 Open Public Page ↗
               </a>
               <div className="text-xs text-white/50">
-                Shortcuts: <kbd className="rounded bg-black/40 px-1">⌘/Ctrl</kbd> + <kbd className="rounded bg-black/40 px-1">L</kbd> = Load,&nbsp;
-                <kbd className="rounded bg-black/40 px-1">⌘/Ctrl</kbd> + <kbd className="rounded bg-black/40 px-1">S</kbd> = Save
+                Shortcuts: <kbd className="rounded bg-black/40 px-1">⌘/Ctrl</kbd> +{" "}
+                <kbd className="rounded bg-black/40 px-1">L</kbd> = Load,&nbsp;
+                <kbd className="rounded bg-black/40 px-1">⌘/Ctrl</kbd> +{" "}
+                <kbd className="rounded bg-black/40 px-1">S</kbd> = Save
               </div>
             </div>
           </div>
@@ -360,11 +452,17 @@ export default function AdminPage() {
           {/* Preview Card */}
           <div className="rounded-2xl border border-white/10 bg-white/5 p-6 shadow-2xl backdrop-blur-md">
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold">Live Preview — {activeLang === "en" ? "English" : "नेपाली"}</h2>
-              <span className={cx(
-                "rounded-full px-3 py-1 text-xs border",
-                doc?.published ? "border-emerald-400/40 bg-emerald-500/15 text-emerald-200" : "border-yellow-400/40 bg-yellow-500/10 text-yellow-200"
-              )}>
+              <h2 className="text-lg font-semibold">
+                Live Preview — {activeLang === "en" ? "English" : "नेपाली"}
+              </h2>
+            <span
+                className={cx(
+                  "rounded-full px-3 py-1 text-xs border",
+                  doc?.published
+                    ? "border-emerald-400/40 bg-emerald-500/15 text-emerald-200"
+                    : "border-yellow-400/40 bg-yellow-500/10 text-yellow-200"
+                )}
+              >
                 {doc?.published ? "Published" : "Draft"}
               </span>
             </div>
