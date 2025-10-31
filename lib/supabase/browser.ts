@@ -32,3 +32,14 @@ export function supabaseBrowser(): SupabaseClient {
   }
   return globalThis.__supabaseBrowser__;
 }
+
+// Handy proxy so you can `import { supabase } from '...'` anywhere on the client.
+export const supabase: SupabaseClient = new Proxy({} as SupabaseClient, {
+  get(_target, prop, receiver) {
+    const instance = getSupabaseBrowser();
+    const value = Reflect.get(instance as object, prop, receiver);
+    return typeof value === 'function' ? value.bind(instance) : value;
+  },
+});
+
+export const getSupabaseBrowserClient = getSupabaseBrowser;

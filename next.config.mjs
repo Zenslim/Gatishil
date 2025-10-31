@@ -1,8 +1,13 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import nextMDX from '@next/mdx';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const resolveVendor = (relativePath) => path.join(here, relativePath);
+
+const withMDX = nextMDX({
+  extension: /\.mdx?$/,
+});
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
@@ -55,4 +60,7 @@ const nextConfig = {
   },
 };
 
-export default nextConfig;
+export default withMDX({
+  ...nextConfig,
+  pageExtensions: ['ts', 'tsx', 'js', 'jsx', 'md', 'mdx'],
+});
