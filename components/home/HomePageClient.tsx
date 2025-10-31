@@ -163,52 +163,7 @@ export default function HomePageClient(props: HomePageClientProps) {
     <div className="relative min-h-screen overflow-hidden bg-slate-950 text-slate-100">
       <Starfield />
 
-      <header className="relative z-20 border-b border-white/5 bg-slate-950/70 backdrop-blur">
-        <div className="mx-auto flex max-w-6xl flex-col gap-4 px-4 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.28em] text-amber-300/80">
-              {t('home.content.header', 'Movement Home Page')}
-            </p>
-            {usingNepaliFallback && (
-              <p className="mt-2 max-w-xl text-xs text-slate-300/70">
-                {t(
-                  'home.content.fallbackNotice',
-                  'Nepali translation not available yet — displaying English copy until it is provided.',
-                )}
-              </p>
-            )}
-          </div>
-
-          <div className="flex flex-wrap items-center gap-3 text-xs sm:text-sm">
-            <div className="flex overflow-hidden rounded-full border border-white/10 bg-white/5">
-              <button
-                type="button"
-                onClick={() => setLang('en')}
-                className={`px-3 py-1.5 font-semibold transition ${
-                  lang === 'en'
-                    ? 'bg-white text-slate-900 shadow-inner'
-                    : 'text-white/80 hover:bg-white/10'
-                }`}
-              >
-                EN
-              </button>
-              <button
-                type="button"
-                onClick={() => setLang('np')}
-                className={`px-3 py-1.5 font-semibold transition ${
-                  lang === 'np'
-                    ? 'bg-white text-slate-900 shadow-inner'
-                    : 'text-white/80 hover:bg-white/10'
-                }`}
-              >
-                NP
-              </button>
-            </div>
-          </div>
-        </div>
-      </header>
-
-      <main className="relative z-10">
+            <main className="relative z-10">
         <section className="mx-auto flex max-w-6xl flex-col gap-12 px-4 pb-20 pt-16 sm:px-6 lg:flex-row lg:gap-16 lg:px-8">
           <div className="flex-1 space-y-8">
             <HeroBadge hero={hero} lang={lang} />
