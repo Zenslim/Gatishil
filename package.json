@@ -2,7 +2,7 @@
   "name": "gatishilnepal",
   "private": true,
   "version": "1.0.0",
-  "description": "Gatishil Nepal – Next.js 14 (App Router, TS)",
+  "description": "Gatishil Nepal \u2013 Next.js 14 (App Router, TS)",
   "engines": {
     "node": "22.x"
   },
@@ -18,13 +18,10 @@
     "tina:build": "tinacms build -c ./tina/config.ts"
   },
   "dependencies": {
+    "@next/mdx": "14.2.5",
+    "@supabase/auth-helpers-nextjs": "^0.10.0",
     "@supabase/ssr": "0.5.0",
     "@supabase/supabase-js": "2.45.4",
-    "@next/mdx": "14.2.5",
-    "@mdx-js/loader": "3.0.1",
-    "@mdx-js/react": "3.0.1",
-    "@supabase/auth-helpers-nextjs": "^0.10.0",
-    "@node-rs/argon2": "^1.7.0",
     "@tiptap/extension-link": "^2.3.2",
     "@tiptap/react": "^2.3.2",
     "@tiptap/starter-kit": "^2.3.2",
@@ -40,15 +37,15 @@
     "zod": "^3.23.8"
   },
   "devDependencies": {
+    "@next/eslint-plugin-next": "14.2.5",
     "@testing-library/jest-dom": "6.4.2",
     "@testing-library/react": "14.2.1",
+    "@tinacms/cli": "^1.6.7",
+    "@tinacms/mdx": "^1.5.25",
     "@types/node": "^22.0.0",
     "@types/react": "18.3.3",
     "autoprefixer": "10.4.20",
     "eslint": "8.57.0",
-    "@next/eslint-plugin-next": "14.2.5",
-    "@typescript-eslint/eslint-plugin": "7.2.0",
-    "@typescript-eslint/parser": "7.2.0",
     "eslint-config-next": "14.2.5",
     "eslint-plugin-import": "2.32.0",
     "eslint-plugin-react": "7.37.5",
@@ -56,8 +53,6 @@
     "globals": "13.24.0",
     "jsdom": "24.0.0",
     "postcss": "8.4.47",
-    "@tinacms/cli": "^2.5.0",
-    "@tinacms/mdx": "^1.5.25",
     "prettier": "3.3.3",
     "tailwindcss": "3.4.13",
     "typescript": "5.6.2",
