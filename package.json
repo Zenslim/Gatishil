@@ -38,7 +38,7 @@
   },
   "devDependencies": {
     "@next/eslint-plugin-next": "14.2.5",
-    "@testing-library/jest-dom": "6.4.2",
+    "@testing-library/jest-dom": "6.9.1",
     "@testing-library/react": "14.2.1",
     "@tinacms/cli": "^1.6.7",
     "@tinacms/mdx": "^1.5.25",
