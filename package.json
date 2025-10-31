@@ -6,16 +6,16 @@
   "engines": {
     "node": "22.x"
   },
-  "scripts": {
-    "dev": "next dev",
-    "prebuild": "npm run tina:build",
-    "build": "next build",
-    "start": "next start",
-    "lint": "eslint . --max-warnings=0",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run --reporter=verbose",
-    "tina:dev": "tinacms dev -c ./tina/config.ts",
-    "tina:build": "tinacms build -c ./tina/config.ts"
+"scripts": {
+  "dev": "next dev",
+  "prebuild": "echo \"Skipping TinaCloud build (M1 self-hosted on Workers)\"",
+  "build": "next build",
+  "start": "next start",
+  "lint": "eslint . --max-warnings=0",
+  "typecheck": "tsc -p tsconfig.json --noEmit",
+  "test": "vitest run --reporter=verbose",
+  "tina:dev": "tinacms dev -c ./tina/config.ts",
+  "tina:build": "tinacms build -c ./tina/config.ts"
   },
   "dependencies": {
     "@next/mdx": "14.2.5",
