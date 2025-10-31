@@ -8,6 +8,7 @@
   },
   "scripts": {
     "dev": "next dev",
+    "prebuild": "npm run tina:build",
     "build": "next build",
     "start": "next start",
     "lint": "eslint . --max-warnings=0",
@@ -55,7 +56,7 @@
     "globals": "13.24.0",
     "jsdom": "24.0.0",
     "postcss": "8.4.47",
-    "@tinacms/cli": "^1.6.7",
+    "@tinacms/cli": "^2.5.0",
     "@tinacms/mdx": "^1.5.25",
     "prettier": "3.3.3",
     "tailwindcss": "3.4.13",
