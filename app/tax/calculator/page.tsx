@@ -1,17 +1,15 @@
 // app/tax/calculator/page.tsx
-import type { Metadata } from "next";
-import Chrome from "./Chrome";
+import dynamic from 'next/dynamic';
 
-export const metadata: Metadata = {
-  title: "True Tax Mirror — Calculator | Gatishil Nepal",
-  description:
-    "Compute your true effective tax rate by stacking hidden indirect taxes over visible taxes. Built for Nepal.",
-  openGraph: {
-    title: "True Tax Mirror — Calculator",
-    description: "Estimate hidden indirect taxes and see your full effective tax rate.",
-    type: "website",
-    url: "https://www.gatishilnepal.org/tax/calculator",
-  },
+// Force runtime rendering so Vercel doesn’t cache an old UI
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
+const Chrome = dynamic(() => import('./Chrome'), { ssr: true });
+
+export const metadata = {
+  title: 'Nepal True Tax Mirror — Gatishil Nepal',
+  description: 'A smooth, borderless, single-scroll calculator page styled like the landing.',
 };
 
 export default function Page() {
