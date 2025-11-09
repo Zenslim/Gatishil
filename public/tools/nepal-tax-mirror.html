@@ -837,6 +837,356 @@
                 transform: scale(1);
             }
         }
+
+        /* ===== TRUTH PACK: MAKE THE HIDDEN VISIBLE ===== */
+
+        /* 1. Life Hours Meter - Time For State */
+        .life-hours-meter {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 20px;
+            padding: 25px;
+            margin: 20px 0;
+            box-shadow: 0 20px 40px rgba(102, 126, 234, 0.3);
+            color: white;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .life-hours-meter::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent);
+            animation: shimmer 3s infinite;
+        }
+
+        @keyframes shimmer {
+            0% { left: -100%; }
+            100% { left: 100%; }
+        }
+
+        .life-hours-header {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .life-hours-icon {
+            font-size: 2.5em;
+            background: rgba(255,255,255,0.2);
+            width: 70px;
+            height: 70px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            animation: pulse 2s infinite;
+        }
+
+        .life-hours-main {
+            font-size: 3em;
+            font-weight: 800;
+            text-align: center;
+            margin: 20px 0;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .life-hours-subtitle {
+            text-align: center;
+            font-size: 1.2em;
+            opacity: 0.9;
+            margin-bottom: 15px;
+        }
+
+        .life-hours-breakdown {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .life-hours-item {
+            background: rgba(255,255,255,0.1);
+            padding: 15px;
+            border-radius: 10px;
+            text-align: center;
+        }
+
+        .life-hours-value {
+            font-size: 1.8em;
+            font-weight: 700;
+            display: block;
+        }
+
+        /* 2. Price Ghosts - Supply Chain Visualization */
+        .price-ghosts-container {
+            background: #f8f9ff;
+            border-radius: 15px;
+            padding: 25px;
+            margin: 20px 0;
+            border-left: 5px solid #667eea;
+        }
+
+        .price-ghost-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 0;
+            border-bottom: 1px solid #e1e5f3;
+            position: relative;
+        }
+
+        .price-ghost-item:last-child {
+            border-bottom: none;
+        }
+
+        .ghost-label {
+            font-weight: 600;
+            color: #2d3748;
+        }
+
+        .ghost-amount {
+            font-weight: 700;
+            color: #e53e3e;
+            font-size: 1.1em;
+        }
+
+        .ghost-morph {
+            position: absolute;
+            right: -100px;
+            background: #667eea;
+            color: white;
+            padding: 5px 10px;
+            border-radius: 15px;
+            font-size: 0.8em;
+            opacity: 0;
+            transform: translateX(-20px);
+            transition: all 0.3s ease;
+        }
+
+        .ghost-item:hover .ghost-morph {
+            opacity: 1;
+            transform: translateX(0);
+        }
+
+        /* 3. Bracket Creep Visualization */
+        .bracket-creep-container {
+            background: linear-gradient(135deg, #ffeaa7 0%, #fab1a0 100%);
+            border-radius: 15px;
+            padding: 25px;
+            margin: 20px 0;
+        }
+
+        .bracket-slider {
+            width: 100%;
+            margin: 20px 0;
+            -webkit-appearance: none;
+            height: 8px;
+            border-radius: 5px;
+            background: #ddd;
+            outline: none;
+        }
+
+        .bracket-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 25px;
+            height: 25px;
+            border-radius: 50%;
+            background: #6c5ce7;
+            cursor: pointer;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+        }
+
+        .bracket-labels {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.9em;
+            margin-top: 10px;
+            color: #555;
+        }
+
+        .bracket-impact {
+            text-align: center;
+            margin-top: 15px;
+            font-size: 1.1em;
+            font-weight: 600;
+            color: #2d3748;
+        }
+
+        /* 4. Cart Scanner */
+        .cart-scanner {
+            background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);
+            border-radius: 20px;
+            padding: 30px;
+            margin: 25px 0;
+            position: relative;
+        }
+
+        .scanner-input {
+            width: 100%;
+            padding: 15px;
+            border: none;
+            border-radius: 10px;
+            font-size: 16px;
+            background: rgba(255,255,255,0.9);
+            margin: 10px 0;
+        }
+
+        .scanner-button {
+            background: #6c5ce7;
+            color: white;
+            border: none;
+            padding: 12px 25px;
+            border-radius: 25px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .scanner-button:hover {
+            background: #5f4dd1;
+            transform: translateY(-2px);
+        }
+
+        .cart-results {
+            margin-top: 20px;
+            background: rgba(255,255,255,0.8);
+            padding: 20px;
+            border-radius: 10px;
+        }
+
+        /* 5. Compliance Cost Meter */
+        .compliance-meter {
+            background: linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%);
+            border-radius: 15px;
+            padding: 25px;
+            margin: 20px 0;
+        }
+
+        .compliance-hours {
+            font-size: 2.5em;
+            font-weight: 800;
+            text-align: center;
+            color: #2d3748;
+            margin: 15px 0;
+        }
+
+        .compliance-breakdown {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .compliance-item {
+            background: rgba(255,255,255,0.5);
+            padding: 15px;
+            border-radius: 10px;
+            text-align: center;
+        }
+
+        /* 6. Corruption Friction Dial */
+        .friction-dial {
+            background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%);
+            border-radius: 20px;
+            padding: 25px;
+            margin: 20px 0;
+        }
+
+        .dial-container {
+            text-align: center;
+            margin: 20px 0;
+        }
+
+        .dial {
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            background: conic-gradient(from 0deg, #4ade80 0%, #fbbf24 50%, #ef4444 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 20px;
+            position: relative;
+        }
+
+        .dial-pointer {
+            width: 4px;
+            height: 50px;
+            background: #2d3748;
+            border-radius: 2px;
+            position: absolute;
+            transform-origin: bottom center;
+            transition: transform 0.3s ease;
+        }
+
+        .friction-impact {
+            text-align: center;
+            margin-top: 15px;
+            font-size: 1.1em;
+            font-weight: 600;
+        }
+
+        /* Universal Truth Pack Animations */
+        .truth-pulse {
+            animation: truth-pulse 2s ease-in-out infinite;
+        }
+
+        @keyframes truth-pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+        }
+
+        .truth-glow {
+            box-shadow: 0 0 20px rgba(102, 126, 234, 0.6);
+        }
+
+        /* One Rupee, Five Hands Animation */
+        .five-hands-container {
+            background: linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%);
+            border-radius: 20px;
+            padding: 30px;
+            margin: 25px 0;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .rupee-journey {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin: 20px 0;
+        }
+
+        .hand-step {
+            text-align: center;
+            position: relative;
+            flex: 1;
+        }
+
+        .hand-icon {
+            font-size: 2em;
+            color: #2d3748;
+            margin-bottom: 10px;
+        }
+
+        .rupee-icon {
+            position: absolute;
+            font-size: 1.5em;
+            color: #e53e3e;
+            animation: rupee-flow 3s infinite;
+        }
+
+        @keyframes rupee-flow {
+            0% { transform: translateX(0) scale(1); }
+            50% { transform: translateX(100px) scale(0.8); }
+            100% { transform: translateX(200px) scale(1); }
+        }
     </style>
 </head>
 <body>
@@ -1100,6 +1450,202 @@
                     </div>
                 </div>
 
+                <!-- ===== TRUTH PACK: MAKE THE HIDDEN VISIBLE ===== -->
+
+                <!-- 1. Life Hours Meter -->
+                <div class="life-hours-meter" id="lifeHoursSection" style="display: none;">
+                    <div class="life-hours-header">
+                        <div class="life-hours-icon">
+                            <i class="fas fa-clock"></i>
+                        </div>
+                        <h3 style="font-size: 1.3rem; font-weight: 700;">⏰ Your Time for the State</h3>
+                    </div>
+                    <div class="life-hours-main" id="lifeHoursMain">--</div>
+                    <div class="life-hours-subtitle" id="lifeHoursSubtitle">Hours per year spent working for government</div>
+                    <div class="life-hours-breakdown">
+                        <div class="life-hours-item">
+                            <span class="life-hours-value" id="dailyLifeHours">--</span>
+                            <div class="life-hours-label">Hours per day</div>
+                        </div>
+                        <div class="life-hours-item">
+                            <span class="life-hours-value" id="monthlyLifeHours">--</span>
+                            <div class="life-hours-label">Hours per month</div>
+                        </div>
+                        <div class="life-hours-item">
+                            <span class="life-hours-value" id="workingDaysLost">--</span>
+                            <div class="life-hours-label">Working days lost</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 2. Price Ghosts - Supply Chain Breakdown -->
+                <div class="price-ghosts-container" id="priceGhostsSection" style="display: none;">
+                    <h3 style="color: #2d3748; font-size: 1.2rem; font-weight: 700; margin-bottom: 20px;">
+                        <i class="fas fa-eye-slash"></i> Price Ghosts: Your Rs 100 Journey
+                    </h3>
+                    <div class="price-ghost-item ghost-item">
+                        <span class="ghost-label">💰 Original Price</span>
+                        <span class="ghost-amount">NPR 100</span>
+                        <div class="ghost-morph">Starting point</div>
+                    </div>
+                    <div class="price-ghost-item ghost-item">
+                        <span class="ghost-label">🏢 Import Duty</span>
+                        <span class="ghost-amount">NPR 15</span>
+                        <div class="ghost-morph">Customs office</div>
+                    </div>
+                    <div class="price-ghost-item ghost-item">
+                        <span class="ghost-label">⛽ Excise Tax</span>
+                        <span class="ghost-amount">NPR 8</span>
+                        <div class="ghost-morph">Government takes fuel</div>
+                    </div>
+                    <div class="price-ghost-item ghost-item">
+                        <span class="ghost-label">📄 VAT on Duty</span>
+                        <span class="ghost-amount">NPR 3</span>
+                        <div class="ghost-morph">13% on the duty!</div>
+                    </div>
+                    <div class="price-ghost-item ghost-item">
+                        <span class="ghost-label">💼 Corporate Tax</span>
+                        <span class="ghost-amount">NPR 12</span>
+                        <div class="ghost-morph">Company's share</div>
+                    </div>
+                    <div class="price-ghost-item ghost-item">
+                        <span class="ghost-label">💳 Payment Fees</span>
+                        <span class="ghost-amount">NPR 4</span>
+                        <div class="ghost-morph">Bank & payment charges</div>
+                    </div>
+                    <div class="price-ghost-item ghost-item">
+                        <span class="ghost-label">💱 FX Spread</span>
+                        <span class="ghost-amount">NPR 2</span>
+                        <div class="ghost-morph">For foreign goods</div>
+                    </div>
+                    <div style="background: #e53e3e; color: white; padding: 15px; border-radius: 10px; margin-top: 15px; text-align: center;">
+                        <strong>Total Hidden Tax: NPR 44 (44% of your money!)</strong><br>
+                        <small>You only get Rs 56 worth of actual goods for your Rs 100</small>
+                    </div>
+                </div>
+
+                <!-- 3. Bracket Creep Visualization -->
+                <div class="bracket-creep-container" id="bracketCreepSection" style="display: none;">
+                    <h3 style="color: #2d3748; font-size: 1.2rem; font-weight: 700; margin-bottom: 15px;">
+                        <i class="fas fa-chart-line"></i> Bracket Creep: Your Income vs Tax Brackets
+                    </h3>
+                    <p style="margin-bottom: 15px; color: #555;">See how a small raise moves you into higher tax brackets</p>
+                    <div class="bracket-slider-container">
+                        <label style="display: block; margin-bottom: 10px; font-weight: 600;">Income: <span id="bracketIncomeValue">NPR 500,000</span></label>
+                        <input type="range" class="bracket-slider" id="bracketSlider" min="400000" max="1000000" value="500000" step="10000">
+                        <div class="bracket-labels">
+                            <span>Low</span>
+                            <span>Mid</span>
+                            <span>High</span>
+                        </div>
+                    </div>
+                    <div class="bracket-impact" id="bracketCreepImpact">
+                        <!-- Bracket creep analysis will be populated by JavaScript -->
+                    </div>
+                </div>
+
+                <!-- 4. Cart Scanner -->
+                <div class="cart-scanner" id="cartScannerSection" style="display: none;">
+                    <h3 style="color: #2d3748; font-size: 1.3rem; font-weight: 700; margin-bottom: 15px;">
+                        <i class="fas fa-receipt"></i> Your Cart, Your Truth
+                    </h3>
+                    <p style="margin-bottom: 20px; color: #555;">Enter a real shopping list to see the hidden tax breakdown</p>
+                    <textarea class="scanner-input" id="cartInput" placeholder="e.g. 1kg rice 80, 2L milk 120, 1kg chicken 400, phone recharge 100"></textarea>
+                    <button class="scanner-button" onclick="analyzeCart()">
+                        <i class="fas fa-search"></i> Scan for Hidden Taxes
+                    </button>
+                    <div class="cart-results" id="cartResults" style="display: none;">
+                        <!-- Cart analysis results will be populated by JavaScript -->
+                    </div>
+                </div>
+
+                <!-- 5. Compliance Cost Meter -->
+                <div class="compliance-meter" id="complianceSection" style="display: none;">
+                    <h3 style="color: #2d3748; font-size: 1.2rem; font-weight: 700; margin-bottom: 15px;">
+                        <i class="fas fa-file-alt"></i> Compliance Cost: Your Paperwork Tax
+                    </h3>
+                    <div class="compliance-hours" id="complianceHours">--</div>
+                    <p style="text-align: center; color: #555; margin-bottom: 20px;">Hours per year spent on tax compliance</p>
+                    <div class="compliance-breakdown">
+                        <div class="compliance-item">
+                            <div style="font-weight: 600; margin-bottom: 5px;">Filing Returns</div>
+                            <div style="font-size: 1.5em; font-weight: 700; color: #e53e3e;">8 hrs</div>
+                        </div>
+                        <div class="compliance-item">
+                            <div style="font-weight: 600; margin-bottom: 5px;">Gathering Documents</div>
+                            <div style="font-size: 1.5em; font-weight: 700; color: #e53e3e;">12 hrs</div>
+                        </div>
+                        <div class="compliance-item">
+                            <div style="font-weight: 600; margin-bottom: 5px;">Follow-up & Queries</div>
+                            <div style="font-size: 1.5em; font-weight: 700; color: #e53e3e;">5 hrs</div>
+                        </div>
+                        <div class="compliance-item">
+                            <div style="font-weight: 600; margin-bottom: 5px;">Mind Space</div>
+                            <div style="font-size: 1.5em; font-weight: 700; color: #e53e3e;">10 hrs</div>
+                        </div>
+                    </div>
+                    <div style="background: rgba(0,0,0,0.1); padding: 15px; border-radius: 10px; margin-top: 20px; text-align: center;">
+                        <strong style="color: #2d3748;">At NPR 2000/hour, this costs you: <span id="complianceCost">NPR 70,000/year</span></strong>
+                    </div>
+                </div>
+
+                <!-- 6. Corruption Friction Dial -->
+                <div class="friction-dial" id="frictionDialSection" style="display: none;">
+                    <h3 style="color: #2d3748; font-size: 1.2rem; font-weight: 700; margin-bottom: 15px;">
+                        <i class="fas fa-hand-paper"></i> Corruption Friction: What Gets Lost
+                    </h3>
+                    <div class="dial-container">
+                        <div class="dial" id="frictionDial">
+                            <div class="dial-pointer" id="dialPointer"></div>
+                        </div>
+                        <label style="display: block; margin-bottom: 15px; font-weight: 600;">Friction Level: <span id="frictionLevel">5%</span></label>
+                        <input type="range" id="frictionSlider" min="0" max="40" value="5" step="1" style="width: 100%; margin: 10px 0;">
+                    </div>
+                    <div class="friction-impact" id="frictionImpact">
+                        <!-- Friction impact will be populated by JavaScript -->
+                    </div>
+                </div>
+
+                <!-- 7. One Rupee, Five Hands Journey -->
+                <div class="five-hands-container" id="fiveHandsSection" style="display: none;">
+                    <h3 style="color: #2d3748; font-size: 1.2rem; font-weight: 700; margin-bottom: 15px;">
+                        <i class="fas fa-handshake"></i> One Rupee, Five Hands: The Journey
+                    </h3>
+                    <p style="margin-bottom: 20px; color: #555;">Watch your rupee pass through five hands before reaching you</p>
+                    <div class="rupee-journey">
+                        <div class="hand-step">
+                            <div class="hand-icon">👤</div>
+                            <div style="font-weight: 600; font-size: 0.9em;">You Earn</div>
+                            <div style="color: #e53e3e;">100%</div>
+                        </div>
+                        <div class="hand-step">
+                            <div class="hand-icon">💰</div>
+                            <div style="font-weight: 600; font-size: 0.9em;">Gov Tax</div>
+                            <div style="color: #e53e3e;">25%</div>
+                        </div>
+                        <div class="hand-step">
+                            <div class="hand-icon">💳</div>
+                            <div style="font-weight: 600; font-size: 0.9em;">VAT/Sales</div>
+                            <div style="color: #e53e3e;">15%</div>
+                        </div>
+                        <div class="hand-step">
+                            <div class="hand-icon">🏢</div>
+                            <div style="font-weight: 600; font-size: 0.9em;">Corp Tax</div>
+                            <div style="color: #e53e3e;">10%</div>
+                        </div>
+                        <div class="hand-step">
+                            <div class="hand-icon">🔄</div>
+                            <div style="font-weight: 600; font-size: 0.9em;">Friction</div>
+                            <div style="color: #e53e3e;">5%</div>
+                        </div>
+                    </div>
+                    <div style="background: rgba(229, 62, 62, 0.1); border: 2px solid #e53e3e; padding: 20px; border-radius: 10px; text-align: center; margin-top: 20px;">
+                        <div style="font-size: 2em; font-weight: 800; color: #e53e3e; margin-bottom: 10px;">NPR 45</div>
+                        <div style="font-weight: 600; color: #2d3748;">From your original NPR 100, only NPR 45 reaches you!</div>
+                        <div style="font-size: 0.9em; color: #555; margin-top: 5px;">You lose 55% to the system before you even see your money</div>
+                    </div>
+                </div>
+
                 <div class="receipt-heatmap">
                     <h3 class="heatmap-title">
                         <i class="fas fa-fire"></i>
@@ -1325,6 +1871,26 @@
             // Calculate and display Lifetime Tax Burden
             calculateLifetimeTaxBurden(effectiveRate, monthlyIncome, directTax + hiddenTax);
 
+            // ===== TRUTH PACK: Activate all features =====
+            
+            // 1. Life Hours Calculator
+            calculateLifeHours(effectiveRate, monthlyIncome, directTax + hiddenTax);
+            
+            // 2. Price Ghosts (always visible)
+            showPriceGhosts();
+            
+            // 3. Bracket Creep Visualization
+            updateBracketCreep(monthlyIncome * 12);
+            
+            // 4. Compliance Cost (always visible)
+            showComplianceCost();
+            
+            // 5. Friction Dial (always visible)
+            setupFrictionDial();
+            
+            // 6. Five Hands Journey (always visible)
+            showFiveHandsJourney();
+
             // Update heatmap
             updateHeatmap(breakdown);
 
@@ -1461,6 +2027,199 @@
             }
             
             document.getElementById('burdenImpact').innerHTML = `<div class="burden-impact-text">${impactMessage}</div>`;
+        }
+
+        // ===== TRUTH PACK JAVASCRIPT FUNCTIONS =====
+
+        // 1. Life Hours Calculator
+        function calculateLifeHours(effectiveRate, monthlyIncome, totalTax) {
+            if (totalTax <= 0 || monthlyIncome <= 0) {
+                document.getElementById('lifeHoursSection').style.display = 'none';
+                return;
+            }
+
+            document.getElementById('lifeHoursSection').style.display = 'block';
+
+            const annualTax = totalTax * 12;
+            const annualIncome = monthlyIncome * 12;
+            const taxRate = effectiveRate / 100;
+            
+            // Calculate hours per year working for government
+            const workingHoursPerYear = 2000; // Standard working hours assumption
+            const hoursForTaxes = Math.floor(workingHoursPerYear * taxRate);
+            
+            // Breakdown calculations
+            const dailyLifeHours = (hoursForTaxes / 365).toFixed(1);
+            const monthlyLifeHours = Math.floor(hoursForTaxes / 12);
+            const workingDaysLost = Math.floor(hoursForTaxes / 8); // Assuming 8-hour days
+            
+            // Update display
+            document.getElementById('lifeHoursMain').textContent = `${hoursForTaxes.toLocaleString()} hrs`;
+            document.getElementById('lifeHoursSubtitle').textContent = `That's ${workingDaysLost} working days you work for the government!`;
+            document.getElementById('dailyLifeHours').textContent = dailyLifeHours;
+            document.getElementById('monthlyLifeHours').textContent = monthlyLifeHours;
+            document.getElementById('workingDaysLost').textContent = workingDaysLost;
+            
+            // Add impact message
+            if (hoursForTaxes > 1000) {
+                document.getElementById('lifeHoursMain').innerHTML = `${hoursForTaxes.toLocaleString()} hrs <br><small style="font-size: 0.6em;">${workingDaysLost} working days!</small>`;
+            }
+        }
+
+        // 2. Price Ghosts (always visible when results show)
+        function showPriceGhosts() {
+            document.getElementById('priceGhostsSection').style.display = 'block';
+        }
+
+        // 3. Bracket Creep Calculator
+        function updateBracketCreep(annualIncome) {
+            document.getElementById('bracketCreepSection').style.display = 'block';
+            
+            const slider = document.getElementById('bracketSlider');
+            const incomeDisplay = document.getElementById('bracketIncomeValue');
+            const impactDisplay = document.getElementById('bracketCreepImpact');
+            
+            // Calculate tax brackets
+            function calculateTax(income) {
+                let tax = 0;
+                if (income <= 500000) {
+                    tax = income * 0.01;
+                } else if (income <= 700000) {
+                    tax = 500000 * 0.01;
+                    tax += (income - 500000) * 0.10;
+                } else if (income <= 1000000) {
+                    tax = 500000 * 0.01;
+                    tax += 200000 * 0.10;
+                    tax += (income - 700000) * 0.20;
+                } else {
+                    tax = 500000 * 0.01;
+                    tax += 200000 * 0.10;
+                    tax += 300000 * 0.20;
+                    tax += (income - 1000000) * 0.30;
+                }
+                return tax;
+            }
+            
+            function updateBracketDisplay() {
+                const income = parseInt(slider.value);
+                const tax = calculateTax(income);
+                const rate = (tax / income) * 100;
+                incomeDisplay.textContent = `NPR ${income.toLocaleString()}`;
+                
+                let impact = '';
+                if (income <= 500000) {
+                    impact = `You're in the 1% bracket. Small, but you still lose <strong>NPR ${tax.toLocaleString()}</strong>!`;
+                } else if (income <= 700000) {
+                    impact = `The 10% bracket! A <strong>NPR ${tax.toLocaleString()}</strong> tax on NPR ${(income - 500000).toLocaleString()} in this range.`;
+                } else if (income <= 1000000) {
+                    impact = `Welcome to the 20% bracket! Your effective rate is <strong>${rate.toFixed(1)}%</strong>. That NPR ${tax.toLocaleString()} is real money.`;
+                } else {
+                    impact = `30% bracket territory! You pay <strong>NPR ${tax.toLocaleString()}</strong> - over a <strong>${rate.toFixed(1)}%</strong> effective rate. Each raise costs you more!`;
+                }
+                
+                impactDisplay.innerHTML = impact;
+            }
+            
+            slider.addEventListener('input', updateBracketDisplay);
+            updateBracketDisplay();
+        }
+
+        // 4. Cart Scanner
+        function analyzeCart() {
+            const cartText = document.getElementById('cartInput').value;
+            if (!cartText.trim()) {
+                alert('Please enter a shopping list to analyze!');
+                return;
+            }
+            
+            document.getElementById('cartScannerSection').style.display = 'block';
+            document.getElementById('cartResults').style.display = 'block';
+            
+            // Simple parsing logic (this could be much more sophisticated)
+            const items = cartText.split(/[,;\n]/).filter(item => item.trim());
+            let totalItems = 0;
+            let totalHiddenTax = 0;
+            
+            items.forEach(item => {
+                const priceMatch = item.match(/(\d+)/);
+                if (priceMatch) {
+                    const price = parseInt(priceMatch[1]);
+                    totalItems += price;
+                    // Estimate 25% hidden tax on consumer goods
+                    totalHiddenTax += price * 0.25;
+                }
+            });
+            
+            const cartResults = document.getElementById('cartResults');
+            cartResults.innerHTML = `
+                <div style="background: #e53e3e; color: white; padding: 20px; border-radius: 10px; text-align: center;">
+                    <h4 style="margin-bottom: 15px;">🎯 Your Cart Analysis</h4>
+                    <div style="font-size: 2em; font-weight: 800; margin-bottom: 10px;">${totalHiddenTax.toFixed(0)}</div>
+                    <div style="font-size: 1.1em; margin-bottom: 15px;">NPR in hidden taxes</div>
+                    <div style="font-size: 0.9em; opacity: 0.9;">
+                        From your cart total of <strong>NPR ${totalItems.toLocaleString()}</strong>, 
+                        NPR ${totalHiddenTax.toFixed(0)} goes straight to government via VAT, excise, and other levies.
+                    </div>
+                </div>
+            `;
+        }
+
+        // 5. Compliance Cost (always visible)
+        function showComplianceCost() {
+            document.getElementById('complianceSection').style.display = 'block';
+            
+            const totalHours = 35; // 8 + 12 + 5 + 10 hours
+            const hourlyRate = 2000;
+            const annualCost = totalHours * hourlyRate;
+            
+            document.getElementById('complianceHours').textContent = `${totalHours} hrs`;
+            document.getElementById('complianceCost').textContent = `NPR ${annualCost.toLocaleString()}/year`;
+        }
+
+        // 6. Corruption Friction Dial
+        function setupFrictionDial() {
+            document.getElementById('frictionDialSection').style.display = 'block';
+            
+            const slider = document.getElementById('frictionSlider');
+            const dialPointer = document.getElementById('dialPointer');
+            const levelDisplay = document.getElementById('frictionLevel');
+            const impactDisplay = document.getElementById('frictionImpact');
+            
+            function updateFriction() {
+                const friction = parseInt(slider.value);
+                const angle = (friction / 40) * 270; // 270 degrees total range
+                
+                levelDisplay.textContent = `${friction}%`;
+                dialPointer.style.transform = `rotate(${angle}deg)`;
+                
+                let impact = '';
+                let color = '';
+                
+                if (friction <= 5) {
+                    impact = `Low friction! Only <strong>${friction}%</strong> of your tax money gets lost. Your money is mostly well-managed.`;
+                    color = '#4ade80'; // Green
+                } else if (friction <= 15) {
+                    impact = `Moderate friction. <strong>${friction}%</strong> leakage means some inefficiency, but still manageable.`;
+                    color = '#fbbf24'; // Yellow
+                } else if (friction <= 25) {
+                    impact = `High friction! <strong>${friction}%</strong> of your money disappears into delays, bribes, and inefficiencies.`;
+                    color = '#f97316'; // Orange
+                } else {
+                    impact = `Severe friction! <strong>${friction}%</strong> leakage - this means major corruption and waste. Your money barely reaches its intended destination.`;
+                    color = '#ef4444'; // Red
+                }
+                
+                impactDisplay.innerHTML = impact;
+                impactDisplay.style.color = color;
+            }
+            
+            slider.addEventListener('input', updateFriction);
+            updateFriction();
+        }
+
+        // 7. Five Hands Journey (always visible)
+        function showFiveHandsJourney() {
+            document.getElementById('fiveHandsSection').style.display = 'block';
         }
 
         function updateHeatmap(breakdown) {
