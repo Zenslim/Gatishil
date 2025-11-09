@@ -154,7 +154,7 @@ export default function TaxCalculatorPage() {
             <div className="relative z-10 w-full h-[calc(100vh-220px)] sm:h-[calc(100vh-200px)] md:h-[80vh]">
               <iframe
                 title="True Tax Mirror — Calculator"
-                src="/tools/nepal-tax-calculator.html"
+                src="/tools/nepal-tax-mirror.html"
                 className="absolute inset-0 w-full h-full border-0 rounded-2xl"
                 loading="eager"
                 referrerPolicy="no-referrer"
