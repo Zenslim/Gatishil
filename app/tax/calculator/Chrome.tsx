@@ -4,14 +4,13 @@
 import { motion, useScroll, useTransform } from 'framer-motion';
 import { useEffect, useMemo, useState } from 'react';
 
-/** util: mount-safe */
+/* ------------ visuals ------------ */
 function useMounted() {
   const [m, set] = useState(false);
   useEffect(() => set(true), []);
   return m;
 }
 
-/** subtle starfield (mirrors /tax/page.tsx) */
 function Starfield() {
   const { scrollYProgress } = useScroll();
   const opacity = useTransform(scrollYProgress, [0, 0.25], [0, 1]);
@@ -46,7 +45,28 @@ function Starfield() {
   );
 }
 
-/** presets & categories ported from nepal-tax-mirror.html */
+/* ------------ data model ------------ */
+// Six income sources (monthly)
+const INCOME_SOURCES = [
+  { key: 'salary', label: '🧾 Salary / TDS' },
+  { key: 'business', label: '🏭 Business / Self' },
+  { key: 'remittance', label: '🌏 Remittance' },
+  { key: 'rental', label: '🏠 Rental' },
+  { key: 'interest', label: '💸 Interest / Dividend' },
+  { key: 'capital', label: '📈 Capital Gains' },
+] as const;
+type IncomeKey = typeof INCOME_SOURCES[number]['key'];
+
+const DEFAULT_INCOME: Record<IncomeKey, number> = {
+  salary: 120000,
+  business: 15000,
+  remittance: 0,
+  rental: 10000,
+  interest: 3000,
+  capital: 2000,
+};
+
+// Spending categories (VAT/excise assumptions mirror the HTML)
 const CATEGORIES = [
   { key: 'foodHome', label: '🍎 Food (Home)' },
   { key: 'eatingOut', label: '🍽️ Eating Out' },
@@ -59,7 +79,6 @@ const CATEGORIES = [
   { key: 'entertainment', label: '🎬 Entertainment' },
   { key: 'other', label: '📦 Other' },
 ] as const;
-
 type CatKey = typeof CATEGORIES[number]['key'];
 
 const DEFAULT_SPEND: Record<CatKey, number> = {
@@ -98,16 +117,28 @@ const SETTINGS = {
   uncertainty: 0.05,
 };
 
+/* ------------ page ------------ */
 export default function ChromeCalculator() {
   const mounted = useMounted();
-  const [income, setIncome] = useState(150000);
+
+  // NEW: 6 income sources drive total income
+  const [incomeMap, setIncomeMap] = useState<Record<IncomeKey, number>>(DEFAULT_INCOME);
+  const income = useMemo(
+    () => Object.values(incomeMap).reduce((a, v) => a + (v || 0), 0),
+    [incomeMap]
+  );
+
+  // Direct tax (visible pay-slip/self-assessed). Keep separate & user-editable.
   const [directTax, setDirectTax] = useState(20000);
+
+  // Spending
   const [spend, setSpend] = useState<Record<CatKey, number>>(DEFAULT_SPEND);
   const [showAdvanced, setShowAdvanced] = useState(false);
 
   const { hiddenTax, breakdown, totalSpending, effectiveRate, low, high } = useMemo(() => {
     let hidden = 0;
     const b: Record<CatKey, { amount: number; pctOfIncome: number }> = {} as any;
+
     for (const { key } of CATEGORIES) {
       const amt = spend[key] || 0;
       const vat = amt * (SETTINGS.vatableShare[key] ?? 0) * SETTINGS.vatRate;
@@ -116,9 +147,11 @@ export default function ChromeCalculator() {
       hidden += sum;
       b[key] = { amount: sum, pctOfIncome: income ? (sum / income) * 100 : 0 };
     }
+
     const totalTax = directTax + hidden;
     const eff = income ? (totalTax / income) * 100 : 0;
     const unc = eff * SETTINGS.uncertainty;
+
     return {
       hiddenTax: hidden,
       breakdown: b,
@@ -129,16 +162,15 @@ export default function ChromeCalculator() {
     };
   }, [income, directTax, spend]);
 
-  /** landing-like page shell */
   return (
     <main className="relative min-h-screen bg-black text-white">
-      {/* background gradients */}
+      {/* background */}
       <div className="absolute inset-0 -z-20 pointer-events-none">
         <div className="absolute inset-0 opacity-[0.9] bg-[radial-gradient(1200px_600px_at_50%_-10%,rgba(255,255,255,0.06),transparent_60%),radial-gradient(900px_500px_at_80%_10%,rgba(251,191,36,0.08),transparent_60%),radial-gradient(900px_500px_at_20%_10%,rgba(244,114,182,0.06),transparent_60%)]" />
       </div>
       {mounted && <Starfield />}
 
-      {/* header (slim, borderless) */}
+      {/* header */}
       <header className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-16 pt-5 relative z-20">
         <div className="flex items-center justify-between">
           <a href="/tax" className="flex items-center gap-3">
@@ -174,7 +206,7 @@ export default function ChromeCalculator() {
       {/* body */}
       <section className="relative z-10 py-8 sm:py-10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-16 grid lg:grid-cols-12 gap-8">
-          {/* form (sticky-ish on large) */}
+          {/* left column */}
           <motion.div
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
@@ -185,52 +217,65 @@ export default function ChromeCalculator() {
               Nepal True Tax <span className="bg-clip-text text-transparent bg-gradient-to-r from-amber-300 via-orange-400 to-rose-400">Mirror</span>
             </h1>
             <p className="mt-3 text-slate-300/90">
-              See your <span className="text-white font-semibold">complete tax story</span>:
-              the visible pay-slip taxes plus the hidden VAT/excise embedded in prices.
+              A smooth, borderless Gatishil page: see your <span className="text-white font-semibold">complete tax story</span>—
+              visible pay-slip taxes plus hidden VAT/excise embedded in prices.
             </p>
 
-            {/* inputs */}
-            <div className="mt-6 space-y-5">
-              <Field
-                label="Monthly Gross Income"
-                suffix="NPR"
-                value={income}
-                onChange={(v) => setIncome(v)}
-              />
-              <Field
-                label="Direct Tax (TDS / Self)"
-                suffix="NPR / month"
-                value={directTax}
-                onChange={(v) => setDirectTax(v)}
-              />
-
-              <div className="mt-2">
-                <div className="text-sm text-white/90 font-semibold mb-2">Monthly Spending — estimates per category</div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {CATEGORIES.map(({ key, label }) => (
-                    <div
-                      key={key}
-                      className="rounded-xl bg-white/5 border border-white/10 hover:border-white/20 transition p-3"
-                    >
-                      <div className="text-[12px] text-slate-300/90 mb-1">{label}</div>
-                      <NumberInput
-                        value={spend[key]}
-                        onChange={(v) => setSpend((s) => ({ ...s, [key]: v }))}
-                        placeholder="0"
-                        right="NPR"
-                      />
-                    </div>
-                  ))}
+            {/* NEW: Six income sources */}
+            <div className="mt-6 space-y-3">
+              <div className="text-sm text-white/90 font-semibold">Monthly Income — 6 Sources</div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {INCOME_SOURCES.map(({ key, label }) => (
+                  <div key={key} className="rounded-xl bg-white/5 border border-white/10 hover:border-white/20 transition p-3">
+                    <div className="text-[12px] text-slate-300/90 mb-1">{label}</div>
+                    <NumberInput
+                      value={incomeMap[key]}
+                      onChange={(v) => setIncomeMap((m) => ({ ...m, [key]: v }))}
+                      placeholder="0"
+                      right="NPR"
+                    />
+                  </div>
+                ))}
+              </div>
+              <div className="rounded-xl border border-white/10 bg-white/5 p-4 flex items-center justify-between">
+                <div className="text-sm text-white/90 font-semibold">Total Monthly Income</div>
+                <div className="text-xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-amber-300 via-white to-fuchsia-300">
+                  Rs {formatRs(income)}
                 </div>
               </div>
             </div>
 
-            {/* micro-copy */}
-            <p className="text-[11px] text-slate-400 mt-3">
-              Nothing is stored by default. Edit assumptions any time.
-            </p>
+            {/* Direct tax input */}
+            <div className="mt-5">
+              <Field
+                label="Direct Tax (TDS / Self)"
+                suffix="NPR / month"
+                value={directTax}
+                onChange={setDirectTax}
+              />
+            </div>
 
-            {/* advanced toggle */}
+            {/* Spending categories */}
+            <div className="mt-4">
+              <div className="text-sm text-white/90 font-semibold mb-2">Monthly Spending — estimates per category</div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {CATEGORIES.map(({ key, label }) => (
+                  <div key={key} className="rounded-xl bg-white/5 border border-white/10 hover:border-white/20 transition p-3">
+                    <div className="text-[12px] text-slate-300/90 mb-1">{label}</div>
+                    <NumberInput
+                      value={spend[key]}
+                      onChange={(v) => setSpend((s) => ({ ...s, [key]: v }))}
+                      placeholder="0"
+                      right="NPR"
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <p className="text-[11px] text-slate-400 mt-3">Nothing is stored by default. Edit assumptions any time.</p>
+
+            {/* Advanced */}
             <div id="advanced" className="mt-5">
               <button
                 onClick={() => setShowAdvanced((x) => !x)}
@@ -242,7 +287,7 @@ export default function ChromeCalculator() {
                     <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round"/>
                   </svg>
                 </div>
-                <p className="text-slate-300/80 text-xs mt-1">Nepal 2025 defaults: VAT 13% with category-specific vatable shares and excise.</p>
+                <p className="text-slate-300/80 text-xs mt-1">Nepal 2025 defaults: VAT 13% with category-specific VATable shares and excise.</p>
               </button>
 
               <motion.div
@@ -262,15 +307,15 @@ export default function ChromeCalculator() {
             </div>
           </motion.div>
 
-          {/* results */}
+          {/* right column */}
           <motion.div
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay: 0.05 }}
             className="lg:col-span-7"
           >
-            {/* giant number */}
             <div className="rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl p-6 shadow-[0_0_35px_rgba(255,255,255,0.05)]">
+              {/* headline */}
               <div className="text-center">
                 <div className="text-5xl sm:text-6xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-amber-300 via-white to-fuchsia-300">
                   {effectiveRate.toFixed(1)}%
@@ -279,7 +324,7 @@ export default function ChromeCalculator() {
                 <div className="text-xs text-slate-400 mt-1">Range: {low.toFixed(1)}% – {high.toFixed(1)}%</div>
               </div>
 
-              {/* visible vs hidden */}
+              {/* stats */}
               <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <Stat title="Visible Tax" value={`Rs ${formatRs(directTax)}`} />
                 <Stat title="Hidden Tax (est.)" value={`Rs ${formatRs(hiddenTax)}`} highlight />
@@ -301,16 +346,45 @@ export default function ChromeCalculator() {
 
               {/* footer facts */}
               <div className="mt-6 grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs text-slate-300/80">
+                <Fact label="Total Monthly Income" value={`Rs ${formatRs(income)}`} />
                 <Fact label="Total Monthly Spend (est.)" value={`Rs ${formatRs(totalSpending)}`} />
                 <Fact label="Direct tax rate" value={`${income ? ((directTax / income) * 100).toFixed(1) : '0.0'}%`} />
                 <Fact label="Indirect tax rate (est.)" value={`${income ? ((hiddenTax / income) * 100).toFixed(1) : '0.0'}%`} />
+              </div>
+            </div>
+
+            {/* income share bars */}
+            <div className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-6">
+              <h3 className="text-sm font-semibold text-white/90 mb-3">Income Sources (share of total)</h3>
+              <div className="space-y-2">
+                {INCOME_SOURCES.map(({ key, label }) => {
+                  const v = incomeMap[key] || 0;
+                  const pct = income ? Math.round((v / income) * 100) : 0;
+                  return (
+                    <div key={key} className="flex items-center gap-3">
+                      <div className="min-w-[180px] text-sm text-white/90">{label}</div>
+                      <div className="flex-1 h-2.5 rounded-full bg-white/10 overflow-hidden">
+                        <motion.div
+                          initial={{ width: 0 }}
+                          whileInView={{ width: `${pct}%` }}
+                          viewport={{ once: true }}
+                          transition={{ duration: 0.8, ease: 'easeOut' }}
+                          className="h-full bg-gradient-to-r from-cyan-200 via-white to-fuchsia-200"
+                        />
+                      </div>
+                      <div className="w-32 text-right text-sm text-slate-300/90">
+                        {pct}% · Rs {formatRs(v)}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           </motion.div>
         </div>
       </section>
 
-      {/* footer (borderless like landing) */}
+      {/* footer */}
       <footer className="relative z-10 py-10 text-sm text-slate-300">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-16 text-center">
           <p>© {mounted ? new Date().getFullYear() : 2025} GatishilNepal.org · Democracy That Flows</p>
@@ -320,7 +394,7 @@ export default function ChromeCalculator() {
   );
 }
 
-/* ---------- UI atoms ---------- */
+/* ------------ atoms ------------ */
 function Field({
   label,
   suffix,
@@ -409,12 +483,9 @@ function ReceiptHeatmap({
 }: {
   breakdown: Record<CatKey, { amount: number; pctOfIncome: number }>;
 }) {
-  const items = useMemo(() => {
-    const arr = Object.entries(breakdown) as [CatKey, { amount: number; pctOfIncome: number }][];
-    const filtered = arr.filter(([, d]) => d.amount > 0);
-    filtered.sort((a, b) => b[1].amount - a[1].amount);
-    return filtered;
-  }, [breakdown]);
+  const items = Object.entries(breakdown)
+    .filter(([, d]) => d.amount > 0)
+    .sort((a, b) => b[1].amount - a[1].amount)) as [CatKey, { amount: number; pctOfIncome: number }][]; // typed
 
   const max = Math.max(...items.map(([, d]) => d.amount), 1);
 
@@ -451,7 +522,7 @@ function ReceiptHeatmap({
   );
 }
 
-/* ---------- helpers ---------- */
+/* ------------ utils ------------ */
 function formatRs(n: number) {
   return Math.round(n).toLocaleString();
 }
