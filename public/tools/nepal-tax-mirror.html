@@ -161,6 +161,101 @@
             border: 2px solid var(--neutral-200);
         }
 
+        .income-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-bottom: 20px;
+            background: linear-gradient(135deg, #e8f5e8 0%, #f0f8f0 100%);
+            padding: 20px;
+            border-radius: 15px;
+            border: 2px solid #4CAF50;
+        }
+
+        .income-item {
+            background: var(--neutral-100);
+            border-radius: 12px;
+            padding: 15px;
+            border: 2px solid #4CAF50;
+            transition: all 0.3s ease;
+            display: flex;
+            flex-direction: column;
+            min-height: 60px;
+            justify-content: center;
+        }
+
+        .income-item:hover {
+            border-color: #45a049;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(76, 175, 80, 0.2);
+        }
+
+        .income-item input {
+            background: var(--neutral-50);
+            border: 1px solid #4CAF50;
+            border-radius: 6px;
+            outline: none;
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--primary);
+            width: 100%;
+            padding: 8px 12px;
+            transition: all 0.3s ease;
+        }
+
+        .income-item input:focus {
+            border-color: #45a049;
+            box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.2);
+        }
+
+        .income-item input::placeholder {
+            color: var(--neutral-500);
+            font-weight: 500;
+        }
+
+        .income-item::before {
+            content: attr(data-label);
+            font-size: 12px;
+            font-weight: 500;
+            color: #2E7D32;
+            margin-bottom: 5px;
+            display: block;
+        }
+
+        .total-income-display {
+            background: linear-gradient(135deg, #4CAF50, #45a049);
+            color: white;
+            padding: 20px;
+            border-radius: 12px;
+            text-align: center;
+            font-size: 1.5rem;
+            font-weight: 700;
+            margin: 10px 0;
+            box-shadow: 0 4px 15px rgba(76, 175, 80, 0.3);
+        }
+
+        .tax-info-card {
+            background: linear-gradient(135deg, #e3f2fd 0%, #f1f8e9 100%);
+            border: 2px solid var(--primary);
+            border-radius: 12px;
+            padding: 20px;
+            margin: 15px 0;
+        }
+
+        @media (max-width: 768px) {
+            .spending-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .income-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .tax-breakdown {
+                grid-template-columns: 1fr;
+            }
+        }
+
         .spending-item {
             background: var(--neutral-100);
             border-radius: 12px;
@@ -398,6 +493,245 @@
             font-style: italic;
         }
 
+        /* Spending Warning Styles */
+        .spending-warning {
+            background: linear-gradient(135deg, #ff6b6b, #e74c3c);
+            color: white;
+            border-radius: 12px;
+            padding: 20px;
+            margin: 20px 0;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            box-shadow: var(--shadow);
+            animation: pulse 2s infinite;
+        }
+
+        .warning-icon {
+            font-size: 2rem;
+            color: #fff;
+            min-width: 50px;
+            text-align: center;
+        }
+
+        .warning-content {
+            flex: 1;
+        }
+
+        .warning-title {
+            font-size: 1.1rem;
+            font-weight: 700;
+            margin-bottom: 5px;
+            color: #fff;
+        }
+
+        .warning-text {
+            font-size: 0.95rem;
+            color: #ffe0e0;
+            line-height: 1.4;
+        }
+
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(255, 107, 107, 0.7); }
+            70% { box-shadow: 0 0 0 10px rgba(255, 107, 107, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(255, 107, 107, 0); }
+        }
+
+        /* Tax Freedom Day Styles */
+        .tax-freedom-section {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 15px;
+            padding: 25px;
+            margin: 20px 0;
+            box-shadow: var(--shadow-lg);
+        }
+
+        .freedom-title {
+            text-align: center;
+            font-size: 1.4rem;
+            font-weight: 700;
+            margin-bottom: 20px;
+            color: #fff;
+        }
+
+        .freedom-container {
+            display: flex;
+            align-items: center;
+            gap: 30px;
+            margin-bottom: 20px;
+        }
+
+        .freedom-main {
+            flex: 1;
+            text-align: center;
+        }
+
+        .freedom-day {
+            font-size: 3rem;
+            font-weight: 800;
+            color: #fff;
+            margin-bottom: 8px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .freedom-label {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: #e8e8e8;
+            margin-bottom: 5px;
+        }
+
+        .freedom-description {
+            font-size: 0.9rem;
+            color: #c8c8c8;
+            font-style: italic;
+        }
+
+        .freedom-breakdown {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .freedom-item {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            padding: 15px;
+            text-align: center;
+            backdrop-filter: blur(10px);
+        }
+
+        .freedom-value {
+            font-size: 1.8rem;
+            font-weight: 700;
+            color: #fff;
+            margin-bottom: 5px;
+        }
+
+        .freedom-item .freedom-label {
+            font-size: 0.9rem;
+            color: #e0e0e0;
+        }
+
+        .freedom-impact {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            padding: 15px;
+            text-align: center;
+            backdrop-filter: blur(10px);
+            border-left: 4px solid #ffd700;
+        }
+
+        .freedom-impact-text {
+            font-size: 1rem;
+            color: #fff;
+            line-height: 1.4;
+        }
+
+        .freedom-impact-text strong {
+            color: #ffd700;
+            font-weight: 700;
+        }
+
+        /* Lifetime Tax Burden Styles */
+        .lifetime-burden-section {
+            background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
+            color: white;
+            border-radius: 15px;
+            padding: 25px;
+            margin: 20px 0;
+            box-shadow: var(--shadow-lg);
+        }
+
+        .burden-title {
+            text-align: center;
+            font-size: 1.4rem;
+            font-weight: 700;
+            margin-bottom: 20px;
+            color: #fff;
+        }
+
+        .burden-container {
+            display: flex;
+            align-items: center;
+            gap: 30px;
+            margin-bottom: 20px;
+        }
+
+        .burden-main {
+            flex: 1;
+            text-align: center;
+        }
+
+        .burden-amount {
+            font-size: 2.2rem;
+            font-weight: 800;
+            color: #e74c3c;
+            margin-bottom: 8px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .burden-label {
+            font-size: 1rem;
+            font-weight: 600;
+            color: #e8e8e8;
+            margin-bottom: 5px;
+        }
+
+        .burden-description {
+            font-size: 0.9rem;
+            color: #c8c8c8;
+            font-style: italic;
+        }
+
+        .burden-breakdown {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .burden-item {
+            background: rgba(231, 76, 60, 0.2);
+            border-radius: 10px;
+            padding: 15px;
+            text-align: center;
+            backdrop-filter: blur(10px);
+            border: 2px solid rgba(231, 76, 60, 0.3);
+        }
+
+        .burden-value {
+            font-size: 1.6rem;
+            font-weight: 700;
+            color: #e74c3c;
+            margin-bottom: 5px;
+        }
+
+        .burden-item .burden-label {
+            font-size: 0.85rem;
+            color: #e0e0e0;
+        }
+
+        .burden-impact {
+            background: rgba(231, 76, 60, 0.1);
+            border-radius: 10px;
+            padding: 15px;
+            text-align: center;
+            backdrop-filter: blur(10px);
+            border-left: 4px solid #e74c3c;
+        }
+
+        .burden-impact-text {
+            font-size: 1rem;
+            color: #fff;
+            line-height: 1.4;
+        }
+
+        .burden-impact-text strong {
+            color: #e74c3c;
+            font-weight: 700;
+        }
+
         .advanced-toggle {
             background: var(--neutral-100);
             border: 2px solid var(--neutral-200);
@@ -537,18 +871,62 @@
                 <form id="taxForm">
                     <div class="form-group">
                         <label class="label">
-                            <span>Monthly Gross Income</span>
-                            <span class="currency">NPR</span>
+                            <span>💼 Income Source Categories</span>
+                            <span class="currency">NPR/month</span>
                         </label>
-                        <input type="number" id="monthlyIncome" class="input" placeholder="150,000" value="150000">
+                        <p style="font-size: 14px; color: var(--neutral-600); margin-bottom: 15px; font-style: italic;">
+                            Add your monthly income from all sources. The calculator will automatically compute your direct tax.
+                        </p>
+                        
+                        <div class="income-grid">
+                            <div class="income-item" data-label="💼 Primary Employment (+1% Social Security)">
+                                <input type="number" id="employment" value="150000" placeholder="Salary, wages, allowances">
+                            </div>
+                            <div class="income-item" data-label="🏢 Business Income (Progressive Tax)">
+                                <input type="number" id="business" value="50000" placeholder="Business, shop, enterprise">
+                            </div>
+                            <div class="income-item" data-label="✈️ Remittances (TAX-EXEMPT for personal)">
+                                <input type="number" id="remittances" value="80000" placeholder="Money from abroad - personal remittances exempt">
+                            </div>
+                            <div class="income-item" data-label="🌾 Agriculture (100% TAX-EXEMPT)">
+                                <input type="number" id="agriculture" value="25000" placeholder="Farming, livestock - completely tax exempt">
+                            </div>
+                            <div class="income-item" data-label="🏠 Investment (TDS: Interest 6%, Dividends 5%, Gains 7.5%/5%)">
+                                <input type="number" id="investment" value="30000" placeholder="Interest, dividends, capital gains">
+                            </div>
+                            <div class="income-item" data-label="👴 Pension (+25% deduction, NO Social Security)">
+                                <input type="number" id="otherIncome" value="20000" placeholder="Pension, government benefits">
+                            </div>
+                        </div>
                     </div>
 
                     <div class="form-group">
                         <label class="label">
-                            <span>Direct Tax (TDS/Self)</span>
+                            <span>📊 Total Monthly Income</span>
                             <span class="currency">NPR/month</span>
                         </label>
-                        <input type="number" id="directTax" class="input" placeholder="20,000" value="20000">
+                        <div class="total-income-display" id="totalIncomeDisplay">
+                            NPR 350,000
+                        </div>
+                        <p style="font-size: 12px; color: var(--neutral-600); margin-top: 5px; font-style: italic;">
+                            Auto-calculated from income sources above
+                        </p>
+                    </div>
+
+                    <div class="form-group">
+                        <div class="tax-info-card">
+                            <h4 style="color: var(--primary); margin-bottom: 10px;">
+                                <i class="fas fa-calculator"></i>
+                                Direct Tax Calculation
+                            </h4>
+                            <p style="font-size: 14px; color: var(--neutral-700); margin-bottom: 10px;">
+                                Based on Nepal Income Tax Slabs (FY 2082/83 - 2025/26)
+                            </p>
+                            <div id="taxBreakdown" style="font-size: 13px; color: var(--neutral-600);">
+                                Annual Income: NPR 2,040,000<br>
+                                Estimated Monthly Tax: NPR 25,000
+                            </div>
+                        </div>
                     </div>
 
                     <div class="form-group">
@@ -632,6 +1010,32 @@
                         <span class="preset-value">100%</span>
                     </div>
                     
+                    <h4 style="margin: 20px 0 10px 0; color: var(--primary);">Income Tax Treatment (FY 2082/83 - 2025/26)</h4>
+                    <div class="preset-item">
+                        <span class="preset-label">💼 Employment</span>
+                        <span class="preset-value">Progressive (1%-39%) + 1% Social Security Tax</span>
+                    </div>
+                    <div class="preset-item">
+                        <span class="preset-label">🏢 Business</span>
+                        <span class="preset-value">Progressive tax (1%-39%)</span>
+                    </div>
+                    <div class="preset-item">
+                        <span class="preset-label">✈️ Remittances</span>
+                        <span class="preset-value"><strong>TAX-EXEMPT</strong> for personal remittances</span>
+                    </div>
+                    <div class="preset-item">
+                        <span class="preset-label">🌾 Agriculture</span>
+                        <span class="preset-value"><strong>100% Tax Exempt</strong></span>
+                    </div>
+                    <div class="preset-item">
+                        <span class="preset-label">🏠 Investment</span>
+                        <span class="preset-value"><strong>TDS rates:</strong> Interest 6%, Dividends 5%, Gains 7.5%/5%</span>
+                    </div>
+                    <div class="preset-item">
+                        <span class="preset-label">👴 Pension</span>
+                        <span class="preset-value">Progressive + 25% deduction, NO Social Security</span>
+                    </div>
+                    
                     <div class="uncertainty-note">
                         <i class="fas fa-info-circle"></i>
                         Uncertainty range: ±5% due to price variation and tax enforcement differences
@@ -657,6 +1061,45 @@
                     </div>
                 </div>
 
+                <!-- Spending Warning Flag -->
+                <div class="spending-warning" id="spendingWarning" style="display: none;">
+                    <div class="warning-icon">
+                        <i class="fas fa-exclamation-triangle"></i>
+                    </div>
+                    <div class="warning-content">
+                        <div class="warning-title">Budget Alert: Spending Exceeds Income</div>
+                        <div class="warning-text" id="warningText">Your monthly spending is higher than your income. Consider reviewing your budget to adopt a more frugal lifestyle.</div>
+                    </div>
+                </div>
+
+                <!-- Tax Freedom Day Section -->
+                <div class="tax-freedom-section" id="taxFreedomSection" style="display: none;">
+                    <h3 class="freedom-title">
+                        <i class="fas fa-calendar-check"></i>
+                        Your Tax Freedom Journey
+                    </h3>
+                    <div class="freedom-container">
+                        <div class="freedom-main">
+                            <div class="freedom-day" id="taxFreedomDay">--</div>
+                            <div class="freedom-label">Tax Freedom Day</div>
+                            <div class="freedom-description" id="freedomDescription">The day you start working for yourself</div>
+                        </div>
+                        <div class="freedom-breakdown">
+                            <div class="freedom-item">
+                                <div class="freedom-value" id="daysWorkedForGov">--</div>
+                                <div class="freedom-label">Days worked for government</div>
+                            </div>
+                            <div class="freedom-item">
+                                <div class="freedom-value" id="monthsWorkedForGov">--</div>
+                                <div class="freedom-label">Months of slavery</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="freedom-impact" id="freedomImpact">
+                        <!-- Impact messages will be populated by JavaScript -->
+                    </div>
+                </div>
+
                 <div class="receipt-heatmap">
                     <h3 class="heatmap-title">
                         <i class="fas fa-fire"></i>
@@ -674,6 +1117,34 @@
                     </div>
                     <div class="micro-text" id="microText">
                         This is why. You're paying tax every time you buy something, but it's hidden in the price.
+                    </div>
+                </div>
+
+                <!-- Lifetime Tax Burden Section -->
+                <div class="lifetime-burden-section" id="lifetimeBurdenSection" style="display: none;">
+                    <h3 class="burden-title">
+                        <i class="fas fa-hourglass-end"></i>
+                        Your Lifetime Tax Legacy
+                    </h3>
+                    <div class="burden-container">
+                        <div class="burden-main">
+                            <div class="burden-amount" id="lifetimeTaxAmount">--</div>
+                            <div class="burden-label">Total Taxes Over Lifetime</div>
+                            <div class="burden-description" id="lifetimeDescription">What you'll give to the government</div>
+                        </div>
+                        <div class="burden-breakdown">
+                            <div class="burden-item">
+                                <div class="burden-value" id="workingYearsForGov">--</div>
+                                <div class="burden-label">Years working for government</div>
+                            </div>
+                            <div class="burden-item">
+                                <div class="burden-value" id="alternativePurchases">--</div>
+                                <div class="burden-label">Luxury cars you could buy</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="burden-impact" id="burdenImpact">
+                        <!-- Impact messages will be populated by JavaScript -->
                     </div>
                 </div>
             </div>
@@ -742,20 +1213,59 @@
                 calculateTrueTax();
             });
 
+            // Add real-time calculation for income sources
+            const incomeInputs = ['employment', 'business', 'remittances', 'agriculture', 'investment', 'otherIncome'];
+            incomeInputs.forEach(id => {
+                document.getElementById(id).addEventListener('input', updateTotalIncome);
+            });
+
             // Add smooth scrolling and animations
             addInputAnimations();
+            
+            // Initial calculation
+            updateTotalIncome();
+            
+            // Set initial calculation (auto-populate example)
+            setTimeout(() => {
+                calculateTrueTax();
+            }, 500);
         });
 
         function calculateTrueTax() {
-            // Get input values
-            const monthlyIncome = parseFloat(document.getElementById('monthlyIncome').value) || 0;
-            const directTax = parseFloat(document.getElementById('directTax').value) || 0;
+            // Get income source data
+            const incomeSources = {
+                employment: parseFloat(document.getElementById('employment').value) || 0,
+                business: parseFloat(document.getElementById('business').value) || 0,
+                remittances: parseFloat(document.getElementById('remittances').value) || 0,
+                agriculture: parseFloat(document.getElementById('agriculture').value) || 0,
+                investment: parseFloat(document.getElementById('investment').value) || 0,
+                otherIncome: parseFloat(document.getElementById('otherIncome').value) || 0
+            };
+
+            // Calculate total monthly income (including tax-exempt agricultural income)
+            const monthlyIncome = Object.values(incomeSources).reduce((sum, val) => sum + val, 0);
+            const annualIncome = monthlyIncome * 12;
+
+            // Calculate direct tax using Nepal income tax rates (FY 2082/83) with different treatment for each income type
+            const directTax = calculateNepalIncomeTaxByCategory(incomeSources);
+            const monthlyDirectTax = directTax / 12;
+            
+            // Update tax breakdown display
+            updateTaxBreakdown(annualIncome, directTax);
             
             // Get spending data
-            const spending = {};
-            Object.keys(categories).forEach(cat => {
-                spending[cat] = parseFloat(document.getElementById(cat).value) || 0;
-            });
+            const spending = {
+                foodHome: parseFloat(document.getElementById('foodHome').value) || 0,
+                eatingOut: parseFloat(document.getElementById('eatingOut').value) || 0,
+                housing: parseFloat(document.getElementById('housing').value) || 0,
+                utilities: parseFloat(document.getElementById('utilities').value) || 0,
+                transport: parseFloat(document.getElementById('transport').value) || 0,
+                education: parseFloat(document.getElementById('education').value) || 0,
+                clothing: parseFloat(document.getElementById('clothing').value) || 0,
+                personalCare: parseFloat(document.getElementById('personalCare').value) || 0,
+                entertainment: parseFloat(document.getElementById('entertainment').value) || 0,
+                other: parseFloat(document.getElementById('other').value) || 0
+            };
 
             // Calculate total monthly spending
             const totalSpending = Object.values(spending).reduce((sum, val) => sum + val, 0);
@@ -778,9 +1288,9 @@
             });
 
             // Calculate total tax and effective rate
-            const totalTax = directTax + hiddenTax;
+            const totalTax = monthlyDirectTax + hiddenTax;
             const effectiveRate = (totalTax / monthlyIncome) * 100;
-            const directTaxRate = (directTax / monthlyIncome) * 100;
+            const directTaxRate = (monthlyDirectTax / monthlyIncome) * 100;
             const indirectTaxRate = (hiddenTax / monthlyIncome) * 100;
 
             // Calculate uncertainty range
@@ -789,7 +1299,7 @@
             const highEstimate = effectiveRate + uncertainty;
 
             // Update display
-            updateResults(effectiveRate, lowEstimate, highEstimate, directTax, hiddenTax, hiddenBreakdown, totalSpending);
+            updateResults(effectiveRate, lowEstimate, highEstimate, monthlyDirectTax, hiddenTax, hiddenBreakdown, totalSpending, monthlyIncome);
 
             // Show results with animation
             const resultsSection = document.getElementById('resultsSection');
@@ -797,7 +1307,7 @@
             resultsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
 
-        function updateResults(effectiveRate, low, high, directTax, hiddenTax, breakdown, totalSpending) {
+        function updateResults(effectiveRate, low, high, directTax, hiddenTax, breakdown, totalSpending, monthlyIncome) {
             // Update giant number
             document.getElementById('trueRate').textContent = `${effectiveRate.toFixed(1)}%`;
             document.getElementById('rateRange').textContent = `Range: ${low.toFixed(1)}% - ${high.toFixed(1)}%`;
@@ -806,11 +1316,151 @@
             document.getElementById('visibleTax').textContent = `NPR ${directTax.toLocaleString()}`;
             document.getElementById('hiddenTax').textContent = `NPR ${hiddenTax.toLocaleString()}`;
 
+            // Check spending vs income and show warning if needed
+            updateSpendingWarning(totalSpending, monthlyIncome);
+
+            // Calculate and display Tax Freedom Day
+            calculateTaxFreedomDay(effectiveRate, monthlyIncome, directTax + hiddenTax);
+            
+            // Calculate and display Lifetime Tax Burden
+            calculateLifetimeTaxBurden(effectiveRate, monthlyIncome, directTax + hiddenTax);
+
             // Update heatmap
             updateHeatmap(breakdown);
 
             // Update micro-text
             updateMicroText(effectiveRate, directTax, hiddenTax, totalSpending);
+        }
+
+        function updateSpendingWarning(totalSpending, monthlyIncome) {
+            const warningElement = document.getElementById('spendingWarning');
+            const warningText = document.getElementById('warningText');
+            
+            if (totalSpending > monthlyIncome && monthlyIncome > 0) {
+                const overspend = totalSpending - monthlyIncome;
+                const overspendPercent = ((overspend / monthlyIncome) * 100).toFixed(1);
+                
+                warningText.textContent = `Your monthly spending (NPR ${totalSpending.toLocaleString()}) exceeds your income (NPR ${monthlyIncome.toLocaleString()}) by NPR ${overspend.toLocaleString()} (${overspendPercent}%). Time to embrace a frugal lifestyle!`;
+                warningElement.style.display = 'flex';
+            } else {
+                warningElement.style.display = 'none';
+            }
+        }
+
+        function calculateTaxFreedomDay(effectiveRate, monthlyIncome, totalTax) {
+            if (totalTax <= 0 || monthlyIncome <= 0) {
+                document.getElementById('taxFreedomSection').style.display = 'none';
+                return;
+            }
+
+            // Show the tax freedom section
+            document.getElementById('taxFreedomSection').style.display = 'block';
+
+            // Calculate annual figures
+            const annualIncome = monthlyIncome * 12;
+            const annualTax = totalTax * 12;
+            const taxRate = effectiveRate / 100;
+
+            // Calculate what day in the year you become tax-free
+            // Assuming a 365-day year
+            const daysWorkingForTaxes = Math.floor(365 * taxRate);
+            const dayOfYear = 1 + daysWorkingForTaxes; // Day 1 = January 1st
+
+            // Convert day of year to actual date
+            const currentYear = new Date().getFullYear();
+            const taxFreedomDate = new Date(currentYear, 0, dayOfYear);
+            
+            // Format the date
+            const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+            const monthName = months[taxFreedomDate.getMonth()];
+            const day = taxFreedomDate.getDate();
+            
+            const taxFreedomDay = `${monthName} ${day}`;
+            
+            // Calculate months and days for breakdown
+            const monthsWorked = Math.floor(daysWorkingForTaxes / 30);
+            const remainingDays = daysWorkingForTaxes % 30;
+            
+            // Update display elements
+            document.getElementById('taxFreedomDay').textContent = taxFreedomDay;
+            document.getElementById('daysWorkedForGov').textContent = daysWorkingForTaxes;
+            document.getElementById('monthsWorkedForGov').textContent = monthsWorked + (remainingDays > 0 ? `.${remainingDays}` : '');
+            
+            // Generate impact message based on tax rate
+            let impactMessage = '';
+            if (taxRate > 0.35) {
+                impactMessage = `You've worked <strong>${monthsWorked} full months</strong> just to feed the government. That's like working <strong>half your year</strong> for someone else!`;
+            } else if (taxRate > 0.25) {
+                impactMessage = `You spend <strong>${daysWorkingForTaxes} days per year</strong> working for the government. Time you could have used for: vacation, family, or your own projects.`;
+            } else if (taxRate > 0.15) {
+                impactMessage = `Nearly <strong>${Math.floor(daysWorkingForTaxes/7)} full weeks</strong> of your year goes to taxes. What could you build with that time?`;
+            } else {
+                impactMessage = `Even at ${effectiveRate.toFixed(1)}%, you're still working <strong>${daysWorkingForTaxes} days</strong> for the government annually. Small amounts still add up.`;
+            }
+            
+            // Add opportunity cost based on tax amount
+            const dailyTax = annualTax / 365;
+            if (dailyTax > 10000) {
+                impactMessage += ` Your daily tax bill: <strong>NPR ${dailyTax.toLocaleString()}</strong> - enough for a nice meal every day!`;
+            } else if (dailyTax > 5000) {
+                impactMessage += ` Your daily tax: <strong>NPR ${dailyTax.toLocaleString()}</strong> - that's a decent dinner every day.`;
+            }
+            
+            document.getElementById('freedomImpact').innerHTML = `<div class="freedom-impact-text">${impactMessage}</div>`;
+        }
+
+        function calculateLifetimeTaxBurden(effectiveRate, monthlyIncome, totalTax) {
+            if (totalTax <= 0 || monthlyIncome <= 0) {
+                document.getElementById('lifetimeBurdenSection').style.display = 'none';
+                return;
+            }
+
+            // Show the lifetime burden section
+            document.getElementById('lifetimeBurdenSection').style.display = 'block';
+
+            // Calculate lifetime figures
+            // Assume working from age 25 to 60 (35 years), retiring at 60
+            const currentAge = 30; // Assume user is around 30
+            const retirementAge = 60;
+            const workingYearsLeft = retirementAge - currentAge;
+            
+            const annualTax = totalTax * 12;
+            const lifetimeTax = annualTax * workingYearsLeft;
+            
+            // Calculate years spent working for government
+            const taxRate = effectiveRate / 100;
+            const yearsWorkingForGov = workingYearsLeft * taxRate;
+            
+            // Calculate opportunity cost in luxury items
+            // Assume average luxury car costs 35 lakhs
+            const luxuryCarCost = 3500000;
+            const luxuryCarsAffordable = Math.floor(lifetimeTax / luxuryCarCost);
+            
+            // Update display elements
+            document.getElementById('lifetimeTaxAmount').textContent = `NPR ${(lifetimeTax / 10000000).toFixed(1)} Crore`;
+            document.getElementById('workingYearsForGov').textContent = yearsWorkingForGov.toFixed(1);
+            document.getElementById('alternativePurchases').textContent = luxuryCarsAffordable;
+            
+            // Generate impact message based on lifetime tax amount
+            let impactMessage = '';
+            const lifetimeTaxCrore = lifetimeTax / 10000000;
+            
+            if (lifetimeTaxCrore > 5) {
+                impactMessage = `You'll give the government <strong>${lifetimeTaxCrore.toFixed(1)} crores</strong> over your working life. That's enough to buy <strong>${luxuryCarsAffordable} luxury cars</strong> or <strong>${Math.floor(lifetimeTax / 50000000)} houses</strong> in Kathmandu!`;
+            } else if (lifetimeTaxCrore > 2) {
+                impactMessage = `Lifetime tax burden: <strong>${lifetimeTaxCrore.toFixed(1)} crores NPR</strong>. You're basically working <strong>${yearsWorkingForGov.toFixed(1)} years</strong> of your life for government employees you'll never meet.`;
+            } else if (lifetimeTaxCrore > 0.5) {
+                impactMessage = `Even earning moderately, you'll pay <strong>${(lifetimeTax / 100000).toFixed(0)} lakhs</strong> in taxes. That's <strong>${Math.floor(lifetimeTax / 1000000)} million</strong> rupees that could have been your retirement fund.`;
+            } else {
+                impactMessage = `Despite lower earnings, your lifetime tax is still <strong>${(lifetimeTax / 100000).toFixed(0)} lakhs NPR</strong>. Every tax dollar is money you can't invest in your own future.`;
+            }
+            
+            // Add inflation adjustment warning
+            if (lifetimeTax > 50000000) {
+                impactMessage += ` Plus, with inflation, your money will be worth even <strong>less</strong> when you actually pay it!`;
+            }
+            
+            document.getElementById('burdenImpact').innerHTML = `<div class="burden-impact-text">${impactMessage}</div>`;
         }
 
         function updateHeatmap(breakdown) {
@@ -888,8 +1538,156 @@
             content.classList.toggle('show');
         }
 
+        // Nepal Income Tax Calculation by Category (FY 2082/83 - 2025/26)
+        function calculateNepalIncomeTaxByCategory(incomeSources) {
+            let totalTax = 0;
+            let taxableIncome = 0;
+            let socialSecurityTax = 0;
+            
+            // 1. Employment Income - Progressive tax + 1% Social Security Tax
+            const employmentIncome = (incomeSources.employment || 0) * 12;
+            if (employmentIncome > 0) {
+                const employmentTax = calculateProgressiveTax(employmentIncome);
+                totalTax += employmentTax;
+                taxableIncome += employmentIncome;
+                // Social Security Tax (1% on first NPR 500,000, max NPR 5,000) - applies to employment
+                socialSecurityTax = Math.min(employmentIncome * 0.01, 5000);
+                totalTax += socialSecurityTax;
+            }
+            
+            // 2. Business Income - Progressive tax only (no social security tax for individuals)
+            const businessIncome = (incomeSources.business || 0) * 12;
+            if (businessIncome > 0) {
+                const businessTax = calculateProgressiveTax(businessIncome);
+                totalTax += businessTax;
+                taxableIncome += businessIncome;
+            }
+            
+            // 3. Remittances/Foreign Income - TAX EXEMPT for personal remittances
+            const remittancesIncome = (incomeSources.remittances || 0) * 12;
+            // Personal remittances are tax-exempt in Nepal - no tax, no inclusion in taxable income
+            // Only specific foreign services (like IT exports) have 5% TDS, not personal remittances
+            
+            // 4. Agricultural Income - 100% TAX EXEMPT (Nepal Income Tax Act)
+            const agricultureIncome = (incomeSources.agriculture || 0) * 12;
+            // No tax, no inclusion in taxable income - completely exempt
+            taxableIncome += 0; // Agricultural income is exempt
+            
+            // 5. Investment Income - Specific TDS rates (NOT progressive tax)
+            const investmentIncome = (incomeSources.investment || 0) * 12;
+            if (investmentIncome > 0) {
+                // For this calculator, we estimate the tax based on typical investment breakdown
+                // Interest income: 6% TDS (for non-business deposits/bonds)
+                // Dividend income: 5% TDS  
+                // Capital gains: 7.5% short-term, 5% long-term (we estimate 6.25% average)
+                // For simplicity, assume average of 5.5% TDS on investment income
+                const investmentTax = investmentIncome * 0.055; // Average 5.5% TDS rate
+                totalTax += investmentTax;
+                taxableIncome += investmentIncome;
+            }
+            
+            // 6. Other Income (Pension/Government Benefits) - Progressive tax, NO Social Security Tax, + 25% deduction
+            const otherIncome = (incomeSources.otherIncome || 0) * 12;
+            if (otherIncome > 0) {
+                // Apply 25% deduction for pension income
+                const netOtherIncome = otherIncome * 0.75; // 25% deduction
+                const otherTax = calculateProgressiveTax(netOtherIncome);
+                totalTax += otherTax;
+                // Pension income is included in taxable income before deduction
+                taxableIncome += otherIncome;
+            }
+            
+            return totalTax;
+        }
+        
+        // Progressive tax calculation for individual income categories
+        function calculateProgressiveTax(annualIncome) {
+            let tax = 0;
+            
+            if (annualIncome <= 500000) {
+                tax = annualIncome * 0.01;
+            } else if (annualIncome <= 700000) {
+                tax = 500000 * 0.01;
+                tax += (annualIncome - 500000) * 0.10;
+            } else if (annualIncome <= 1000000) {
+                tax = 500000 * 0.01;
+                tax += 200000 * 0.10;
+                tax += (annualIncome - 700000) * 0.20;
+            } else if (annualIncome <= 2000000) {
+                tax = 500000 * 0.01;
+                tax += 200000 * 0.10;
+                tax += 300000 * 0.20;
+                tax += (annualIncome - 1000000) * 0.30;
+            } else if (annualIncome <= 5000000) {
+                tax = 500000 * 0.01;
+                tax += 200000 * 0.10;
+                tax += 300000 * 0.20;
+                tax += 1000000 * 0.30;
+                tax += (annualIncome - 2000000) * 0.36;
+            } else {
+                tax = 500000 * 0.01;
+                tax += 200000 * 0.10;
+                tax += 300000 * 0.20;
+                tax += 1000000 * 0.30;
+                tax += 3000000 * 0.36;
+                tax += (annualIncome - 5000000) * 0.39;
+            }
+            
+            return tax;
+        }
+
+        function updateTaxBreakdown(annualIncome, annualTax) {
+            const monthlyTax = annualTax / 12;
+            const effectiveRate = (annualTax / annualIncome) * 100;
+            
+            // Calculate taxable income breakdown by category
+            const incomeSources = {
+                employment: parseFloat(document.getElementById('employment').value) || 0,
+                business: parseFloat(document.getElementById('business').value) || 0,
+                remittances: parseFloat(document.getElementById('remittances').value) || 0,
+                agriculture: parseFloat(document.getElementById('agriculture').value) || 0,
+                investment: parseFloat(document.getElementById('investment').value) || 0,
+                otherIncome: parseFloat(document.getElementById('otherIncome').value) || 0
+            };
+            
+            document.getElementById('taxBreakdown').innerHTML = `
+                <strong>Annual Income: NPR ${annualIncome.toLocaleString()}</strong><br>
+                <strong>Annual Tax: NPR ${annualTax.toLocaleString()}</strong><br>
+                <strong>Effective Rate: ${effectiveRate.toFixed(1)}%</strong><br>
+                Monthly Tax: NPR ${monthlyTax.toLocaleString()}<br><br>
+                <small style="color: #666; font-size: 11px;">
+                    <strong>Income Tax Treatment (FY 2082/83):</strong><br>
+                    💼 Employment: Progressive tax (1%-39%) + 1% Social Security Tax<br>
+                    🏢 Business: Progressive tax (1%-39%)<br>
+                    ✈️ Remittances: <strong>TAX-EXEMPT</strong> for personal remittances<br>
+                    🌾 Agriculture: <strong>100% TAX-EXEMPT</strong><br>
+                    🏠 Investment: <strong>TDS rates</strong> (Interest 6%, Dividends 5%, Gains 7.5%/5%)<br>
+                    👴 Pension: Progressive tax + 25% deduction, NO Social Security Tax
+                </small>
+            `;
+        }
+
+        function updateTotalIncome() {
+            const incomeSources = {
+                employment: parseFloat(document.getElementById('employment').value) || 0,
+                business: parseFloat(document.getElementById('business').value) || 0,
+                remittances: parseFloat(document.getElementById('remittances').value) || 0,
+                agriculture: parseFloat(document.getElementById('agriculture').value) || 0,
+                investment: parseFloat(document.getElementById('investment').value) || 0,
+                otherIncome: parseFloat(document.getElementById('otherIncome').value) || 0
+            };
+            
+            const totalIncome = Object.values(incomeSources).reduce((sum, val) => sum + val, 0);
+            document.getElementById('totalIncomeDisplay').textContent = `NPR ${totalIncome.toLocaleString()}`;
+            
+            // Update tax calculation with category-specific rates
+            const annualTax = calculateNepalIncomeTaxByCategory(incomeSources);
+            const annualIncome = totalIncome * 12;
+            updateTaxBreakdown(annualIncome, annualTax);
+        }
+
         function addInputAnimations() {
-            const inputs = document.querySelectorAll('.input, .spending-item input');
+            const inputs = document.querySelectorAll('.input, .spending-item input, .income-item input');
             
             inputs.forEach(input => {
                 input.addEventListener('focus', function() {
