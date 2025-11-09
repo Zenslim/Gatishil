@@ -66,7 +66,7 @@ const DEFAULT_INCOME: Record<IncomeKey, number> = {
   capital: 2000,
 };
 
-// Spending categories (VAT/excise assumptions mirror the HTML)
+// Spending categories (VAT/excise assumptions)
 const CATEGORIES = [
   { key: 'foodHome', label: '🍎 Food (Home)' },
   { key: 'eatingOut', label: '🍽️ Eating Out' },
@@ -128,7 +128,7 @@ export default function ChromeCalculator() {
     [incomeMap]
   );
 
-  // Direct tax (visible pay-slip/self-assessed). Keep separate & user-editable.
+  // Direct tax (visible pay-slip/self-assessed)
   const [directTax, setDirectTax] = useState(20000);
 
   // Spending
@@ -221,7 +221,7 @@ export default function ChromeCalculator() {
               visible pay-slip taxes plus hidden VAT/excise embedded in prices.
             </p>
 
-            {/* NEW: Six income sources */}
+            {/* Six income sources */}
             <div className="mt-6 space-y-3">
               <div className="text-sm text-white/90 font-semibold">Monthly Income — 6 Sources</div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -483,9 +483,9 @@ function ReceiptHeatmap({
 }: {
   breakdown: Record<CatKey, { amount: number; pctOfIncome: number }>;
 }) {
-  const items = Object.entries(breakdown)
+  const items = (Object.entries(breakdown) as [CatKey, { amount: number; pctOfIncome: number }][])
     .filter(([, d]) => d.amount > 0)
-    .sort((a, b) => b[1].amount - a[1].amount)) as [CatKey, { amount: number; pctOfIncome: number }][]; // typed
+    .sort((a, b) => b[1].amount - a[1].amount);
 
   const max = Math.max(...items.map(([, d]) => d.amount), 1);
 
