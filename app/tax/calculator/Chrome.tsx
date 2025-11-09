@@ -121,21 +121,30 @@ const SETTINGS = {
 export default function ChromeCalculator() {
   const mounted = useMounted();
 
-  // NEW: 6 income sources drive total income
+  // 6 income sources drive total income
   const [incomeMap, setIncomeMap] = useState<Record<IncomeKey, number>>(DEFAULT_INCOME);
   const income = useMemo(
     () => Object.values(incomeMap).reduce((a, v) => a + (v || 0), 0),
     [incomeMap]
   );
 
-  // Direct tax (visible pay-slip/self-assessed)
+  // Direct (visible) monthly tax
   const [directTax, setDirectTax] = useState(20000);
 
   // Spending
   const [spend, setSpend] = useState<Record<CatKey, number>>(DEFAULT_SPEND);
   const [showAdvanced, setShowAdvanced] = useState(false);
 
-  const { hiddenTax, breakdown, totalSpending, effectiveRate, low, high } = useMemo(() => {
+  // Lifetime + Journey controls
+  const [years, setYears] = useState<number>(30);        // horizon for legacy
+  const [growth, setGrowth] = useState<number>(5);       // % annual compounding alt use
+  const [monthDays, setMonthDays] = useState<number>(30);// average month length for journey
+
+  const {
+    hiddenTax, breakdown, totalSpending, effectiveRate, low, high,
+    monthlyTax, legacyNominal, legacyAltWealth, taxFreedomDay
+  } = useMemo(() => {
+    // hidden monthly tax from spend
     let hidden = 0;
     const b: Record<CatKey, { amount: number; pctOfIncome: number }> = {} as any;
 
@@ -148,9 +157,25 @@ export default function ChromeCalculator() {
       b[key] = { amount: sum, pctOfIncome: income ? (sum / income) * 100 : 0 };
     }
 
-    const totalTax = directTax + hidden;
+    const monthlyVisible = directTax;
+    const monthlyHidden  = hidden;
+    const monthlyTotal   = monthlyVisible + monthlyHidden;
+
+    const totalTax = monthlyTotal;
     const eff = income ? (totalTax / income) * 100 : 0;
     const unc = eff * SETTINGS.uncertainty;
+
+    // Lifetime legacy (simple): nominal = monthlyTotal * 12 * years
+    const legacyNominal = monthlyTotal * 12 * years;
+
+    // Alternative wealth if redirected & compounded annually at growth%
+    const r = Math.max(0, growth) / 100;
+    const yearly = monthlyTotal * 12;
+    const legacyAltWealth = r > 0 ? yearly * ((Math.pow(1 + r, years) - 1) / r) : yearly * years;
+
+    // Tax Freedom Journey: day of month spent covering taxes
+    const taxRate = income ? totalTax / income : 0; // monthly
+    const day = Math.min(monthDays, Math.max(1, Math.round(taxRate * monthDays)));
 
     return {
       hiddenTax: hidden,
@@ -159,8 +184,12 @@ export default function ChromeCalculator() {
       effectiveRate: eff,
       low: eff - unc,
       high: eff + unc,
+      monthlyTax: monthlyTotal,
+      legacyNominal,
+      legacyAltWealth,
+      taxFreedomDay: day,
     };
-  }, [income, directTax, spend]);
+  }, [income, directTax, spend, years, growth, monthDays]);
 
   return (
     <main className="relative min-h-screen bg-black text-white">
@@ -188,6 +217,8 @@ export default function ChromeCalculator() {
           <nav className="hidden md:flex gap-6 items-center text-sm text-slate-300">
             <a className="hover:text-white" href="/tax">Intro</a>
             <a className="hover:text-white" href="#advanced">Advanced</a>
+            <a className="hover:text-white" href="#legacy">Legacy</a>
+            <a className="hover:text-white" href="#journey">Journey</a>
           </nav>
           <div className="hidden md:flex items-center gap-2">
             <a href="/login" className="px-3 py-2 border border-white/10 rounded-lg text-xs hover:bg-white/5 transition">Login</a>
@@ -314,8 +345,8 @@ export default function ChromeCalculator() {
             transition={{ duration: 0.6, delay: 0.05 }}
             className="lg:col-span-7"
           >
+            {/* headline block */}
             <div className="rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl p-6 shadow-[0_0_35px_rgba(255,255,255,0.05)]">
-              {/* headline */}
               <div className="text-center">
                 <div className="text-5xl sm:text-6xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-amber-300 via-white to-fuchsia-300">
                   {effectiveRate.toFixed(1)}%
@@ -324,10 +355,15 @@ export default function ChromeCalculator() {
                 <div className="text-xs text-slate-400 mt-1">Range: {low.toFixed(1)}% – {high.toFixed(1)}%</div>
               </div>
 
-              {/* stats */}
               <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <Stat title="Visible Tax" value={`Rs ${formatRs(directTax)}`} />
-                <Stat title="Hidden Tax (est.)" value={`Rs ${formatRs(hiddenTax)}`} highlight />
+                <Stat title="Visible Tax (monthly)" value={`Rs ${formatRs(directTax)}`} />
+                <Stat title="Hidden Tax (monthly est.)" value={`Rs ${formatRs(hiddenTax)}`} highlight />
+              </div>
+
+              <div className="mt-4 grid grid-cols-3 gap-3 text-xs text-slate-300/80">
+                <Fact label="Total Monthly Income" value={`Rs ${formatRs(income)}`} />
+                <Fact label="Total Monthly Spend (est.)" value={`Rs ${formatRs(totalSpending)}`} />
+                <Fact label="Total Monthly Tax (est.)" value={`Rs ${formatRs(monthlyTax)}`} />
               </div>
 
               {/* heatmap */}
@@ -343,41 +379,103 @@ export default function ChromeCalculator() {
                   {microText({ effectiveRate, directTax, hiddenTax })}
                 </div>
               </div>
-
-              {/* footer facts */}
-              <div className="mt-6 grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs text-slate-300/80">
-                <Fact label="Total Monthly Income" value={`Rs ${formatRs(income)}`} />
-                <Fact label="Total Monthly Spend (est.)" value={`Rs ${formatRs(totalSpending)}`} />
-                <Fact label="Direct tax rate" value={`${income ? ((directTax / income) * 100).toFixed(1) : '0.0'}%`} />
-                <Fact label="Indirect tax rate (est.)" value={`${income ? ((hiddenTax / income) * 100).toFixed(1) : '0.0'}%`} />
-              </div>
             </div>
 
-            {/* income share bars */}
-            <div className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-6">
-              <h3 className="text-sm font-semibold text-white/90 mb-3">Income Sources (share of total)</h3>
-              <div className="space-y-2">
-                {INCOME_SOURCES.map(({ key, label }) => {
-                  const v = incomeMap[key] || 0;
-                  const pct = income ? Math.round((v / income) * 100) : 0;
-                  return (
-                    <div key={key} className="flex items-center gap-3">
-                      <div className="min-w-[180px] text-sm text-white/90">{label}</div>
-                      <div className="flex-1 h-2.5 rounded-full bg-white/10 overflow-hidden">
-                        <motion.div
-                          initial={{ width: 0 }}
-                          whileInView={{ width: `${pct}%` }}
-                          viewport={{ once: true }}
-                          transition={{ duration: 0.8, ease: 'easeOut' }}
-                          className="h-full bg-gradient-to-r from-cyan-200 via-white to-fuchsia-200"
-                        />
-                      </div>
-                      <div className="w-32 text-right text-sm text-slate-300/90">
-                        {pct}% · Rs {formatRs(v)}
-                      </div>
-                    </div>
-                  );
-                })}
+            {/* Lifetime Tax Legacy */}
+            <div id="legacy" className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-6">
+              <h3 className="text-lg font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-amber-300 via-white to-fuchsia-300">
+                Your Lifetime Tax Legacy
+              </h3>
+              <p className="text-slate-300/90 text-sm mt-1">
+                Project your current monthly taxes forward as a simple, living estimate you can adjust any time.
+              </p>
+
+              <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <LabeledNumber
+                  label="Horizon (years)"
+                  value={years}
+                  onChange={setYears}
+                  right="yrs"
+                />
+                <LabeledNumber
+                  label="Alt. Growth (annual)"
+                  value={growth}
+                  onChange={setGrowth}
+                  right="%"
+                />
+                <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+                  <div className="text-[11px] text-white/60">Monthly Tax (now)</div>
+                  <div className="mt-1 text-xl font-bold">Rs {formatRs(monthlyTax)}</div>
+                </div>
+              </div>
+
+              <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <Stat
+                  title="Nominal Taxes Paid (Horizon)"
+                  value={`Rs ${formatRs(legacyNominal)}`}
+                  highlight
+                />
+                <Stat
+                  title="If Redirected & Compounded (est.)"
+                  value={`Rs ${formatRs(legacyAltWealth)}`}
+                />
+              </div>
+
+              <p className="text-[12px] text-slate-400 mt-2">
+                This is a simple projection using today’s monthly taxes. It’s not advice; it’s a mirror to
+                spark better policy and smarter choices.
+              </p>
+            </div>
+
+            {/* Tax Freedom Journey */}
+            <div id="journey" className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-6">
+              <h3 className="text-lg font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-cyan-200 via-white to-fuchsia-200">
+                Your Tax Freedom Journey
+              </h3>
+              <p className="text-slate-300/90 text-sm mt-1">
+                Each month, you first work for taxes—then for you. Here’s your estimated “freedom day”.
+              </p>
+
+              <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <LabeledNumber
+                  label="Days in Month (avg.)"
+                  value={monthDays}
+                  onChange={setMonthDays}
+                  right="days"
+                />
+                <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+                  <div className="text-[11px] text-white/60">Freedom Day (est.)</div>
+                  <div className="mt-1 text-2xl font-extrabold">Day {taxFreedomDay}</div>
+                </div>
+                <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+                  <div className="text-[11px] text-white/60">Workdays for You</div>
+                  <div className="mt-1 text-2xl font-extrabold">
+                    {Math.max(0, monthDays - taxFreedomDay)}
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-4">
+                <div className="text-[12px] text-white/70 mb-1">Month Timeline</div>
+                <div className="h-3 w-full rounded-full bg-white/10 overflow-hidden">
+                  <motion.div
+                    initial={{ width: 0 }}
+                    whileInView={{ width: `${(taxFreedomDay / monthDays) * 100}%` }}
+                    viewport={{ once: true }}
+                    transition={{ duration: 1, ease: 'easeOut' }}
+                    className="h-full bg-gradient-to-r from-rose-400 via-orange-400 to-amber-300"
+                  />
+                </div>
+                <div className="flex justify-between text-[11px] text-slate-400 mt-1">
+                  <span>1</span>
+                  <span>Tax Freedom → Day {taxFreedomDay}</span>
+                  <span>{monthDays}</span>
+                </div>
+              </div>
+
+              <div className="mt-4 text-sm text-slate-300/90">
+                Tip: Reduce high-VAT/Excise spend (fuel-heavy transport, frequent eating out) or increase
+                post-tax income—you’ll watch your “freedom day” move earlier.
               </div>
             </div>
           </motion.div>
@@ -413,6 +511,21 @@ function Field({
         {suffix ? <span className="text-slate-300/80">{suffix}</span> : null}
       </div>
       <NumberInput value={value} onChange={onChange} placeholder="0" right="NPR" />
+    </div>
+  );
+}
+
+function LabeledNumber({
+  label, value, onChange, right,
+}: {
+  label: string; value: number; onChange: (v: number) => void; right?: string;
+}) {
+  return (
+    <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+      <div className="text-[11px] text-white/60">{label}</div>
+      <div className="mt-1">
+        <NumberInput value={value} onChange={onChange} right={right} />
+      </div>
     </div>
   );
 }
@@ -514,7 +627,7 @@ function ReceiptHeatmap({
                 className="h-full bg-gradient-to-r from-rose-400 via-orange-400 to-amber-300"
               />
             </div>
-            <div className="w-28 text-right text-sm text-slate-300/90">Rs {formatRs(data.amount)}</div>
+            <div className="w-36 text-right text-sm text-slate-300/90">Rs {formatRs(data.amount)}</div>
           </motion.div>
         );
       })}
@@ -531,7 +644,7 @@ function microText({ effectiveRate, directTax, hiddenTax }: { effectiveRate: num
   const hiddenPct = (hiddenTax / (directTax + hiddenTax || 1)) * 100;
   if (effectiveRate > 25) {
     return `Wow. ${hiddenPct.toFixed(0)}% of your tax comes from everyday spending. If you feel prices more than pay slips, this is why.`;
-  } else if (effectiveRate > 15) {
+    } else if (effectiveRate > 15) {
     return `You’re paying about Rs ${formatRs(hiddenTax / 12)} per month in hidden taxes. The real question: do we know where it goes?`;
   }
   return `Even at ${effectiveRate.toFixed(1)}%, hidden taxes are ~${hiddenPct.toFixed(0)}% of your total. That’s how modern prices carry tax inside.`;
