@@ -1,0 +1,928 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nepal True Tax Mirror - Discover Your Real Tax Rate</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --primary: #1a1a2e;
+            --accent: #e94560;
+            --success: #0f4c75;
+            --warning: #ff6b6b;
+            --neutral-50: #f8f9fa;
+            --neutral-100: #ffffff;
+            --neutral-200: #e9ecef;
+            --neutral-300: #dee2e6;
+            --neutral-600: #6c757d;
+            --neutral-700: #495057;
+            --neutral-800: #343a40;
+            --neutral-900: #212529;
+            --shadow: 0 10px 30px rgba(0,0,0,0.1);
+            --shadow-lg: 0 20px 60px rgba(0,0,0,0.15);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: var(--neutral-900);
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+            color: white;
+        }
+
+        .title {
+            font-size: 3.5rem;
+            font-weight: 800;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .subtitle {
+            font-size: 1.2rem;
+            font-weight: 300;
+            opacity: 0.9;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        .main-content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            align-items: start;
+        }
+
+        .card {
+            background: var(--neutral-100);
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: var(--shadow-lg);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+
+        .form-section {
+            position: sticky;
+            top: 20px;
+        }
+
+        .section-title {
+            font-size: 1.5rem;
+            font-weight: 700;
+            margin-bottom: 25px;
+            color: var(--primary);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .form-group {
+            margin-bottom: 25px;
+        }
+
+        .label {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: var(--neutral-800);
+        }
+
+        .input {
+            width: 100%;
+            height: 50px;
+            padding: 12px 20px;
+            border: 2px solid var(--neutral-200);
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            background: var(--neutral-50);
+        }
+
+        .input:focus {
+            outline: none;
+            border-color: var(--accent);
+            background: white;
+            box-shadow: 0 0 0 3px rgba(233, 69, 96, 0.1);
+        }
+
+        .slider {
+            -webkit-appearance: none;
+            width: 100%;
+            height: 8px;
+            border-radius: 5px;
+            background: var(--neutral-200);
+            outline: none;
+            margin: 10px 0;
+        }
+
+        .slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: var(--accent);
+            cursor: pointer;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+        }
+
+        .spending-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-bottom: 20px;
+            background: var(--neutral-50);
+            padding: 20px;
+            border-radius: 15px;
+            border: 2px solid var(--neutral-200);
+        }
+
+        .spending-item {
+            background: var(--neutral-100);
+            border-radius: 12px;
+            padding: 15px;
+            border: 2px solid var(--neutral-200);
+            transition: all 0.3s ease;
+            display: flex;
+            flex-direction: column;
+            min-height: 60px;
+            justify-content: center;
+        }
+
+        .spending-item:hover {
+            border-color: var(--accent);
+            transform: translateY(-2px);
+        }
+
+        .spending-item input {
+            background: var(--neutral-50);
+            border: 1px solid var(--neutral-300);
+            border-radius: 6px;
+            outline: none;
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--primary);
+            width: 100%;
+            padding: 8px 12px;
+            transition: all 0.3s ease;
+        }
+
+        .spending-item input:focus {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 2px rgba(233, 69, 96, 0.1);
+        }
+
+        .spending-item input::placeholder {
+            color: var(--neutral-500);
+            font-weight: 500;
+        }
+
+        .spending-item::before {
+            content: attr(data-label);
+            font-size: 12px;
+            font-weight: 500;
+            color: var(--neutral-700);
+            margin-bottom: 5px;
+            display: block;
+        }
+
+        .toggle-container {
+            display: flex;
+            background: var(--neutral-100);
+            border-radius: 12px;
+            padding: 4px;
+            margin: 20px 0;
+            border: 2px solid var(--neutral-200);
+        }
+
+        .toggle-option {
+            flex: 1;
+            padding: 12px;
+            text-align: center;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+
+        .toggle-option.active {
+            background: var(--accent);
+            color: white;
+        }
+
+        .calculate-btn {
+            width: 100%;
+            height: 60px;
+            background: linear-gradient(135deg, var(--accent), #ff6b6b);
+            color: white;
+            border: none;
+            border-radius: 15px;
+            font-size: 18px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            box-shadow: 0 8px 25px rgba(233, 69, 96, 0.3);
+        }
+
+        .calculate-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 12px 35px rgba(233, 69, 96, 0.4);
+        }
+
+        .calculate-btn:active {
+            transform: translateY(0);
+        }
+
+        .results-section {
+            display: none;
+        }
+
+        .results-section.show {
+            display: block;
+            animation: slideUp 0.6s ease-out;
+        }
+
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .giant-number {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .true-rate {
+            font-size: 4rem;
+            font-weight: 800;
+            color: var(--accent);
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 10px;
+        }
+
+        .rate-range {
+            font-size: 1.2rem;
+            color: var(--neutral-600);
+            font-weight: 500;
+        }
+
+        .tax-breakdown {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .tax-card {
+            background: linear-gradient(135deg, var(--success), #2c5aa0);
+            color: white;
+            padding: 25px;
+            border-radius: 15px;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .tax-card.hidden {
+            background: linear-gradient(135deg, var(--warning), #ff8e8e);
+        }
+
+        .tax-amount {
+            font-size: 2rem;
+            font-weight: 700;
+            margin-bottom: 5px;
+        }
+
+        .tax-label {
+            font-size: 1rem;
+            opacity: 0.9;
+        }
+
+        .receipt-heatmap {
+            background: var(--neutral-50);
+            border-radius: 15px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+
+        .heatmap-title {
+            font-size: 1.2rem;
+            font-weight: 700;
+            margin-bottom: 15px;
+            color: var(--primary);
+        }
+
+        .heatmap-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+            padding: 10px;
+            background: white;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .heatmap-item:hover {
+            transform: translateX(5px);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+
+        .heatmap-bar {
+            height: 8px;
+            border-radius: 4px;
+            margin-left: 15px;
+            flex: 1;
+            background: var(--neutral-200);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .heatmap-fill {
+            height: 100%;
+            border-radius: 4px;
+            background: linear-gradient(90deg, var(--accent), var(--warning));
+            transition: width 0.8s ease;
+        }
+
+        .micros {
+            background: linear-gradient(135deg, var(--neutral-100), var(--neutral-50));
+            border-radius: 15px;
+            padding: 20px;
+            margin: 20px 0;
+            border-left: 4px solid var(--accent);
+        }
+
+        .micro-title {
+            font-size: 1.1rem;
+            font-weight: 700;
+            margin-bottom: 10px;
+            color: var(--primary);
+        }
+
+        .micro-text {
+            font-size: 0.95rem;
+            color: var(--neutral-700);
+            font-style: italic;
+        }
+
+        .advanced-toggle {
+            background: var(--neutral-100);
+            border: 2px solid var(--neutral-200);
+            border-radius: 10px;
+            padding: 15px;
+            margin: 20px 0;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .advanced-toggle:hover {
+            border-color: var(--accent);
+        }
+
+        .advanced-content {
+            display: none;
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid var(--neutral-200);
+        }
+
+        .advanced-content.show {
+            display: block;
+            animation: slideDown 0.3s ease;
+        }
+
+        @keyframes slideDown {
+            from {
+                opacity: 0;
+                max-height: 0;
+            }
+            to {
+                opacity: 1;
+                max-height: 500px;
+            }
+        }
+
+        .preset-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 0;
+            border-bottom: 1px solid var(--neutral-200);
+        }
+
+        .preset-item:last-child {
+            border-bottom: none;
+        }
+
+        .preset-label {
+            font-weight: 500;
+        }
+
+        .preset-value {
+            font-weight: 600;
+            color: var(--accent);
+        }
+
+        .uncertainty-note {
+            background: linear-gradient(135deg, #ffeaa7, #fab1a0);
+            border-radius: 10px;
+            padding: 15px;
+            margin: 15px 0;
+            font-size: 0.9rem;
+            color: var(--neutral-800);
+        }
+
+        @media (max-width: 768px) {
+            .main-content {
+                grid-template-columns: 1fr;
+                gap: 20px;
+            }
+
+            .title {
+                font-size: 2.5rem;
+            }
+
+            .true-rate {
+                font-size: 3rem;
+            }
+
+            .spending-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .tax-breakdown {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .pulse {
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% {
+                transform: scale(1);
+            }
+            50% {
+                transform: scale(1.05);
+            }
+            100% {
+                transform: scale(1);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <h1 class="title">
+                <i class="fas fa-mirror"></i>
+                Nepal True Tax Mirror
+            </h1>
+            <p class="subtitle">
+                Stop feeling the pinch without knowing why. This mirror shows your complete tax story.
+            </p>
+        </header>
+
+        <div class="main-content">
+            <!-- Input Form Section -->
+            <div class="card form-section">
+                <h2 class="section-title">
+                    <i class="fas fa-calculator"></i>
+                    Tell Us The Truth
+                </h2>
+
+                <div class="toggle-container">
+                    <div class="toggle-option active" data-mode="preset">
+                        <i class="fas fa-magic"></i> Nepal Preset
+                    </div>
+                    <div class="toggle-option" data-mode="custom">
+                        <i class="fas fa-cogs"></i> Custom
+                    </div>
+                </div>
+
+                <form id="taxForm">
+                    <div class="form-group">
+                        <label class="label">
+                            <span>Monthly Gross Income</span>
+                            <span class="currency">NPR</span>
+                        </label>
+                        <input type="number" id="monthlyIncome" class="input" placeholder="150,000" value="150000">
+                    </div>
+
+                    <div class="form-group">
+                        <label class="label">
+                            <span>Direct Tax (TDS/Self)</span>
+                            <span class="currency">NPR/month</span>
+                        </label>
+                        <input type="number" id="directTax" class="input" placeholder="20,000" value="20000">
+                    </div>
+
+                    <div class="form-group">
+                        <label class="label">
+                            <span>Monthly Spending Categories</span>
+                            <span class="currency">NPR/month</span>
+                        </label>
+                        <p style="font-size: 14px; color: var(--neutral-600); margin-bottom: 15px; font-style: italic;">
+                            Enter your estimated monthly spending in each category. These will be used to calculate hidden taxes.
+                        </p>
+                        
+                        <div class="spending-grid">
+                            <div class="spending-item" data-label="🍎 Food (Home)">
+                                <input type="number" id="foodHome" value="15000">
+                            </div>
+                            <div class="spending-item" data-label="🍽️ Eating Out">
+                                <input type="number" id="eatingOut" value="8000">
+                            </div>
+                            <div class="spending-item" data-label="🏠 Housing/Rent">
+                                <input type="number" id="housing" value="30000">
+                            </div>
+                            <div class="spending-item" data-label="⚡ Utilities">
+                                <input type="number" id="utilities" value="8000">
+                            </div>
+                            <div class="spending-item" data-label="🚗 Transport">
+                                <input type="number" id="transport" value="12000">
+                            </div>
+                            <div class="spending-item" data-label="📚 Education/Health">
+                                <input type="number" id="education" value="5000">
+                            </div>
+                            <div class="spending-item" data-label="👕 Clothing">
+                                <input type="number" id="clothing" value="4000">
+                            </div>
+                            <div class="spending-item" data-label="🧴 Personal Care">
+                                <input type="number" id="personalCare" value="3000">
+                            </div>
+                            <div class="spending-item" data-label="🎬 Entertainment">
+                                <input type="number" id="entertainment" value="6000">
+                            </div>
+                            <div class="spending-item" data-label="📦 Other">
+                                <input type="number" id="other" value="9000">
+                            </div>
+                        </div>
+                    </div>
+
+                    <button type="submit" class="calculate-btn pulse">
+                        <i class="fas fa-eye"></i>
+                        Reveal My True Tax Rate
+                    </button>
+                </form>
+
+                <div class="advanced-toggle" onclick="toggleAdvanced()">
+                    <i class="fas fa-cog"></i>
+                    Advanced Settings (Optional)
+                </div>
+
+                <div class="advanced-content" id="advancedContent">
+                    <h4 style="margin-bottom: 15px; color: var(--primary);">Tax Rate Assumptions (Nepal 2025)</h4>
+                    <div class="preset-item">
+                        <span class="preset-label">VAT Rate (Standard)</span>
+                        <span class="preset-value">13%</span>
+                    </div>
+                    <div class="preset-item">
+                        <span class="preset-label">Food (Home) - VATable</span>
+                        <span class="preset-value">60%</span>
+                    </div>
+                    <div class="preset-item">
+                        <span class="preset-label">Eating Out - VATable</span>
+                        <span class="preset-value">95%</span>
+                    </div>
+                    <div class="preset-item">
+                        <span class="preset-label">Utilities - VATable</span>
+                        <span class="preset-value">100%</span>
+                    </div>
+                    <div class="preset-item">
+                        <span class="preset-label">Transport (Fuel)</span>
+                        <span class="preset-value">+8% excise</span>
+                    </div>
+                    <div class="preset-item">
+                        <span class="preset-label">Entertainment - VATable</span>
+                        <span class="preset-value">100%</span>
+                    </div>
+                    
+                    <div class="uncertainty-note">
+                        <i class="fas fa-info-circle"></i>
+                        Uncertainty range: ±5% due to price variation and tax enforcement differences
+                    </div>
+                </div>
+            </div>
+
+            <!-- Results Section -->
+            <div class="card results-section" id="resultsSection">
+                <div class="giant-number">
+                    <div class="true-rate" id="trueRate">--%</div>
+                    <div class="rate-range" id="rateRange">Your True Effective Tax Rate</div>
+                </div>
+
+                <div class="tax-breakdown">
+                    <div class="tax-card">
+                        <div class="tax-amount" id="visibleTax">NPR --</div>
+                        <div class="tax-label">Visible Tax</div>
+                    </div>
+                    <div class="tax-card hidden">
+                        <div class="tax-amount" id="hiddenTax">NPR --</div>
+                        <div class="tax-label">Hidden Tax</div>
+                    </div>
+                </div>
+
+                <div class="receipt-heatmap">
+                    <h3 class="heatmap-title">
+                        <i class="fas fa-fire"></i>
+                        Your Hidden Tax Receipt
+                    </h3>
+                    <div id="heatmapContainer">
+                        <!-- Heatmap items will be populated by JavaScript -->
+                    </div>
+                </div>
+
+                <div class="micros">
+                    <div class="micro-title">
+                        <i class="fas fa-lightbulb"></i>
+                        If you feel prices more than pay slips...
+                    </div>
+                    <div class="micro-text" id="microText">
+                        This is why. You're paying tax every time you buy something, but it's hidden in the price.
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Nepal Tax Calculation System
+        const taxSettings = {
+            // Base VAT rate
+            vatRate: 0.13,
+            
+            // VATable share by category (what percentage of spending is VATable)
+            vatableShare: {
+                foodHome: 0.60,      // 60% - Some basic foods exempt
+                eatingOut: 0.95,     // 95% - Restaurant services fully VATable
+                housing: 0.00,       // 0% - Rent typically not VATable
+                utilities: 1.00,     // 100% - Electricity, water, telecom fully VATable
+                transport: 0.70,     // 70% - Mix of fuel (high tax) and public transport
+                education: 0.80,     // 80% - Some educational services VATable
+                clothing: 1.00,      // 100% - Clothing fully VATable
+                personalCare: 1.00,  // 100% - Personal care fully VATable
+                entertainment: 1.00, // 100% - Entertainment fully VATable
+                other: 0.85          // 85% - Blended average
+            },
+            
+            // Additional excise/add-on rates (as decimal of total spend)
+            exciseRates: {
+                transport: 0.08,     // 8% - Fuel excise and vehicle taxes
+                foodHome: 0.02,      // 2% - Some food items have additional levies
+                eatingOut: 0.03,     // 3% - Restaurant service charges
+                personalCare: 0.01   // 1% - Luxury items excise
+            },
+            
+            // Uncertainty ranges (±%)
+            uncertainty: 0.05
+        };
+
+        // Spending categories for display
+        const categories = {
+            foodHome: 'Food (Home)',
+            eatingOut: 'Eating Out',
+            housing: 'Housing/Rent',
+            utilities: 'Utilities',
+            transport: 'Transport',
+            education: 'Education/Health',
+            clothing: 'Clothing',
+            personalCare: 'Personal Care',
+            entertainment: 'Entertainment',
+            other: 'Other'
+        };
+
+        // Initialize event listeners
+        document.addEventListener('DOMContentLoaded', function() {
+            // Toggle between preset and custom modes
+            document.querySelectorAll('.toggle-option').forEach(option => {
+                option.addEventListener('click', function() {
+                    document.querySelectorAll('.toggle-option').forEach(opt => opt.classList.remove('active'));
+                    this.classList.add('active');
+                });
+            });
+
+            // Form submission
+            document.getElementById('taxForm').addEventListener('submit', function(e) {
+                e.preventDefault();
+                calculateTrueTax();
+            });
+
+            // Add smooth scrolling and animations
+            addInputAnimations();
+        });
+
+        function calculateTrueTax() {
+            // Get input values
+            const monthlyIncome = parseFloat(document.getElementById('monthlyIncome').value) || 0;
+            const directTax = parseFloat(document.getElementById('directTax').value) || 0;
+            
+            // Get spending data
+            const spending = {};
+            Object.keys(categories).forEach(cat => {
+                spending[cat] = parseFloat(document.getElementById(cat).value) || 0;
+            });
+
+            // Calculate total monthly spending
+            const totalSpending = Object.values(spending).reduce((sum, val) => sum + val, 0);
+
+            // Calculate hidden tax (indirect taxes)
+            let hiddenTax = 0;
+            const hiddenBreakdown = {};
+
+            Object.keys(spending).forEach(category => {
+                const categorySpend = spending[category];
+                const vatAmount = categorySpend * taxSettings.vatableShare[category] * taxSettings.vatRate;
+                const exciseAmount = categorySpend * (taxSettings.exciseRates[category] || 0);
+                const categoryTotal = vatAmount + exciseAmount;
+                
+                hiddenTax += categoryTotal;
+                hiddenBreakdown[category] = {
+                    amount: categoryTotal,
+                    percentage: (categoryTotal / monthlyIncome) * 100
+                };
+            });
+
+            // Calculate total tax and effective rate
+            const totalTax = directTax + hiddenTax;
+            const effectiveRate = (totalTax / monthlyIncome) * 100;
+            const directTaxRate = (directTax / monthlyIncome) * 100;
+            const indirectTaxRate = (hiddenTax / monthlyIncome) * 100;
+
+            // Calculate uncertainty range
+            const uncertainty = effectiveRate * taxSettings.uncertainty;
+            const lowEstimate = effectiveRate - uncertainty;
+            const highEstimate = effectiveRate + uncertainty;
+
+            // Update display
+            updateResults(effectiveRate, lowEstimate, highEstimate, directTax, hiddenTax, hiddenBreakdown, totalSpending);
+
+            // Show results with animation
+            const resultsSection = document.getElementById('resultsSection');
+            resultsSection.classList.add('show');
+            resultsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+
+        function updateResults(effectiveRate, low, high, directTax, hiddenTax, breakdown, totalSpending) {
+            // Update giant number
+            document.getElementById('trueRate').textContent = `${effectiveRate.toFixed(1)}%`;
+            document.getElementById('rateRange').textContent = `Range: ${low.toFixed(1)}% - ${high.toFixed(1)}%`;
+
+            // Update tax breakdown
+            document.getElementById('visibleTax').textContent = `NPR ${directTax.toLocaleString()}`;
+            document.getElementById('hiddenTax').textContent = `NPR ${hiddenTax.toLocaleString()}`;
+
+            // Update heatmap
+            updateHeatmap(breakdown);
+
+            // Update micro-text
+            updateMicroText(effectiveRate, directTax, hiddenTax, totalSpending);
+        }
+
+        function updateHeatmap(breakdown) {
+            const container = document.getElementById('heatmapContainer');
+            container.innerHTML = '';
+
+            // Sort categories by hidden tax amount
+            const sortedCategories = Object.entries(breakdown)
+                .filter(([_, data]) => data.amount > 0)
+                .sort((a, b) => b[1].amount - a[1].amount);
+
+            const maxAmount = Math.max(...sortedCategories.map(([_, data]) => data.amount));
+
+            sortedCategories.forEach(([category, data]) => {
+                const item = document.createElement('div');
+                item.className = 'heatmap-item';
+                
+                const percentage = (data.amount / maxAmount) * 100;
+                const isHigh = percentage > 50;
+                
+                item.innerHTML = `
+                    <div style="flex: 1;">
+                        <div style="font-weight: 600; color: var(--primary);">${categories[category]}</div>
+                        <div style="font-size: 0.9rem; color: var(--neutral-600);">NPR ${data.amount.toLocaleString()}/month</div>
+                    </div>
+                    <div class="heatmap-bar">
+                        <div class="heatmap-fill" style="width: ${percentage}%; ${isHigh ? 'background: linear-gradient(90deg, #e74c3c, #c0392b);' : ''}"></div>
+                    </div>
+                `;
+
+                // Add click handler for educational text
+                item.addEventListener('click', function() {
+                    showCategoryEducation(category, data.amount);
+                });
+
+                container.appendChild(item);
+            });
+        }
+
+        function showCategoryEducation(category, amount) {
+            const educationText = {
+                foodHome: `Rs ${Math.round(amount)} of your monthly food budget is pure tax - VAT on packaged foods and processing, plus some agricultural levies.`,
+                eatingOut: `Rs ${Math.round(amount)} goes to government in taxes from your dining out - 13% VAT plus service charges and restaurant levies.`,
+                housing: `Surprisingly, rent has minimal hidden tax (${Math.round(amount)} NPR) - property taxes are usually paid by landlords, not renters.`,
+                utilities: `Rs ${Math.round(amount)} in your utility bills is tax - 13% VAT on electricity, water, and telecom services.`,
+                transport: `Rs ${Math.round(amount)} is hidden tax in transport - 8% excise on fuel, plus vehicle taxes and fare levies on public transport.`,
+                education: `Rs ${Math.round(amount)} of education spending includes VAT on private education and health services.`,
+                clothing: `Rs ${Math.round(amount)} is VAT and import duties on your clothing purchases. Nepal imports most textiles.`,
+                personalCare: `Rs ${Math.round(amount)} includes VAT and excise on cosmetics, toiletries, and personal luxury items.`,
+                entertainment: `Rs ${Math.round(amount)} is tax on entertainment - movies, games, streaming services all carry 13% VAT.`,
+                other: `Rs ${Math.round(amount)} in your "other" spending includes various taxes - VAT on consumer goods plus service charges.`
+            };
+
+            alert(educationText[category] || `Rs ${Math.round(amount)} in this category is various taxes and levies embedded in prices.`);
+        }
+
+        function updateMicroText(effectiveRate, directTax, hiddenTax, totalSpending) {
+            const hiddenPercentage = (hiddenTax / (directTax + hiddenTax)) * 100;
+            
+            let message = '';
+            
+            if (effectiveRate > 25) {
+                message = `Wow. ${hiddenPercentage.toFixed(0)}% of your tax comes from everyday spending. If you feel prices more than pay slips, this is why.`;
+            } else if (effectiveRate > 15) {
+                message = `You're paying about ${Math.round(hiddenTax / 12).toLocaleString()} NPR monthly in hidden taxes. The real question: do you know where it goes?`;
+            } else {
+                message = `Even at ${effectiveRate.toFixed(1)}%, hidden taxes ${Math.round(hiddenPercentage).toFixed(0)}% of your total. That's the price of living in a modern economy.`;
+            }
+
+            document.getElementById('microText').textContent = message;
+        }
+
+        function toggleAdvanced() {
+            const content = document.getElementById('advancedContent');
+            content.classList.toggle('show');
+        }
+
+        function addInputAnimations() {
+            const inputs = document.querySelectorAll('.input, .spending-item input');
+            
+            inputs.forEach(input => {
+                input.addEventListener('focus', function() {
+                    this.parentElement.style.transform = 'scale(1.02)';
+                });
+                
+                input.addEventListener('blur', function() {
+                    this.parentElement.style.transform = 'scale(1)';
+                });
+            });
+        }
+
+        // Add subtle interactive features (removed 3D transform to prevent distortion)
+        document.addEventListener('DOMContentLoaded', function() {
+            const cards = document.querySelectorAll('.card');
+            
+            cards.forEach(card => {
+                card.addEventListener('mouseenter', function() {
+                    this.style.transform = 'translateY(-2px)';
+                    this.style.boxShadow = '0 20px 40px rgba(0,0,0,0.15)';
+                });
+                
+                card.addEventListener('mouseleave', function() {
+                    this.style.transform = 'translateY(0)';
+                    this.style.boxShadow = '0 20px 60px rgba(0,0,0,0.15)';
+                });
+            });
+        });
+
+        // Initialize with example calculation
+        setTimeout(() => {
+            calculateTrueTax();
+        }, 1000);
+    </script>
+</body>
+</html>
