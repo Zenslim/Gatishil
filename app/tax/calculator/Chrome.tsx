@@ -92,53 +92,48 @@ export default function Chrome() {
     // 2) Observe size changes and resize iframe height
     const el = doc.documentElement; // track full page height
     const calcHeight = () => {
-      // prefer scrollHeight of body, fallback to docElement
       const h = Math.max(
         doc.body?.scrollHeight || 0,
         el?.scrollHeight || 0,
         doc.body?.offsetHeight || 0,
         el?.offsetHeight || 0
       );
-      // clamp for safety
       const clamped = Math.min(Math.max(h, 600), 6000);
       setHeight(clamped);
     };
 
-    // Initial
+    // Initial measurement
     calcHeight();
 
-    // ResizeObserver for layout changes
-    const ro = new (window as any).ResizeObserver?.(() => calcHeight());
+    // SAFE feature checks (no optional chaining after "new")
+    const RO: any = (window as any).ResizeObserver;
+    const ro = RO ? new RO(() => calcHeight()) : null;
     if (ro) {
-      ro.observe(doc.body || el);
-      ro.observe(el);
+      try { ro.observe(doc.body || el); } catch {}
+      try { ro.observe(el); } catch {}
     }
 
-    // MutationObserver for dynamic content changes
     const mo = new MutationObserver(() => calcHeight());
     mo.observe(doc, { childList: true, subtree: true, attributes: true, characterData: true });
 
-    // Fallback timer (rare)
     const id = window.setInterval(calcHeight, 800);
+    const onLoad = () => calcHeight();
+    iframe.addEventListener("load", onLoad);
 
-    // Clean-up when iframe reloads/unmounts
-    iframe.addEventListener("load", calcHeight);
     return () => {
       try { ro && ro.disconnect(); } catch {}
       try { mo.disconnect(); } catch {}
       try { window.clearInterval(id); } catch {}
-      try { iframe.removeEventListener("load", calcHeight); } catch {}
+      try { iframe.removeEventListener("load", onLoad); } catch {}
     };
   };
 
   useEffect(() => {
-    // Attach after initial load, and again on subsequent loads (if any)
     let cleanup: (() => void) | undefined;
     const onLoad = () => { cleanup && cleanup(); cleanup = attachAutoResize() as any; };
     const el = iframeRef.current;
     if (el) {
       el.addEventListener("load", onLoad, { once: false });
-      // If already loaded, attach immediately
       if (el.contentDocument?.readyState === "complete") onLoad();
     }
     return () => {
@@ -182,7 +177,7 @@ export default function Chrome() {
         </div>
       </section>
 
-      {/* Calculator (auto-height, single page scroll) */}
+      {/* Calculator (auto-height, single page scroll, no inner box) */}
       <section className="relative z-10">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-16">
           <div className="relative w-full rounded-2xl overflow-visible">
@@ -195,7 +190,7 @@ export default function Chrome() {
               title="Nepal True Tax Mirror — Calculator"
               src="/tools/nepal-tax-mirror.html?embed=1"
               className="w-full border-0"
-              style={{ height: `${height}px` }}   // auto-resized height
+              style={{ height: `${height}px` }}
               loading="eager"
               referrerPolicy="no-referrer"
             />
