@@ -1,291 +1,337 @@
 // app/tax/page.tsx
-"use client";
+'use client';
 
-import Head from "next/head";
-import { useEffect, useRef } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, useScroll, useTransform } from 'framer-motion';
+import { useState, useEffect } from 'react';
 
-export default function Page() {
-  return (
-    <>
-      <Head>
-        <title>Nepal True Tax Mirror — Landing | Gatishil Nepal</title>
-        <meta
-          name="description"
-          content="Reveal the hidden indirect tax inside prices and see your true effective tax rate. Educational, fast, bilingual."
-        />
-        <meta property="og:title" content="Nepal True Tax Mirror — Landing" />
-        <meta
-          property="og:description"
-          content="Reveal the hidden tax inside everyday prices, then calculate your true effective tax rate."
-        />
-        <meta property="og:type" content="website" />
-        <meta property="og:url" content="https://www.gatishilnepal.org/tax" />
-      </Head>
-
-      <main className="min-h-screen bg-black text-white relative overflow-hidden">
-        {/* Cosmic background */}
-        <div className="absolute inset-0">
-          <Starfield />
-          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(66,0,255,0.18),transparent_60%),radial-gradient(ellipse_at_bottom,rgba(0,180,255,0.16),transparent_60%)]" />
-        </div>
-
-        {/* Header */}
-        <header className="relative z-10 w-full border-b border-white/10 backdrop-blur-sm/0">
-          <div className="mx-auto max-w-7xl px-5 py-4 flex items-center justify-between">
-            <motion.h1
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6, ease: "easeOut" }}
-              className="text-lg md:text-2xl font-semibold tracking-tight"
-            >
-              Nepal True Tax Mirror <span className="opacity-70">/ सत्य कर दर्पण</span>
-            </motion.h1>
-            <nav className="hidden md:flex items-center gap-6 text-sm opacity-80">
-              <a className="underline hover:no-underline" href="#why">Why</a>
-              <a className="underline hover:no-underline" href="#how">How</a>
-              <a className="underline hover:no-underline" href="/tax/calculator">Calculator</a>
-            </nav>
-          </div>
-        </header>
-
-        {/* HERO */}
-        <section className="relative z-10">
-          <div className="mx-auto max-w-7xl px-5 pt-10 md:pt-16 pb-10 md:pb-16 grid md:grid-cols-2 gap-10 items-center">
-            <div className="relative">
-              <AnimatePresence>
-                <motion.h2
-                  initial={{ opacity: 0, y: 12, filter: "blur(6px)" }}
-                  animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
-                  transition={{ duration: 0.8, ease: "easeOut" }}
-                  className="text-3xl md:text-5xl font-black leading-tight tracking-[-0.02em]"
-                >
-                  The tax you{" "}
-                  <span className="bg-gradient-to-r from-cyan-200 via-white to-fuchsia-200 bg-clip-text text-transparent">
-                    never see
-                  </span>{" "}
-                  is the one you feel.
-                </motion.h2>
-              </AnimatePresence>
-
-              <motion.p
-                initial={{ opacity: 0, y: 6 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.2, duration: 0.6 }}
-                className="mt-5 text-white/80 md:text-lg"
-              >
-                VAT, excise, fuel &amp; telecom levies hide inside prices. Stack the{" "}
-                <span className="text-white">invisible</span> with your visible TDS to see your{" "}
-                <span className="text-white">true effective tax rate</span>.
-              </motion.p>
-
-              <motion.p
-                initial={{ opacity: 0, y: 6 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.35, duration: 0.6 }}
-                className="mt-2 text-white/70"
-              >
-                देखिँदैन तर तिर्नुहुन्छ—मूल्यभित्र घुलाएको करलाई बाहिर ल्याएर एउटै{" "}
-                <span className="text-white">सत्य प्रतिशत</span> देखाउनु नै हाम्रो लक्ष्य।
-              </motion.p>
-
-              <div className="mt-8 flex flex-wrap gap-3">
-                <CTA href="/tax/calculator" label="Start Calculator" />
-                <CTA href="#why" label="Why it matters" variant="ghost" />
-              </div>
-
-              {/* Floating badges */}
-              <motion.div
-                initial={{ opacity: 0, y: 12 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.5, duration: 0.6 }}
-                className="mt-8 grid grid-cols-2 gap-3 max-w-md"
-              >
-                <Badge title="No sign-in" note="Nothing stored by default" />
-                <Badge title="Editable assumptions" note="Conservative presets for Nepal" />
-                <Badge title="Bilingual" note="English / नेपाली" />
-                <Badge title="Mobile-first" note="< 2s load on 4G" />
-              </motion.div>
-            </div>
-
-            {/* Right: motion “receipt” card */}
-            <div className="relative">
-              <motion.div
-                initial={{ opacity: 0, scale: 0.95, y: 10 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                transition={{ duration: 0.7, ease: "easeOut", delay: 0.15 }}
-                className="relative rounded-2xl border border-white/10 bg-white/5 backdrop-blur-md p-6 md:p-8 shadow-[0_0_80px_-20px_rgba(0,150,255,0.25)]"
-              >
-                <div className="flex items-center justify-between">
-                  <span className="text-sm uppercase tracking-wider text-white/70">Receipt Heatmap</span>
-                  <span className="text-xs text-white/60">Live demo</span>
-                </div>
-
-                <div className="mt-5 space-y-4">
-                  <Bar label="Fuel" value={72} hint="Excise+VAT inside pump price" />
-                  <Bar label="Telecom" value={38} hint="Service charges embedded" />
-                  <Bar label="Eating out" value={24} hint="Mostly VATable" />
-                  <Bar label="Utilities" value={12} hint="Mixed pass-through" />
-                </div>
-
-                <div className="mt-6 border-t border-white/10 pt-4 grid grid-cols-2 gap-4">
-                  <Stat title="Visible" value="Rs 8,540" sub="TDS + property" />
-                  <Stat title="Hidden" value="Rs 13,780" sub="VAT + excise est." highlight />
-                </div>
-
-                <motion.div
-                  initial={{ opacity: 0, y: 6 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.4, duration: 0.5 }}
-                  className="mt-4 text-sm text-white/70"
-                >
-                  Example only—your number updates instantly in the calculator.
-                </motion.div>
-              </motion.div>
-            </div>
-          </div>
-        </section>
-
-        {/* WHY */}
-        <section id="why" className="relative z-10 py-12 md:py-16">
-          <div className="mx-auto max-w-7xl px-5 grid md:grid-cols-3 gap-6">
-            <WhyCard
-              title="Clarity over shock"
-              body="A single effective rate removes confusion. If prices feel heavy, this shows why—without blame."
-              delay={0}
-            />
-            <WhyCard
-              title="Fairness starts with knowing"
-              body="Debate becomes honest when everyone sees the same stack: visible + hidden."
-              delay={0.05}
-            />
-            <WhyCard
-              title="Nepal-aware"
-              body="Conservative defaults for VAT/excise/fuel/telecom pass-through—editable in ‘Advanced’."
-              delay={0.1}
-            />
-          </div>
-        </section>
-
-        {/* HOW */}
-        <section id="how" className="relative z-10 pb-8 md:pb-12">
-          <div className="mx-auto max-w-7xl px-5">
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true, margin: "-80px" }}
-              transition={{ duration: 0.6 }}
-              className="rounded-2xl border border-white/10 bg-white/5 p-6 md:p-8"
-            >
-              <h3 className="text-xl md:text-2xl font-semibold">How it computes</h3>
-              <p className="mt-3 text-white/80">
-                Estimated Indirect Tax = Σ(Spendᵢ × PassThroughᵢ). Total Tax = Direct + Estimated Indirect.
-                Effective Rate = Total Tax / Gross Income. We also show a low–high range using preset tables.
-              </p>
-              <div className="mt-5 flex flex-wrap gap-3">
-                <CTA href="/tax/calculator" label="Open Calculator" />
-                <a
-                  href="/tax/calculator#advanced"
-                  className="text-sm underline underline-offset-4 decoration-white/40 hover:decoration-white"
-                >
-                  Jump to Advanced
-                </a>
-              </div>
-            </motion.div>
-          </div>
-        </section>
-
-        {/* CALCULATOR IFRAME (revealed with motion) */}
-        <section className="relative z-10">
-          <motion.div
-            initial={{ opacity: 0, y: 16 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, margin: "-80px" }}
-            transition={{ duration: 0.7, ease: "easeOut" }}
-            className="w-full"
-          >
-            <div className="mx-auto max-w-7xl px-5 pb-4 flex items-center justify-between">
-              <h3 className="text-lg md:text-xl font-semibold">Try it now</h3>
-              <a
-                className="text-sm underline underline-offset-4 decoration-white/40 hover:decoration-white"
-                href="/tax/calculator"
-              >
-                Open full page
-              </a>
-            </div>
-            <div className="relative w-full h-[82vh] md:h-[86vh]">
-              <iframe
-                title="Nepal True Tax Mirror — Calculator"
-                src="/tools/nepal-tax-calculator.html"
-                className="absolute inset-0 w-full h-full border-0 rounded-xl"
-                loading="eager"
-                referrerPolicy="no-referrer"
-              />
-              <GlowEdges />
-            </div>
-          </motion.div>
-        </section>
-
-        {/* FOOTER */}
-        <footer className="relative z-10 border-t border-white/10">
-          <div className="mx-auto max-w-7xl px-5 py-4 text-xs text-white/70 flex flex-wrap items-center justify-between gap-3">
-            <span>Built by Gatishil Nepal · Educational estimates · Nothing stored by default.</span>
-            <a
-              href="/tax/calculator"
-              className="underline underline-offset-4 decoration-white/40 hover:decoration-white"
-            >
-              Go to Calculator
-            </a>
-          </div>
-        </footer>
-      </main>
-    </>
-  );
+/** util: run code only after React mounts (prevents hydration mismatch) */
+function useMounted() {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  return mounted;
 }
 
-/* ---------- UI atoms ---------- */
+const fadeUp = (delay = 0) => ({
+  initial: { opacity: 0, y: 18 },
+  whileInView: { opacity: 1, y: 0, transition: { duration: 0.7, ease: 'easeOut', delay } },
+  viewport: { once: true, amount: 0.35 }
+});
 
-function CTA({ href, label, variant = "solid" }: { href: string; label: string; variant?: "solid" | "ghost" }) {
-  const base =
-    "inline-flex items-center justify-center rounded-full text-sm md:text-base transition focus:outline-none focus:ring-2 focus:ring-cyan-300/40";
-  if (variant === "ghost") {
-    return (
-      <motion.a
-        whileHover={{ scale: 1.03 }}
-        whileTap={{ scale: 0.98 }}
-        href={href}
-        className={`${base} px-5 py-2.5 border border-white/20 bg-white/5 hover:bg-white/10`}
-      >
-        {label}
-      </motion.a>
-    );
-  }
-  return (
-    <motion.a
-      whileHover={{ scale: 1.03 }}
-      whileTap={{ scale: 0.98 }}
-      href={href}
-      className={`${base} px-6 py-2.5 bg-gradient-to-r from-cyan-400/90 via-sky-300/90 to-fuchsia-300/90 text-black font-semibold shadow-[0_0_60px_-10px_rgba(56,189,248,0.6)]`}
-    >
-      {label}
-    </motion.a>
-  );
-}
+/** Subtle starfield like homepage */
+function Starfield() {
+  const { scrollYProgress } = useScroll();
+  const opacity = useTransform(scrollYProgress, [0, 0.3], [0, 1]);
 
-function Badge({ title, note }: { title: string; note: string }) {
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 6 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5 }}
-      className="rounded-xl border border-white/10 bg-white/5 p-3"
-    >
-      <div className="text-sm font-medium">{title}</div>
-      <div className="text-xs text-white/70">{note}</div>
+    <motion.div style={{ opacity }} className="fixed inset-0 -z-10 pointer-events-none">
+      <div className="absolute inset-0 starfield">
+        <div className="layer layer-s"></div>
+        <div className="layer layer-m"></div>
+        <div className="layer layer-l"></div>
+      </div>
+
+      <style jsx>{`
+        .starfield { position: absolute; inset: 0; overflow: hidden; }
+        .layer { position: absolute; inset: -50%; animation: drift 60s linear infinite; opacity: 0.9; }
+        .layer-s {
+          background-image:
+            radial-gradient(white 1px, transparent 1.5px),
+            radial-gradient(white 1px, transparent 1.5px);
+          background-size: 120px 120px, 160px 160px;
+          background-position: 0 0, 60px 80px;
+          filter: drop-shadow(0 0 1px rgba(255,255,255,0.35));
+          animation-duration: 90s;
+        }
+        .layer-m {
+          background-image:
+            radial-gradient(white 1.5px, transparent 2px),
+            radial-gradient(white 1.5px, transparent 2px);
+          background-size: 200px 200px, 260px 260px;
+          background-position: 40px 20px, 160px 100px;
+          filter: drop-shadow(0 0 2px rgba(255,255,255,0.25));
+          animation-duration: 120s;
+        }
+        .layer-l {
+          background-image:
+            radial-gradient(white 2px, transparent 2.5px),
+            radial-gradient(white 2px, transparent 2.5px);
+          background-size: 320px 320px, 420px 420px;
+          background-position: 120px 60px, 260px 180px;
+          filter: drop-shadow(0 0 3px rgba(255,255,255,0.2));
+          animation-duration: 150s;
+        }
+        @keyframes drift {
+          0%   { transform: translate3d(0, 0, 0); }
+          50%  { transform: translate3d(-2%, -3%, 0); }
+          100% { transform: translate3d(0, 0, 0); }
+        }
+      `}</style>
     </motion.div>
   );
 }
 
+export default function TaxLanding() {
+  const [open, setOpen] = useState(false);
+  const mounted = useMounted();
+
+  const NavLinks = () => (
+    <>
+      <a className="hover:text-white" href="#why">Why</a>
+      <a className="hover:text-white" href="#how">How</a>
+      <a className="hover:text-white" href="/tax/calculator">Calculator</a>
+    </>
+  );
+
+  return (
+    <main className="relative min-h-screen bg-black text-white">
+      {/* Background gradients like homepage */}
+      <div className="absolute inset-0 -z-20 pointer-events-none">
+        <div className="absolute inset-0 opacity-[0.85] bg-[radial-gradient(1200px_600px_at_50%_-10%,rgba(255,255,255,0.06),transparent_60%),radial-gradient(900px_500px_at_80%_10%,rgba(251,191,36,0.08),transparent_60%),radial-gradient(900px_500px_at_20%_10%,rgba(244,114,182,0.06),transparent_60%)]" />
+      </div>
+
+      {mounted ? <Starfield /> : null}
+
+      {/* Header (mirrors homepage structure) */}
+      <header className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-16 pt-4 sm:pt-6 relative z-20">
+        <div className="flex items-center justify-between">
+          <a href="/" className="flex items-center gap-3">
+            <img
+              src="/gatishil-logo.png"
+              alt="Gatishil Nepal"
+              className="h-8 sm:h-9 w-auto"
+              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+            />
+            <div className="leading-tight">
+              <p className="text-[16px] sm:text-sm font-bold tracking-wide text-white">Gatishil Nepal</p>
+              <p className="text-[11px] sm:text-[12px] text-slate-300/80">DAO · Guthi · Movement</p>
+            </div>
+          </a>
+
+          {/* Desktop nav */}
+          <nav className="hidden md:flex gap-6 items-center text-sm text-slate-300">
+            <NavLinks />
+          </nav>
+
+          {/* Desktop actions */}
+          <div className="hidden md:flex items-center gap-2">
+            <a href="/login" className="px-3 py-2 border border-white/10 rounded-lg text-xs hover:bg-white/5 transition">Login</a>
+            <motion.a
+              href="/join"
+              whileHover={{ scale: 1.03 }}
+              whileTap={{ scale: 0.98 }}
+              className="px-4 py-2 rounded-xl bg-amber-400 text-black font-semibold transition shadow-[0_0_30px_rgba(251,191,36,0.35)]"
+            >
+              Join
+            </motion.a>
+          </div>
+
+          {/* Mobile actions */}
+          <div className="md:hidden flex items-center gap-2">
+            <a href="/login" className="px-3 py-1.5 border border-white/10 rounded-lg text-[11px] hover:bg-white/5 transition">Login</a>
+            <a href="/join" className="px-3 py-1.5 rounded-lg bg-amber-400 text-black font-semibold text-[11px]">Join</a>
+          </div>
+
+          {/* Mobile menu button */}
+          <button
+            type="button"
+            aria-label="Open menu"
+            aria-controls="mobile-menu"
+            aria-expanded={open ? 'true' : 'false'}
+            onClick={() => setOpen((v) => !v)}
+            className="md:hidden inline-flex items-center justify-center rounded-lg p-2 border border-white/10 hover:bg-white/5"
+          >
+            {!open ? (
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M4 6h16M4 12h16M4 18h16" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+              </svg>
+            ) : (
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M6 6l12 12M18 6l-12 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+              </svg>
+            )}
+          </button>
+        </div>
+
+        {/* Mobile menu */}
+        <motion.div
+          id="mobile-menu"
+          initial={false}
+          animate={open ? { height: 'auto', opacity: 1 } : { height: 0, opacity: 0 }}
+          className="md:hidden overflow-hidden"
+        >
+          <div className="mt-3 rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl p-4 text-sm text-slate-300 space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <NavLinks />
+            </div>
+          </div>
+        </motion.div>
+      </header>
+
+      {/* HERO */}
+      <section className="relative z-10 pt-10 sm:pt-14 pb-8">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-16 grid lg:grid-cols-12 gap-8 items-start">
+          {/* Left text */}
+          <div className="lg:col-span-7">
+            <motion.span
+              className="inline-block text-[10px] uppercase tracking-widest text-amber-300/90 px-2 py-1 border border-amber-300/30 rounded-full"
+              {...fadeUp(0)}
+            >
+              True Tax Mirror
+            </motion.span>
+
+            <motion.h1
+              className="text-[28px] sm:text-4xl md:text-5xl font-extrabold leading-tight mt-3"
+              {...fadeUp(0.05)}
+            >
+              The tax you{' '}
+              <span className="bg-clip-text text-transparent bg-gradient-to-r from-amber-300 via-orange-400 to-rose-400">
+                never see
+              </span>{' '}
+              is the one you feel.
+            </motion.h1>
+
+            <motion.p
+              className="mt-4 text-slate-300/90 text-base sm:text-lg max-w-2xl"
+              {...fadeUp(0.1)}
+            >
+              VAT, excise, fuel and telecom levies hide inside prices. Stack the invisible with your
+              visible TDS to see your <span className="text-white font-semibold">true effective tax rate</span>.
+            </motion.p>
+
+            {/* CTAs */}
+            <div className="mt-6 flex gap-3 flex-col xs:flex-row">
+              <motion.a
+                href="/tax/calculator"
+                whileHover={{ y: -2, boxShadow: '0 0 40px rgba(251,191,36,0.35)' }}
+                whileTap={{ scale: 0.98 }}
+                className="px-5 py-3 rounded-2xl bg-amber-400 text-black font-semibold text-center transition"
+                {...fadeUp(0.18)}
+              >
+                Open Calculator
+              </motion.a>
+
+              <motion.a
+                href="#why"
+                whileHover={{ y: -2 }}
+                whileTap={{ scale: 0.98 }}
+                className="px-5 py-3 rounded-2xl border border-white/15 text-sm hover:bg-white/5 transition text-center"
+                {...fadeUp(0.22)}
+              >
+                Why it matters
+              </motion.a>
+            </div>
+
+            <motion.p className="text-[11px] text-slate-400 mt-3" {...fadeUp(0.24)}>
+              No sign-in. Nothing stored by default. Assumptions are editable.
+            </motion.p>
+          </div>
+
+          {/* Right: animated receipt card */}
+          <motion.aside
+            className="lg:col-span-5 p-5 rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl shadow-[0_0_35px_rgba(255,255,255,0.05)]"
+            {...fadeUp(0.18)}
+          >
+            <h3 className="text-base sm:text-lg font-semibold">🧾 Receipt Heatmap (demo)</h3>
+            <p className="text-xs sm:text-sm text-slate-300/80 mt-1">
+              Watch where the “hidden” layer actually sits.
+            </p>
+
+            <div className="mt-3 space-y-4">
+              <Bar label="Fuel" value={72} hint="Excise + VAT inside pump price" />
+              <Bar label="Telecom" value={38} hint="Service charges embedded" />
+              <Bar label="Eating out" value={24} hint="Mostly VATable" />
+              <Bar label="Utilities" value={12} hint="Mixed pass-through" />
+            </div>
+
+            <div className="mt-6 border-t border-white/10 pt-4 grid grid-cols-2 gap-4">
+              <Stat title="Visible" value="Rs 8,540" sub="TDS + property" />
+              <Stat title="Hidden" value="Rs 13,780" sub="VAT + excise est." highlight />
+            </div>
+
+            <motion.div
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.4, duration: 0.5 }}
+              className="mt-4 text-sm text-slate-300/80"
+            >
+              Example only — your real number appears instantly in the calculator.
+            </motion.div>
+          </motion.aside>
+        </div>
+      </section>
+
+      {/* WHY */}
+      <section id="why" className="relative z-10 py-10 sm:py-12">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-16 grid md:grid-cols-3 gap-6">
+          <WhyCard
+            title="Clarity over shock"
+            body="One effective rate removes confusion. If prices feel heavy, this shows why—without blame."
+            delay={0}
+          />
+          <WhyCard
+            title="Fairness begins with knowing"
+            body="Debate turns honest when everyone sees the same stack: visible + hidden."
+            delay={0.05}
+          />
+          <WhyCard
+            title="Built for Nepal"
+            body="Conservative defaults for VAT/excise/fuel/telecom pass-through—fully editable."
+            delay={0.1}
+          />
+        </div>
+      </section>
+
+      {/* HOW (concise) */}
+      <section id="how" className="relative z-10 pb-12">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-16">
+          <motion.div
+            {...fadeUp(0)}
+            className="rounded-2xl border border-white/10 bg-white/5 p-6 md:p-8"
+          >
+            <h3 className="text-xl md:text-2xl font-semibold">How it computes</h3>
+            <p className="mt-3 text-slate-200/90">
+              Estimated Indirect Tax = Σ(Spendᵢ × PassThroughᵢ). Total Tax = Direct + Estimated Indirect.
+              Effective Rate = Total Tax / Gross Income. A low–high range is shown using preset tables.
+            </p>
+            <div className="mt-5 flex flex-wrap gap-3">
+              <a
+                href="/tax/calculator"
+                className="px-5 py-3 rounded-2xl bg-amber-400 text-black font-semibold text-center"
+              >
+                Open Calculator
+              </a>
+              <a
+                href="/tax/calculator#advanced"
+                className="text-sm underline underline-offset-4 decoration-white/40 hover:decoration-white"
+              >
+                Jump to Advanced
+              </a>
+            </div>
+          </motion.div>
+        </div>
+      </section>
+
+      {/* Footer like homepage */}
+      <footer className="relative z-10 py-8 sm:py-10 text-sm text-slate-300">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-16">
+          <div className="flex flex-col items-center gap-2">
+            <p className="text-center">© {mounted ? new Date().getFullYear() : 2025} GatishilNepal.org</p>
+            <p className="text-center text-slate-400">Democracy That Flows — Not Stagnates.</p>
+            <nav className="mt-3 flex flex-wrap items-center justify-center gap-4 text-slate-300">
+              <a href="/tax/calculator" className="hover:text-white">Calculator</a>
+              <a href="/polls" className="hover:text-white">Polls</a>
+              <a href="/proposals" className="hover:text-white">Proposals</a>
+              <a href="/blog" className="hover:text-white">Blog</a>
+              <a href="/faq#dao" className="hover:text-white">FAQ</a>
+            </nav>
+          </div>
+        </div>
+      </footer>
+    </main>
+  );
+}
+
+/* ---------- UI atoms ---------- */
 function Bar({ label, value, hint }: { label: string; value: number; hint?: string }) {
   return (
     <div className="space-y-1">
@@ -296,8 +342,9 @@ function Bar({ label, value, hint }: { label: string; value: number; hint?: stri
       <div className="h-2.5 rounded-full bg-white/10 overflow-hidden">
         <motion.div
           initial={{ width: 0 }}
-          animate={{ width: `${value}%` }}
-          transition={{ duration: 1.2, ease: "easeOut" }}
+          whileInView={{ width: `${value}%` }}
+          viewport={{ once: true }}
+          transition={{ duration: 1.2, ease: 'easeOut' }}
           className="h-full bg-gradient-to-r from-cyan-400 via-sky-300 to-fuchsia-300"
         />
       </div>
@@ -327,82 +374,12 @@ function WhyCard({ title, body, delay = 0 }: { title: string; body: string; dela
     <motion.div
       initial={{ opacity: 0, y: 8 }}
       whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true, margin: "-80px" }}
+      viewport={{ once: true, margin: '-80px' }}
       transition={{ duration: 0.6, delay }}
       className="rounded-2xl border border-white/10 bg-white/5 p-6"
     >
       <div className="text-lg font-semibold">{title}</div>
-      <p className="mt-2 text-white/80">{body}</p>
+      <p className="mt-2 text-slate-300/90">{body}</p>
     </motion.div>
   );
 }
-
-function GlowEdges() {
-  return (
-    <>
-      <div className="pointer-events-none absolute -inset-1 rounded-xl blur-2xl bg-gradient-to-r from-cyan-500/10 via-white/0 to-fuchsia-500/10" />
-      <div className="pointer-events-none absolute inset-0 rounded-xl ring-1 ring-white/10" />
-    </>
-  );
-}
-
-/* ---------- Starfield canvas (minimal, smooth) ---------- */
-function Starfield() {
-  const ref = useRef<HTMLCanvasElement | null>(null);
-
-  useEffect(() => {
-    const canvas = ref.current!;
-    const ctx = canvas.getContext("2d")!;
-    let raf = 0;
-    let width = (canvas.width = canvas.offsetWidth * devicePixelRatio);
-    let height = (canvas.height = canvas.offsetHeight * devicePixelRatio);
-
-    const stars = Array.from({ length: 180 }, () => ({
-      x: Math.random() * width,
-      y: Math.random() * height,
-      z: Math.random() * 0.8 + 0.2,
-      r: Math.random() * 0.9 + 0.3,
-      vx: (Math.random() - 0.5) * 0.1,
-      vy: (Math.random() - 0.5) * 0.1,
-    }));
-
-    const draw = () => {
-      ctx.clearRect(0, 0, width, height);
-      for (const s of stars) {
-        s.x += s.vx * s.z;
-        s.y += s.vy * s.z;
-        if (s.x < 0) s.x = width;
-        if (s.x > width) s.x = 0;
-        if (s.y < 0) s.y = height;
-        if (s.y > height) s.y = 0;
-
-        const g = ctx.createRadialGradient(s.x, s.y, 0, s.x, s.y, s.r * 6);
-        g.addColorStop(0, "rgba(180,220,255,0.9)");
-        g.addColorStop(1, "rgba(0,0,0,0)");
-        ctx.fillStyle = g;
-        ctx.beginPath();
-        ctx.arc(s.x, s.y, s.r * 6, 0, Math.PI * 2);
-        ctx.fill();
-      }
-      raf = requestAnimationFrame(draw);
-    };
-
-    const onResize = () => {
-      width = canvas.width = canvas.offsetWidth * devicePixelRatio;
-      height = canvas.height = canvas.offsetHeight * devicePixelRatio;
-    };
-
-    draw();
-    window.addEventListener("resize", onResize);
-    return () => {
-      cancelAnimationFrame(raf);
-      window.removeEventListener("resize", onResize);
-    };
-  }, []);
-
-  return <canvas ref={ref} className="w-full h-full" />;
-}
-
-/* ---------- ELI15 justification ----------
-We kept your calculator intact and built a “jaw-dropping” Framer Motion landing around it—animated cosmic hero, glowing stats, and a smooth starfield—so users feel the invisible tax before they even click. It’s one file, no refactors, mobile-first, fast, and matches your homepage vibe.
------------------------------------------ */
