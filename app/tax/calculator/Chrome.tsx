@@ -60,54 +60,92 @@ function Starfield() {
 export default function Chrome() {
   const mounted = useMounted();
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
+  const [height, setHeight] = useState(1200); // safe initial height
 
-  /** Inject CSS into the iframe to remove the internal blue/purple panel and shadows */
-  const neutralizeIframeChrome = () => {
+  /** Make iframe seamless: no inner scroll, parent auto-resizes to content */
+  const attachAutoResize = () => {
     const iframe = iframeRef.current;
     if (!iframe) return;
 
-    try {
-      const doc = iframe.contentDocument || iframe.contentWindow?.document;
-      if (!doc) return;
+    const doc = iframe.contentDocument || iframe.contentWindow?.document;
+    if (!doc) return;
 
-      const style = doc.createElement("style");
-      style.setAttribute("data-injected-by", "gatishil-tax-calculator");
-      style.textContent = `
-        /* Make the calculator sit on transparent canvas to match Gatishil background */
-        html, body { background: transparent !important; }
+    // 1) Neutralize inner scrolling + colored sheets
+    const style = doc.createElement("style");
+    style.setAttribute("data-injected-by", "gatishil-tax");
+    style.textContent = `
+      html, body { background: transparent !important; overflow: hidden !important; }
+      body { margin: 0 !important; padding: 16px 0 24px 0 !important; }
+      /* wipe colored wrappers/panels/shadows */
+      .app, .wrap, .wrapper, .container, .shell, .hero, .panel, .card, .surface, .paper,
+      section, header, .header, .hero-gradient, .gradient,
+      .rounded, .rounded-2xl, .rounded-xl,
+      .max-w-screen, .max-w, .sheet {
+        background: transparent !important;
+        backdrop-filter: none !important;
+        box-shadow: none !important;
+        border: none !important;
+      }
+    `;
+    doc.head.appendChild(style);
 
-        /* Common wrappers that carry gradient/solid fills in the HTML */
-        .app, .wrap, .wrapper, .container, .shell, .hero, .panel, .card, .surface, .paper {
-          background: transparent !important;
-          backdrop-filter: none !important;
-          box-shadow: none !important;
-          border: none !important;
-        }
+    // 2) Observe size changes and resize iframe height
+    const el = doc.documentElement; // track full page height
+    const calcHeight = () => {
+      // prefer scrollHeight of body, fallback to docElement
+      const h = Math.max(
+        doc.body?.scrollHeight || 0,
+        el?.scrollHeight || 0,
+        doc.body?.offsetHeight || 0,
+        el?.offsetHeight || 0
+      );
+      // clamp for safety
+      const clamped = Math.min(Math.max(h, 600), 6000);
+      setHeight(clamped);
+    };
 
-        /* If the blue gradient is on a specific section */
-        section, header, .header, .hero-gradient, .gradient {
-          background: transparent !important;
-          box-shadow: none !important;
-        }
+    // Initial
+    calcHeight();
 
-        /* Soften any remaining rounded clip that looks like a box edge */
-        .rounded, .rounded-2xl, .rounded-xl { background: transparent !important; }
-
-        /* Remove any default body margin that creates a 'box' inset */
-        body { margin: 0 !important; padding: 16px 0 24px 0 !important; }
-
-        /* If the calculator centers with a max-width card, let it breathe without a colored sheet */
-        .max-w-screen, .max-w, .sheet {
-          background: transparent !important;
-          box-shadow: none !important;
-          border: 0 !important;
-        }
-      `;
-      doc.head.appendChild(style);
-    } catch {
-      // If cross-origin ever changes, we silently skip (but our /public/tools is same-origin).
+    // ResizeObserver for layout changes
+    const ro = new (window as any).ResizeObserver?.(() => calcHeight());
+    if (ro) {
+      ro.observe(doc.body || el);
+      ro.observe(el);
     }
+
+    // MutationObserver for dynamic content changes
+    const mo = new MutationObserver(() => calcHeight());
+    mo.observe(doc, { childList: true, subtree: true, attributes: true, characterData: true });
+
+    // Fallback timer (rare)
+    const id = window.setInterval(calcHeight, 800);
+
+    // Clean-up when iframe reloads/unmounts
+    iframe.addEventListener("load", calcHeight);
+    return () => {
+      try { ro && ro.disconnect(); } catch {}
+      try { mo.disconnect(); } catch {}
+      try { window.clearInterval(id); } catch {}
+      try { iframe.removeEventListener("load", calcHeight); } catch {}
+    };
   };
+
+  useEffect(() => {
+    // Attach after initial load, and again on subsequent loads (if any)
+    let cleanup: (() => void) | undefined;
+    const onLoad = () => { cleanup && cleanup(); cleanup = attachAutoResize() as any; };
+    const el = iframeRef.current;
+    if (el) {
+      el.addEventListener("load", onLoad, { once: false });
+      // If already loaded, attach immediately
+      if (el.contentDocument?.readyState === "complete") onLoad();
+    }
+    return () => {
+      el?.removeEventListener("load", onLoad);
+      cleanup && cleanup();
+    };
+  }, []);
 
   return (
     <main className="min-h-screen bg-black text-white relative overflow-hidden">
@@ -144,20 +182,20 @@ export default function Chrome() {
         </div>
       </section>
 
-      {/* Calculator (full viewport), now neutralized to remove the blue box */}
+      {/* Calculator (auto-height, single page scroll) */}
       <section className="relative z-10">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-16">
-          <div className="relative w-full h-[82vh] md:h-[86vh] rounded-2xl overflow-hidden">
+          <div className="relative w-full rounded-2xl overflow-visible">
             {/* Soft glow edges */}
             <div className="pointer-events-none absolute -inset-1 rounded-2xl blur-2xl bg-gradient-to-r from-amber-500/10 via-white/0 to-rose-500/10" />
             <div className="pointer-events-none absolute inset-0 rounded-2xl ring-1 ring-white/10" />
 
             <iframe
               ref={iframeRef}
-              onLoad={neutralizeIframeChrome}
               title="Nepal True Tax Mirror — Calculator"
               src="/tools/nepal-tax-mirror.html?embed=1"
-              className="absolute inset-0 w-full h-full border-0"
+              className="w-full border-0"
+              style={{ height: `${height}px` }}   // auto-resized height
               loading="eager"
               referrerPolicy="no-referrer"
             />
