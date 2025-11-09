@@ -1,0 +1,13 @@
+/* Optional add-on styles for cosmic ambient feel */
+@keyframes twinkle { 0%,100%{opacity:.5} 50%{opacity:1} }
+.g-cosmic {
+  background: radial-gradient(800px 400px at 50% -10%, rgba(251,191,36,.08), transparent),
+              radial-gradient(900px 600px at 100% 10%, rgba(251,191,36,.05), transparent),
+              #0B0C10;
+}
+.star::after{
+  content:"";
+  position:absolute; inset:0;
+  background: radial-gradient(circle at 50% 50%, rgba(255,255,255,.15), transparent 40%);
+  animation: twinkle 6s ease-in-out infinite;
+}

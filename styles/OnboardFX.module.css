@@ -1,0 +1,40 @@
+/* styles/OnboardFX.module.css */
+
+/* Scope design tokens to a local class (CSS Modules friendly) */
+.theme {
+  --glow: 0 0 30px rgba(255,255,255,.18), 0 0 80px rgba(99,102,241,.18);
+  --ring: 0 0 0 2px rgba(255,255,255,.1), 0 0 0 6px rgba(99,102,241,.08);
+}
+
+.starfield {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background:
+    radial-gradient(800px 400px at 70% -10%, rgba(99,102,241,.15), transparent 60%),
+    radial-gradient(700px 300px at 0% 100%, rgba(56,189,248,.12), transparent 60%),
+    radial-gradient(600px 300px at 100% 100%, rgba(244,63,94,.08), transparent 60%),
+    #000;
+}
+
+.card {
+  backdrop-filter: blur(8px);
+  background: rgba(17,17,17,.7);
+  box-shadow: var(--glow);
+  border: 1px solid rgba(255,255,255,.06);
+}
+
+.glowBtn {
+  position: relative;
+  transition: transform .15s ease, box-shadow .2s ease;
+  box-shadow: var(--glow);
+}
+.glowBtn:focus-visible { outline: none; box-shadow: var(--ring), var(--glow); }
+.glowBtn:hover { transform: translateY(-1px); }
+
+.headerShadow { box-shadow: 0 1px 0 rgba(255,255,255,.06); background: rgba(0,0,0,.55); backdrop-filter: blur(6px); }
+.progressTrack { height: 4px; background: rgba(255,255,255,.08); border-radius: 999px; overflow: hidden; }
+.progressBar { height: 100%; background: linear-gradient(90deg,#818cf8,#22d3ee); transition: width .3s ease; }
+.dot { width:10px;height:10px;border-radius:999px;background:#2a2a2a;border:1px solid rgba(255,255,255,.12) }
+.dotActive { background: linear-gradient(180deg,#a5b4fc,#22d3ee); box-shadow: 0 0 18px rgba(34,211,238,.45) }
