@@ -15,37 +15,11 @@ function Starfield() {
   return (
     <motion.div
       aria-hidden
-      className="pointer-events-none fixed inset-0 -z-10"
+      className="pointer-events-none fixed inset-0 -z-10 bg-black"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 0.8 }}
-    >
-      <div className="absolute inset-0 bg-[#0a0a12]" />
-      <div className="absolute inset-0 overflow-hidden">
-        <div className="layer-s absolute inset-0 animate-[drift_90s_linear_infinite]" />
-        <div className="layer-m absolute inset-0 animate-[drift_120s_linear_infinite]" />
-        <div className="layer-l absolute inset-0 animate-[drift_150s_linear_infinite]" />
-      </div>
-      <style>{`
-        .layer-s,.layer-m,.layer-l{will-change:transform;background-repeat:repeat}
-        .layer-s { background-image:
-            radial-gradient(white 1px, transparent 1.5px),
-            radial-gradient(white 1px, transparent 1.5px);
-          background-size:120px 120px, 160px 160px; background-position:0 0, 60px 80px;
-          filter:drop-shadow(0 0 1px rgba(255,255,255,.35)); animation-duration:90s; }
-        .layer-m { background-image:
-            radial-gradient(white 1.5px, transparent 2px),
-            radial-gradient(white 1.5px, transparent 2px);
-          background-size:200px 200px, 260px 260px; background-position:40px 20px, 160px 100px;
-          filter:drop-shadow(0 0 2px rgba(255,255,255,.25)); animation-duration:120s; }
-        .layer-l { background-image:
-            radial-gradient(white 2px, transparent 2.5px),
-            radial-gradient(white 2px, transparent 2.5px);
-          background-size:320px 320px, 420px 420px; background-position:120px 60px, 260px 180px;
-          filter:drop-shadow(0 0 3px rgba(255,255,255,.2)); animation-duration:150s; }
-        @keyframes drift { 0% { transform:translate3d(0,0,0) } 50% { transform:translate3d(-2%,-3%,0) } 100% { transform:translate3d(0,0,0) } }
-      `}</style>
-    </motion.div>
+    />
   );
 }
 
