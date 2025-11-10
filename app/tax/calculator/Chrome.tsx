@@ -352,7 +352,7 @@ export default function Chrome() {
           {/* header */}
           <div className="text-center">
             <h1 className="text-3xl sm:text-4xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-cyan-200 via-white to-fuchsia-200">
-              Nepal True Tax Mirror — Gatishil Edition
+              Nepal True Tax Mirror
             </h1>
             <p className="mt-2 text-slate-300/80">
               Stop feeling the pinch without knowing why. This shows your complete tax story.
