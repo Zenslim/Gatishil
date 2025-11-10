@@ -3,6 +3,7 @@
 import { motion, useScroll, useTransform } from 'framer-motion';
 import { useState, useEffect } from 'react';
 import ClientOnly from '@/components/ClientOnly';
+import Nav from '@/components/Nav';
 /** util: run code only after React mounts (prevents hydration mismatch) */
 function useMounted() {
   const [mounted, setMounted] = useState(false);
@@ -12,8 +13,7 @@ function useMounted() {
 
 /**
  * Gatishil — Mobile-first Homepage (DAO tooltip + FAQ link)
- * - Header tagline: "DAO · Guthi · Movement" with an accessible tooltip on "DAO"
- * - Nav includes FAQ linking to /faq#dao
+ * - Nav is now global via components/Nav.tsx
  * - Manifesto + Four Stones unchanged (except minor link additions)
  */
 
@@ -87,6 +87,7 @@ function Starfield() {
     </motion.div>
   );
 }
+
 // Replace your DaoWord with this version (supports gradient via className)
 function DaoWord({ className = "" }: { className?: string }) {
   return (
@@ -114,23 +115,9 @@ function DaoWord({ className = "" }: { className?: string }) {
     </a>
   );
 }
-export default function HomePage() {
-  const [open, setOpen] = useState(false);
-  const mounted = useMounted();
 
-  const NavLinks = () => (
-    <>
-      <a className="hover:text-white" href="/why">Why</a>
-      <a className="hover:text-white" href="/how">How</a>
-      <a className="hover:text-white" href="/what">What</a>
-      <a className="hover:text-white" href="#manifesto">Manifesto</a>
-      <a className="hover:text-white" href="/polls">Polls</a>
-      <a className="hover:text-white" href="/proposals">Proposals</a>
-      <a className="hover:text-white" href="/members">Members</a>
-      <a className="hover:text-white" href="/blog">Blog</a>
-      <a className="hover:text-white" href="/faq#dao">FAQ</a>
-    </>
-  );
+export default function HomePage() {
+  const mounted = useMounted();
 
   return (
     <main className="relative min-h-screen bg-black text-white">
@@ -141,96 +128,8 @@ export default function HomePage() {
 
       <ClientOnly>{mounted ? <Starfield /> : null}</ClientOnly>
 
-      {/* Header */}
-      <header className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-16 pt-4 sm:pt-6 relative z-20">
-        <div className="flex items-center justify-between">
-          <a href="/" className="flex items-center gap-3">
-            <img
-              src="/gatishil-logo.png"
-              alt="Gatishil Nepal"
-              className="h-8 sm:h-9 w-auto"
-              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-            />
-            <div className="leading-tight">
-              {/* Two-line balanced left block */}
-              <p className="text-[16px] sm:text-sm font-bold tracking-wide text-white">
-                Gatishil Nepal
-              </p>
-              <p className="text-[11px] sm:text-[12px] text-slate-300/80">
-                <DaoWord /> · Guthi · Movement
-              </p>
-            </div>
-          </a>
-
-          {/* Desktop nav */}
-          <nav className="hidden md:flex gap-6 items-center text-sm text-slate-300">
-            <NavLinks />
-          </nav>
-
-          {/* Desktop actions */}
-          <div className="hidden md:flex items-center gap-2">
-            <a href="/login" className="px-3 py-2 border border-white/10 rounded-lg text-xs hover:bg-white/5 transition">Login</a>
-            <motion.a
-              href="/join"
-              whileHover={{ scale: 1.03 }}
-              whileTap={{ scale: 0.98 }}
-              className="px-4 py-2 rounded-xl bg-amber-400 text-black font-semibold transition shadow-[0_0_30px_rgba(251,191,36,0.35)]"
-            >
-              Join
-            </motion.a>
-          </div>
-
-          {/* Mobile actions (always visible) */}
-          <div className="md:hidden flex items-center gap-2">
-            <a
-              href="/login"
-              className="px-3 py-1.5 border border-white/10 rounded-lg text-[11px] hover:bg-white/5 transition"
-            >
-              Login
-            </a>
-            <a
-              href="/join"
-              className="px-3 py-1.5 rounded-lg bg-amber-400 text-black font-semibold text-[11px]"
-            >
-              Join
-            </a>
-          </div>
-
-          {/* Mobile hamburger */}
-          <button
-            type="button"
-            aria-label="Open menu"
-            aria-controls="mobile-menu"
-            aria-expanded={open ? 'true' : 'false'}
-            onClick={() => setOpen((v) => !v)}
-            className="md:hidden inline-flex items-center justify-center rounded-lg p-2 border border-white/10 hover:bg-white/5"
-          >
-            {!open ? (
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                <path d="M4 6h16M4 12h16M4 18h16" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-              </svg>
-            ) : (
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                <path d="M6 6l12 12M18 6l-12 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-              </svg>
-            )}
-          </button>
-        </div>
-
-        {/* Mobile menu */}
-        <motion.div
-          id="mobile-menu"
-          initial={false}
-          animate={open ? { height: 'auto', opacity: 1 } : { height: 0, opacity: 0 }}
-          className="md:hidden overflow-hidden"
-        >
-          <div className="mt-3 rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl p-4 text-sm text-slate-300 space-y-3">
-            <div className="grid grid-cols-2 gap-3">
-              <NavLinks />
-            </div>
-                     </div>
-        </motion.div>
-      </header>
+      {/* Global Nav */}
+      <Nav />
 
       {/* HERO */}
       <section className="relative z-10 pt-10 sm:pt-14 pb-8">
@@ -244,16 +143,16 @@ export default function HomePage() {
               GatishilNepal.org
             </motion.span>
 
-          <motion.h1 className="text-[28px] sm:text-4xl md:text-5xl font-extrabold leading-tight mt-3" {...fadeUp(0.05)}>
-  The <DaoWord className="bg-clip-text text-transparent bg-gradient-to-r from-amber-300 via-orange-400 to-rose-400" /> Party of the Powerless.
-</motion.h1>
-           <motion.p
-  className="mt-4 text-slate-300/90 text-xl sm:text-2xl font-bold max-w-2xl"
-  {...fadeUp(0.1)}
->
-  Service, Not Career. Community, Not Power.
-</motion.p>
+            <motion.h1 className="text-[28px] sm:text-4xl md:text-5xl font-extrabold leading-tight mt-3" {...fadeUp(0.05)}>
+              The <DaoWord className="bg-clip-text text-transparent bg-gradient-to-r from-amber-300 via-orange-400 to-rose-400" /> Party of the Powerless.
+            </motion.h1>
 
+            <motion.p
+              className="mt-4 text-slate-300/90 text-xl sm:text-2xl font-bold max-w-2xl"
+              {...fadeUp(0.1)}
+            >
+              Service, Not Career. Community, Not Power.
+            </motion.p>
 
             <motion.p className="mt-2 text-slate-300/90 text-sm sm:text-base max-w-2xl" {...fadeUp(0.14)}>
               Not another party of faces, but a movement that makes thrones irrelevant.
@@ -271,7 +170,7 @@ export default function HomePage() {
               >
                 Join Us to Restore the Flow
               </motion.a>
-                          <motion.a
+              <motion.a
                 href="#manifesto"
                 whileHover={{ y: -2 }}
                 whileTap={{ scale: 0.98 }}
@@ -467,41 +366,46 @@ export default function HomePage() {
               <h3 className="text-lg font-semibold">🗳 Tech-Forward Campaigns</h3>
               <p className="mt-2 text-slate-300/85 text-sm">
                 <span className="font-semibold">Your Voice, Coded in Trust.</span> Like dropping your vote in a box everyone can see, but no one can steal.
-              </p>              <p className="mt-2 text-amber-400 text-sm font-medium">
-  The new chauṭarī is not a stage, it’s a shared ledger of trust.
-</p>
+              </p>
+              <p className="mt-2 text-amber-400 text-sm font-medium">
+                The new chauṭarī is not a stage, it’s a shared ledger of trust.
+              </p>
             </motion.div>
 
             <motion.div {...fadeUp(0.04)} className="p-5 sm:p-6 rounded-2xl bg-white/5 border border-white/10">
               <h3 className="text-lg font-semibold">💰 Anti-Corruption</h3>
               <p className="mt-2 text-slate-300/85 text-sm">
                 <span className="font-semibold">Every Rupee Tracked. Every Promise Coded.</span> Like grain in a clear jar — all can see, none can steal.
- </p>  <p className="mt-2 text-amber-400 text-sm font-medium">
-    Transparency is the new revolution; sunlight, our policy.
-  </p>
+              </p>
+              <p className="mt-2 text-amber-400 text-sm font-medium">
+                Transparency is the new revolution; sunlight, our policy.
+              </p>
             </motion.div>
 
             <motion.div {...fadeUp(0.06)} className="p-5 sm:p-6 rounded-2xl bg-white/5 border border-white/10">
               <h3 className="text-lg font-semibold">🌱 Grassroots Mobilization</h3>
               <p className="mt-2 text-slate-300/85 text-sm">
                 <span className="font-semibold">The Party is You. The Mandate is Ours.</span> Like a shared khet where every farmer plants, no harvest unless all work.
-              </p>   <p className="mt-2 text-amber-400 text-sm font-medium">
-    This is not representation, this is participation.
-  </p>
+              </p>
+              <p className="mt-2 text-amber-400 text-sm font-medium">
+                This is not representation, this is participation.
+              </p>
             </motion.div>
 
             <motion.div {...fadeUp(0.08)} className="p-5 sm:p-6 rounded-2xl bg-white/5 border border-white/10">
               <h3 className="text-lg font-semibold">📜 Philosophical Foundation</h3>
               <p className="mt-2 text-slate-300/85 text-sm">
                 <span className="font-semibold">The People’s Code. The Nation’s Flow.</span> Like ancient guthi rules, but written in code — fair, tamper-proof, shared by all.
-              </p>   <p className="mt-2 text-amber-400 text-sm font-medium">
-    From Guthi to DAO — the wisdom is old, the tool is new, the flow eternal.
-  </p>
+              </p>
+              <p className="mt-2 text-amber-400 text-sm font-medium">
+                From Guthi to DAO — the wisdom is old, the tool is new, the flow eternal.
+              </p>
             </motion.div>
           </div>
-       <p className="mt-8 text-center text-[16px] text-slate-400">
+
+          <p className="mt-8 text-center text-[16px] text-slate-400">
             A prince must combine the qualities of a lion and a fox.
-          </p>  
+          </p>
         </div>
       </section>
 
