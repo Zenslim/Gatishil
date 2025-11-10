@@ -1,50 +1,15 @@
 import { Metadata } from "next";
 import Link from "next/link";
 
+import { getPostsIndex } from "@/lib/content";
+
 export const metadata: Metadata = {
   title: "🪶 The Living Ledger of Thought — Blog",
   description: "Every reflection under one sky.",
 };
 
-type Post = {
-  id: string;
-  title: string;
-  slug: string;
-  excerpt: string | null;
-  tags: string[] | null;
-  created_at: string;
-  author_name?: string | null;
-};
-
-async function getPosts(): Promise<Post[]> {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL as string;
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string;
-  if (!url || !key) {
-    // Fallback demo content if env is missing
-    return [
-      { id: "demo-1", title: "The Spark that Moves", slug: "the-spark-that-moves", excerpt: "On motion, courage, and quiet revolutions.", tags: ["Essays"], created_at: new Date().toISOString(), author_name: "Gatishil" },
-      { id: "demo-2", title: "Economy as Ecology", slug: "economy-as-ecology", excerpt: "Designing value like watersheds, not pipelines.", tags: ["Economy","Ecology"], created_at: new Date().toISOString(), author_name: "Gatishil" },
-      { id: "demo-3", title: "Every Voice Sings", slug: "every-voice-sings", excerpt: "A DAO is a choir with a purpose.", tags: ["Governance"], created_at: new Date().toISOString(), author_name: "Gatishil" },
-    ];
-  }
-  const res = await fetch(`${url}/rest/v1/posts?select=id,title,slug,excerpt,tags,created_at,author_name&order=created_at.desc`, {
-    headers: {
-      apikey: key,
-      Authorization: `Bearer ${key}`,
-      "Content-Type": "application/json",
-    },
-    // Revalidate every 60s
-    next: { revalidate: 60 },
-  });
-  if (!res.ok) {
-    console.error("Failed to fetch posts", await res.text());
-    return [];
-  }
-  return res.json();
-}
-
 export default async function BlogIndexPage() {
-  const posts = await getPosts();
+  const posts = await getPostsIndex();
   return (
     <main className="min-h-screen bg-[#0B0C10] text-slate-200">
       <section className="py-16 text-center px-6">
@@ -54,15 +19,26 @@ export default async function BlogIndexPage() {
 
       <section className="grid gap-6 px-6 sm:grid-cols-2 lg:grid-cols-3 pb-16">
         {posts.map((p) => (
-          <Link key={p.id} href={`/blog/${p.slug}`} className="group rounded-2xl border border-white/10 bg-white/5 p-5 hover:shadow-lg hover:shadow-amber-400/10 transition">
+          <Link
+            key={p.slug}
+            href={`/blog/${p.slug}`}
+            className="group rounded-2xl border border-white/10 bg-white/5 p-5 hover:shadow-lg hover:shadow-amber-400/10 transition"
+          >
             <h3 className="text-lg font-semibold group-hover:text-amber-300 transition">{p.title}</h3>
+            {p.title_np && (
+              <p className="mt-1 text-sm text-amber-200/80">{p.title_np}</p>
+            )}
             {p.excerpt && <p className="mt-2 text-slate-300/85 text-sm line-clamp-2">{p.excerpt}</p>}
             <div className="mt-4 flex flex-wrap gap-2 text-xs text-slate-400">
               {(p.tags || []).map((t) => (
-                <span key={t} className="rounded-full border border-white/10 px-2 py-0.5 bg-white/5">{t}</span>
+                <span key={t} className="rounded-full border border-white/10 px-2 py-0.5 bg-white/5">
+                  {t}
+                </span>
               ))}
             </div>
-            <div className="mt-4 text-xs text-slate-500">{p.author_name ?? "Member"} • {new Date(p.created_at).toLocaleDateString()}</div>
+            <div className="mt-4 text-xs text-slate-500">
+              {p.author ?? "Gatishil"} • {new Date(p.date).toLocaleDateString()}
+            </div>
           </Link>
         ))}
         {posts.length === 0 && (
