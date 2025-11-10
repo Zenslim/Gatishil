@@ -3,19 +3,13 @@
 import { motion, useScroll, useTransform } from 'framer-motion';
 import { useState, useEffect } from 'react';
 import ClientOnly from '@/components/ClientOnly';
-import Nav from '@/components/Nav';
+
 /** util: run code only after React mounts (prevents hydration mismatch) */
 function useMounted() {
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
   return mounted;
 }
-
-/**
- * Gatishil — Mobile-first Homepage (DAO tooltip + FAQ link)
- * - Nav is now global via components/Nav.tsx
- * - Manifesto + Four Stones unchanged (except minor link additions)
- */
 
 const fadeUp = (delay = 0) => ({
   initial: { opacity: 0, y: 18 },
@@ -128,11 +122,8 @@ export default function HomePage() {
 
       <ClientOnly>{mounted ? <Starfield /> : null}</ClientOnly>
 
-      {/* Global Nav */}
-      <Nav />
-
       {/* HERO */}
-      <section className="relative z-10 pt-10 sm:pt-14 pb-8">
+      <section className="relative z-10 pt-6 sm:pt-8 pb-8">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-16 grid lg:grid-cols-12 gap-8 items-start">
           {/* Left text */}
           <div className="lg:col-span-7">
@@ -140,11 +131,12 @@ export default function HomePage() {
               className="inline-block text-[10px] uppercase tracking-widest text-amber-300/90 px-2 py-1 border border-amber-300/30 rounded-full"
               {...fadeUp(0)}
             >
-              GatishilNepal.org
+              GATISHILNEPAL.ORG
             </motion.span>
 
             <motion.h1 className="text-[28px] sm:text-4xl md:text-5xl font-extrabold leading-tight mt-3" {...fadeUp(0.05)}>
-              The <DaoWord className="bg-clip-text text-transparent bg-gradient-to-r from-amber-300 via-orange-400 to-rose-400" /> Party of the Powerless.
+              The <DaoWord className="bg-clip-text text-transparent bg-gradient-to-r from-amber-300 via-orange-400 to-rose-400" /> Party of the
+              Powerless.
             </motion.h1>
 
             <motion.p
