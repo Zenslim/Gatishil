@@ -67,8 +67,8 @@ export default function RootLayout({
       <body className={`${inter.className} bg-black text-white antialiased`}>
         {/* Global navbar */}
         <Nav />
-        {/* Space below Nav so content isn't hidden if Nav is sticky/fixed */}
-        <main className="min-h-screen pt-14 sm:pt-16">{children}</main>
+        {/* Removed top padding that created the visible gap under Nav */}
+        <main className="min-h-screen">{children}</main>
       </body>
     </html>
   );
