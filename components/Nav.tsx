@@ -151,7 +151,7 @@ export default function Nav() {
             />
             <div className={styles.brandText}>
               <div className={styles.brandTitle}>Gatishil Nepal</div>
-              <div className={styles.brandSub}>DAO · Guthi · Movement</div>
+              <div className={styles.brandSub}>From Guthi to DAO</div>
             </div>
           </div>
         </Link>
