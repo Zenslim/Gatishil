@@ -1,6 +1,8 @@
+// app/layout.tsx
 import type { Metadata } from "next";
 import "./globals.css";
 import { Inter } from "next/font/google";
+import Nav from "@/components/Nav";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -63,7 +65,10 @@ export default function RootLayout({
         <meta name="theme-color" content="#000000" />
       </head>
       <body className={`${inter.className} bg-black text-white antialiased`}>
-        {children}
+        {/* Global navbar */}
+        <Nav />
+        {/* Space below Nav so content isn't hidden if Nav is sticky/fixed */}
+        <main className="min-h-screen pt-14 sm:pt-16">{children}</main>
       </body>
     </html>
   );
