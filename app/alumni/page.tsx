@@ -152,7 +152,7 @@ export default function AlumniEnginePage() {
         <Block title="3) Money Model (math that works)">
           <ul className="mt-3 space-y-2 text-white/80">
             <li>• <b>Platform fee: 2%</b> of selling price at umbrella (covers hosting, ops, training, audits).</li>
-            <li>• <b>Alumni Notes: offer members a 10% annual interest on deposits that fund community projects, with every transaction fully verified through DAO Ledger proofs.</li>
+            <li>• <b>Alumni Notes: </b> offer members a 5% annual interest on deposits that fund community projects, with every transaction fully verified through DAO Ledger proofs.</li>
             <li>• <b>Pre-orders</b> (gift boxes/subscriptions) pull cash forward without debt.</li>
             <li>• <b>Piece-rate + profit share</b>: villagers are paid the same week; no cash handling outside the bank.</li>
           </ul>
