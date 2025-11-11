@@ -103,6 +103,15 @@ function Icon({ name }: { name: string }) {
           <path d="M6 9h6M6 16h4" stroke="#F59E0B" strokeWidth="1.6" strokeLinecap="round" />
         </svg>
       );
+    case 'alumni':
+      return (
+        <svg className={styles.icon} viewBox="0 0 24 24" aria-hidden>
+          <path d="M2 9l10-5 10 5-10 5-10-5z" fill="#10B981" opacity="0.18" />
+          <path d="M12 4L3 8.5 12 13l9-4.5L12 4z" fill="none" stroke="#10B981" strokeWidth="1.6" />
+          <path d="M7 12v3.5c0 1.4 2.2 2.5 5 2.5s5-1.1 5-2.5V12" fill="none" stroke="#34D399" strokeWidth="1.6" strokeLinecap="round" />
+          <circle cx="12" cy="18" r="1.2" fill="#34D399" />
+        </svg>
+      );
     default:
       return null;
   }
@@ -204,6 +213,7 @@ export default function Nav() {
               </div>
             </details>
 
+            <Link href="/alumni" className={styles.link} onClick={() => setOpen(false)}><Icon name="alumni" /> Alumni Engine</Link>
             <Link href="/blog" className={styles.link} onClick={() => setOpen(false)}><Icon name="blog" /> Blog</Link>
             <Link href="/polls" className={styles.link} onClick={() => setOpen(false)}><Icon name="polls" /> Polls</Link>
             <Link href="/proposals" className={styles.link} onClick={() => setOpen(false)}><Icon name="proposals" /> Proposals</Link>
