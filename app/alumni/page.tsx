@@ -5,11 +5,11 @@ import Link from "next/link";
 export const metadata: Metadata = {
   title: "Gatishil Alumni Engine — SEBS → 6,743 Wards",
   description:
-    "Turn the SEBS network into a living engine: mobilize mentors, monetize micro-ventures, and settle cash weekly with receipts. One rhythm, 6,743 wards.",
+    "Turn the SEBS network into a living engine: Make → Sell → Settle → Show. One OS for 6,743 wards, Friday payouts, public receipts.",
   openGraph: {
     title: "Gatishil Alumni Engine — SEBS → 6,743 Wards",
     description:
-      "Mobilize & monetize the SEBS network with ward kits, an umbrella marketplace, and Friday settlements.",
+      "Mobilize mentors, monetize micro-ventures, weekly settlements, and Sunlight proofs. No donors—just receipts.",
     type: "website",
   },
 };
@@ -19,201 +19,226 @@ export default function AlumniEnginePage() {
     <main className="min-h-screen bg-black text-white">
       {/* Hero */}
       <section className="relative overflow-hidden">
-        <div className="mx-auto max-w-6xl px-6 py-20">
-          <div className="text-center">
-            <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-4 py-2 text-sm">
-              <span>🎓 SEBS → 🛠️ Wards → 💸 Friday Payouts</span>
-            </div>
-            <h1 className="mt-6 text-4xl font-bold tracking-tight sm:text-6xl">
-              Gatishil Alumni Engine
-            </h1>
-            <p className="mx-auto mt-5 max-w-2xl text-lg text-white/80">
-              Turn 4,500+ alumni into a nation-scale production network.
-              One rhythm: <span className="text-white">Make → Sell → Settle → Show</span>.
-            </p>
-            <div className="mt-8 flex flex-wrap justify-center gap-3">
-              <Link
-                href="/join?src=alumni"
-                className="rounded-xl bg-white px-5 py-3 font-semibold text-black hover:bg-white/90"
-              >
-                Join a Guild
-              </Link>
-              <Link
-                href="/chautari"
-                className="rounded-xl border border-white/20 px-5 py-3 font-semibold hover:bg-white/10"
-              >
-                Visit Chauṭarī
-              </Link>
-              <Link
-                href="/sunlight"
-                className="rounded-xl border border-emerald-400/30 bg-emerald-400/10 px-5 py-3 font-semibold text-emerald-300 hover:bg-emerald-400/20"
-              >
-                See Sunlight (Proofs)
-              </Link>
-            </div>
+        <div className="mx-auto max-w-6xl px-6 py-20 text-center">
+          <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-4 py-2 text-sm">
+            <span>🎓 SEBS → 🛠️ Wards → 💸 Friday Payouts → 🔆 Sunlight</span>
+          </div>
+          <h1 className="mt-6 text-4xl font-bold tracking-tight sm:text-6xl">
+            Gatishil Alumni Engine
+          </h1>
+          <p className="mx-auto mt-5 max-w-2xl text-lg text-white/80">
+            Turn 4,500+ alumni into a nation-scale production network. One rhythm:
+            <span className="text-white"> Make → Sell → Settle → Show</span>.
+          </p>
+          <div className="mt-8 flex flex-wrap justify-center gap-3">
+            <CTA href="/join?src=alumni" label="Join a Guild" variant="primary" />
+            <CTA href="/chautari" label="Visit Chauṭarī" />
+            <CTA href="/sunlight" label="See Sunlight (Proofs)" variant="accent" />
           </div>
         </div>
         <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(ellipse_at_top,rgba(16,185,129,0.15),rgba(0,0,0,0))]" />
       </section>
 
-      {/* The Promise */}
-      <section className="border-t border-white/10">
-        <div className="mx-auto max-w-6xl px-6 py-14">
-          <div className="grid gap-8 md:grid-cols-3">
-            <Card
-              emoji="🧭"
-              title="One Purpose"
-              text="Alumni power local dignity: each ward runs a tiny factory, a clean ledger, and a weekly payout."
-            />
-            <Card
-              emoji="🛒"
-              title="One Marketplace"
-              text="All wards sell under one roof. Umbrella handles checkout, logistics, taxes, and settlements."
-            />
-            <Card
-              emoji="🧾"
-              title="One Truth"
-              text="Every rupee leaves a receipt. Ledgers are append-only. Corrections happen by reversal, never delete."
-            />
-          </div>
-        </div>
-      </section>
+      {/* Core Promise */}
+      <Section border>
+        <Grid3>
+          <Card
+            emoji="🧭"
+            title="One Purpose"
+            text="Alumni power ward-level dignity: tiny factories, clean ledgers, weekly payouts."
+          />
+          <Card
+            emoji="🛒"
+            title="One Marketplace"
+            text="All wards sell under one roof. Umbrella handles checkout, logistics, taxes, and settlements."
+          />
+          <Card
+            emoji="🧾"
+            title="One Truth"
+            text="Every rupee leaves a receipt. Ledgers are append-only. Corrections are reversals—never deletes."
+          />
+        </Grid3>
+      </Section>
 
-      {/* How it Works */}
-      <section className="border-t border-white/10 bg-white/5">
-        <div className="mx-auto max-w-6xl px-6 py-16">
-          <h2 className="text-3xl font-semibold">How the Engine Runs</h2>
-          <p className="mt-3 max-w-3xl text-white/80">
-            Alumni pick a primary ward and a primary role. Wards produce in small,
-            repeatable units. The umbrella store sells nationwide. Money settles
-            every Friday. Sunlight pages show the trail.
+      {/* ADD: Self-Sustaining Plan (ELI15) */}
+      <Section label="The Self-Sustaining Plan (ELI15)" shaded>
+        {/* 1) Flywheel */}
+        <Block title="1) The Flywheel (one sentence)">
+          <p className="text-white/80">
+            <b>Make → Sell → Settle → Show</b> repeats daily:
+            wards make goods → umbrella sells → money settles back weekly →
+            the Sunlight page shows every rupee → trust grows → more wards join → more goods flow.
           </p>
+        </Block>
 
-          <div className="mt-10 grid gap-6 md:grid-cols-2">
-            <Step
-              number="1"
-              title="Guilds Mobilize"
-              lines={[
-                "🎓 Mentor Guild: 1 hour/week office hours.",
-                "💰 Capital Guild: Alumni Notes @ 10% for assets.",
-                "🧪 Skills Guild: packaging, QA, microsites, ops.",
-              ]}
-            />
-            <Step
-              number="2"
-              title="Ward Kits Monetize"
-              lines={[
-                "🍯 Mushrooms/Honey | 🪵 CNC Woodcraft | 🎁 Festival Boxes",
-                "QR batch labels → receipts & worker payments.",
-                "No cash outside the bank; everything reconciles nightly.",
-              ]}
-            />
-            <Step
-              number="3"
-              title="Umbrella Settles"
-              lines={[
-                "Single intake (gateway/bank) with order splits by ward.",
-                "Weekly settlements per ward; two-key payouts.",
-                "Platform fee (8–12%) funds ops, audits, training.",
-              ]}
-            />
-            <Step
-              number="4"
-              title="Sunlight Proves"
-              lines={[
-                "Public ledgers per ward & umbrella.",
-                "Reversal-only corrections; audit trails are permanent.",
-                "Receipts, manifests, and bank lines match.",
-              ]}
-            />
-          </div>
-        </div>
-      </section>
+        {/* 2) Operating System */}
+        <Block title="2) The Operating System (same everywhere)">
+          <ul className="mt-3 space-y-2 text-white/80">
+            <li>• <b>Ward Kit</b>: batches, inventory lots, orders, payouts, QR proofs, reversal-only ledger, bilingual UI.</li>
+            <li>• <b>Umbrella MPC</b>: one store for all wards, one treasury intake, nightly bank reconciliation, weekly per-ward settlements, festival/wholesale bundles.</li>
+            <li>• <b>Dabba rules</b>: big color/glyph stickers, fixed windows, cross-dock hubs, paper manifest first → phone/QR optional.</li>
+          </ul>
+        </Block>
 
-      {/* 90-Day Sprint */}
-      <section className="border-t border-white/10">
-        <div className="mx-auto max-w-6xl px-6 py-16">
-          <h2 className="text-3xl font-semibold">90-Day Alumni Sprint</h2>
-          <div className="mt-8 grid gap-6 md:grid-cols-3">
+        {/* 3) Money Model */}
+        <Block title="3) Money Model (ELI15 math that works)">
+          <ul className="mt-3 space-y-2 text-white/80">
+            <li>• <b>Platform fee 8–12%</b> at umbrella pays hosting, ops, training, audits.</li>
+            <li>• <b>Alumni Notes 10%/yr</b> for assets (CNC/mushroom/bee/packaging), 12-month lock, statements + Sunlight proofs, strictly member deposits.</li>
+            <li>• <b>Pre-orders</b> (gift boxes/subscriptions) move cash forward without debt.</li>
+            <li>• <b>Piece-rate + profit share</b>: villagers are paid the same week; no cash handling outside the bank.</li>
+          </ul>
+
+          <div className="mt-6 rounded-2xl border border-white/10 bg-black p-5">
+            <h4 className="text-lg font-semibold">Conservative unit test</h4>
+            <ul className="mt-3 space-y-1 text-white/80">
+              <li>• Per ward after 90 days → <b>NPR 300,000/month GMV</b> (mushrooms + honey + 2 festival SKUs).</li>
+              <li>• Platform @10% = <b>NPR 30,000/ward/month</b> gross to umbrella.</li>
+              <li>• At just <b>1,000 wards active</b> → <b>NPR 3 crore/month</b> for ops/media/audits/training (bulk stays with wards).</li>
+              <li>• Cash-positive long before all <b>6,743 wards</b> are live.</li>
+            </ul>
+          </div>
+        </Block>
+
+        {/* 4) Waves */}
+        <Block title="4) 3 Waves to Nationwide (12 months, rhythm not rush)">
+          <div className="mt-4 grid gap-6 md:grid-cols-3">
             <Sprint
-              title="Days 0–7"
+              title="Wave 1 (Months 0–3): 10 → 100"
               points={[
-                "Pick your Primary Ward & Guild.",
-                "Pledge alumni hours or pre-orders.",
-                "Seed 10 pilot wards (2 per province).",
+                "One revenue machine/ward (CNC or mushrooms/honey/packaging).",
+                "Daily dabba rhythm; weekly settlements.",
+                "Publish Sunlight proofs; fix the slowest lane first.",
               ]}
             />
             <Sprint
-              title="Weeks 2–4"
+              title="Wave 2 (Months 4–8): 100 → 1,000"
               points={[
-                "Stand up one revenue machine per pilot.",
-                "Turn on pre-orders; show receipts daily.",
-                "Publish first Friday payouts.",
+                "Pre-orders (corporate/festival), alumni mentor hours (legal/QA/packaging).",
+                "Auditor view live; bank→reco→settlement becomes boring.",
               ]}
             />
             <Sprint
-              title="Weeks 5–12"
+              title="Wave 3 (Months 9–12): 1,000 → 6,743"
               points={[
-                "Scale to 50 wards cleanly.",
-                "Release investor statements & audits.",
-                "Lock the weekly rhythm.",
+                "Clone Ward Kits like franchises; add regional 3PL lanes.",
+                "Flat, public platform fee; every Friday is payout day.",
               ]}
             />
           </div>
-          <div className="mt-8">
-            <Link
-              href="/join?src=alumni-sprint"
-              className="inline-block rounded-xl bg-white px-5 py-3 font-semibold text-black hover:bg-white/90"
-            >
-              I’m In — Add Me to a Guild
-            </Link>
+        </Block>
+
+        {/* 5) Governance */}
+        <Block title="5) Governance that can’t be captured">
+          <ul className="mt-3 space-y-2 text-white/80">
+            <li>• <b>Two-key payouts</b> (ward steward + umbrella finance).</li>
+            <li>• <b>No deletes</b>—only reversals in ledgers.</li>
+            <li>• <b>Term-limited stewards</b> and <b>public procurement</b> (3 quotes or documented exception).</li>
+            <li>• <b>Auditor/Journalist view</b>: read-only, recompute totals from raw rows.</li>
+          </ul>
+        </Block>
+
+        {/* 6) KPIs */}
+        <Block title="6) KPIs that prove it’s real (fits on one screen)">
+          <div className="mt-6 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            <KPI label="Per Ward: GMV" value="Climbing monthly" />
+            <KPI label="On-Time Dispatch" value="≥ 95%" />
+            <KPI label="Bank ≈ Ledger" value="≈ 0 variance" />
+            <KPI label="Payouts on Schedule" value="100%" />
+            <KPI label="# Households Paid / Week" value="Increasing" />
+            <KPI label="Umbrella Take-Rate" value="8–12%" />
+            <KPI label="Shipping Recovery" value="Tracked" />
+            <KPI label="Return Rate" value="Low & falling" />
+            <KPI label="Time-to-Payout" value="Friday sacred" />
           </div>
+        </Block>
+
+        {/* 7) Risks & Counters */}
+        <Block title="7) Risks → Built-in counters (ELI15)">
+          <ul className="mt-3 space-y-2 text-white/80">
+            <li>• <b>Fraud/Leakage?</b> Append-only ledger + bank import + two-key payouts.</li>
+            <li>• <b>Chaos at scale?</b> Same Ward Kit, same stickers, same windows. Rhythm beats meetings.</li>
+            <li>• <b>Cash squeeze?</b> Pre-orders first; Alumni Notes only for assets with 6–12-month payback.</li>
+            <li>• <b>Politics drift?</b> Economics + receipts every Friday → stories can’t outrun facts.</li>
+          </ul>
+        </Block>
+
+        {/* 8) Why Self-Sustaining */}
+        <Block title="8) Why this makes the party self-sustaining (ELI15 justification)">
+          <p className="text-white/80">
+            Donor money fades. <b>Receipt-backed cashflow doesn’t.</b> When every ward earns weekly and every rupee
+            is visible, the <b>platform fee</b> quietly funds the party’s operations without favors. Gatishil becomes
+            Nepal’s lighthouse: dignity created locally, truth published nightly, movement powered by the people it serves.
+          </p>
+        </Block>
+
+        <div className="mt-8 rounded-2xl border border-emerald-400/30 bg-emerald-400/10 p-6 text-center">
+          <h4 className="text-xl font-semibold">Takeaway (one line)</h4>
+          <p className="mt-2 text-emerald-200">
+            Stand up ZenSara in each ward, keep the rhythm sacred (daily flow, Friday payouts), and the party becomes
+            a permanent engine—<b>no sponsors, no drama, just receipts.</b>
+          </p>
         </div>
-      </section>
+      </Section>
+
+      {/* 90-Day Alumni Sprint (kept concise) */}
+      <Section label="90-Day Alumni Sprint" border>
+        <div className="grid gap-6 md:grid-cols-3">
+          <Sprint
+            title="Days 0–7"
+            points={[
+              "Pick your Primary Ward & Guild.",
+              "Pledge alumni hours or pre-orders.",
+              "Seed 10 pilot wards (2 per province).",
+            ]}
+          />
+          <Sprint
+            title="Weeks 2–4"
+            points={[
+              "Stand one revenue machine per pilot.",
+              "Turn on pre-orders; show receipts daily.",
+              "Publish first Friday payouts.",
+            ]}
+          />
+          <Sprint
+            title="Weeks 5–12"
+            points={[
+              "Scale to 50 wards cleanly.",
+              "Release investor statements & audits.",
+              "Lock the weekly rhythm.",
+            ]}
+          />
+        </div>
+        <div className="mt-8">
+          <CTA href="/join?src=alumni-sprint" label="I’m In — Add Me to a Guild" variant="primary" />
+        </div>
+      </Section>
 
       {/* Dabba Rhythm */}
-      <section className="border-t border-white/10 bg-white/5">
-        <div className="mx-auto max-w-6xl px-6 py-16">
-          <h2 className="text-3xl font-semibold">Dabba Rhythm (Logistics that Don’t Break)</h2>
-          <div className="mt-6 grid gap-6 md:grid-cols-2">
-            <Bullet
-              title="Big Stickers, Fixed Windows"
-              text="Colors/glyphs route totes; hubs cross-dock not store. Miss a window? Next slot. Paper manifest first; QR optional."
-              icon="📦"
-            />
-            <Bullet
-              title="Nightly Closure"
-              text="Bank import → match orders → queue settlements. Variance near zero is the game."
-              icon="🌙"
-            />
-            <Bullet
-              title="Friday is Sacred"
-              text="Weekly per-ward payouts with PDFs. No exceptions. Trust compounds on schedule."
-              icon="📅"
-            />
-            <Bullet
-              title="Auditor View"
-              text="Read-only recompute of totals from raw rows. Receipts and reversals visible to the public."
-              icon="🔍"
-            />
-          </div>
+      <Section label="Dabba Rhythm (logistics that don’t break)" shaded>
+        <div className="grid gap-6 md:grid-cols-2">
+          <Bullet
+            title="Big Stickers, Fixed Windows"
+            text="Colors/glyphs route totes; hubs cross-dock not store. Miss a window? Next slot. Paper manifest first; QR optional."
+            icon="📦"
+          />
+          <Bullet
+            title="Nightly Closure"
+            text="Bank import → match orders → queue settlements. Variance near zero is the game."
+            icon="🌙"
+          />
+          <Bullet
+            title="Friday is Sacred"
+            text="Weekly per-ward payouts with PDFs. No exceptions. Trust compounds on schedule."
+            icon="📅"
+          />
+          <Bullet
+            title="Auditor View"
+            text="Read-only recompute of totals from raw rows. Receipts and reversals visible to the public."
+            icon="🔍"
+          />
         </div>
-      </section>
-
-      {/* KPIs */}
-      <section className="border-t border-white/10">
-        <div className="mx-auto max-w-6xl px-6 py-16">
-          <h2 className="text-3xl font-semibold">What We Track (fits on one screen)</h2>
-          <div className="mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            <KPI label="Wards Active" value="→ 1,000 in Wave 2" />
-            <KPI label="On-Time Dispatch" value="≥ 95%" />
-            <KPI label="Bank ≈ Ledger Variance" value="≈ 0" />
-            <KPI label="Payouts on Schedule" value="100%" />
-            <KPI label="Households Paid / Week" value="Climbing" />
-            <KPI label="Platform Fee (Ops Fuel)" value="8–12%" />
-          </div>
-        </div>
-      </section>
+      </Section>
 
       {/* Closing CTA */}
       <section className="border-t border-white/10 bg-gradient-to-b from-white/5 to-transparent">
@@ -226,24 +251,9 @@ export default function AlumniEnginePage() {
             We’ll show the receipts every Friday.
           </p>
           <div className="mt-8 flex flex-wrap justify-center gap-3">
-            <Link
-              href="/join?src=alumni-hero"
-              className="rounded-xl bg-white px-5 py-3 font-semibold text-black hover:bg-white/90"
-            >
-              Start as Alumni
-            </Link>
-            <Link
-              href="/alumni/faq"
-              className="rounded-xl border border-white/20 px-5 py-3 font-semibold hover:bg-white/10"
-            >
-              Read the FAQ
-            </Link>
-            <Link
-              href="/sunlight"
-              className="rounded-xl border border-emerald-400/30 bg-emerald-400/10 px-5 py-3 font-semibold text-emerald-300 hover:bg-emerald-400/20"
-            >
-              Verify the Ledger
-            </Link>
+            <CTA href="/join?src=alumni-hero" label="Start as Alumni" variant="primary" />
+            <CTA href="/alumni/faq" label="Read the FAQ" />
+            <CTA href="/sunlight" label="Verify the Ledger" variant="accent" />
           </div>
         </div>
       </section>
@@ -251,7 +261,37 @@ export default function AlumniEnginePage() {
   );
 }
 
-/* ——— UI Bits ——— */
+/* ——— Small UI primitives ——— */
+
+function Section({
+  children,
+  label,
+  border,
+  shaded,
+}: {
+  children: React.ReactNode;
+  label?: string;
+  border?: boolean;
+  shaded?: boolean;
+}) {
+  return (
+    <section
+      className={[
+        border ? "border-t border-white/10" : "",
+        shaded ? "bg-white/5" : "",
+      ].join(" ")}
+    >
+      <div className="mx-auto max-w-6xl px-6 py-16">
+        {label ? <h2 className="text-3xl font-semibold">{label}</h2> : null}
+        {children}
+      </div>
+    </section>
+  );
+}
+
+function Grid3({ children }: { children: React.ReactNode }) {
+  return <div className="grid gap-8 md:grid-cols-3">{children}</div>;
+}
 
 function Card({
   emoji,
@@ -271,26 +311,11 @@ function Card({
   );
 }
 
-function Step({
-  number,
-  title,
-  lines,
-}: {
-  number: string;
-  title: string;
-  lines: string[];
-}) {
+function Block({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="relative rounded-2xl border border-white/10 bg-black p-6">
-      <div className="absolute -top-3 -left-3 flex h-10 w-10 items-center justify-center rounded-full bg-white text-black font-bold">
-        {number}
-      </div>
-      <h3 className="pl-10 text-xl font-semibold">{title}</h3>
-      <ul className="mt-3 space-y-2 pl-10 text-white/80">
-        {lines.map((l, i) => (
-          <li key={i} className="leading-relaxed">• {l}</li>
-        ))}
-      </ul>
+    <div className="mt-10">
+      <h3 className="text-xl font-semibold">{title}</h3>
+      <div className="mt-3">{children}</div>
     </div>
   );
 }
@@ -332,5 +357,28 @@ function KPI({ label, value }: { label: string; value: string }) {
       <div className="text-sm uppercase tracking-wide text-white/60">{label}</div>
       <div className="mt-2 text-2xl font-bold">{value}</div>
     </div>
+  );
+}
+
+function CTA({
+  href,
+  label,
+  variant = "ghost",
+}: {
+  href: string;
+  label: string;
+  variant?: "primary" | "accent" | "ghost";
+}) {
+  const base = "rounded-xl px-5 py-3 font-semibold";
+  const style =
+    variant === "primary"
+      ? "bg-white text-black hover:bg-white/90"
+      : variant === "accent"
+      ? "border border-emerald-400/30 bg-emerald-400/10 text-emerald-300 hover:bg-emerald-400/20"
+      : "border border-white/20 hover:bg-white/10";
+  return (
+    <Link href={href} className={`${base} ${style}`}>
+      {label}
+    </Link>
   );
 }
