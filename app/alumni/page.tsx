@@ -5,11 +5,11 @@ import Link from "next/link";
 export const metadata: Metadata = {
   title: "Gatishil Alumni Engine — SEBS → 6,743 Wards",
   description:
-    "Turn the SEBS network into a living engine: Make → Sell → Settle → Show. One OS for 6,743 wards, Friday payouts, public receipts.",
+    "Turn the SEBS network into a living engine: Make → Sell → Settle → Show. One OS for 6,743 wards, Friday payouts, public receipts, 2% platform fee.",
   openGraph: {
     title: "Gatishil Alumni Engine — SEBS → 6,743 Wards",
     description:
-      "Mobilize mentors, monetize micro-ventures, weekly settlements, and Sunlight proofs. No donors—just receipts.",
+      "Mobilize mentors, monetize micro-ventures, weekly settlements, Sunlight proofs. No donors—just receipts. 2% platform fee.",
     type: "website",
   },
 };
@@ -60,7 +60,75 @@ export default function AlumniEnginePage() {
         </Grid3>
       </Section>
 
-      {/* ADD: Self-Sustaining Plan (ELI15) */}
+      {/* What it is (Scope) — updated */}
+      <Section label="What it is (Scope)" shaded>
+        <Grid3>
+          <ScopeCard
+            title="Inventory"
+            lines={[
+              "Inputs, harvest lots, batch codes.",
+              "Movements: store ↔ truck ↔ kiosk.",
+            ]}
+          />
+          <ScopeCard
+            title="Procurement & Sales"
+            lines={[
+              "GRN from farmers/members.",
+              "Orders & invoices to buyers.",
+            ]}
+          />
+          <ScopeCard
+            title="Accounting"
+            lines={[
+              "Real-time double-entry.",
+              "Append-only; fixes via reversal.",
+            ]}
+          />
+          <ScopeCard
+            title="Investor Portal"
+            lines={[
+              "Fixed 10% model (Alumni Notes).",
+              "Balances/statements from ledger.",
+            ]}
+          />
+          <ScopeCard
+            title="HR"
+            lines={[
+              "Attendance → payroll accrual.",
+              "Payouts posted as journals.",
+            ]}
+          />
+          <ScopeCard
+            title="Governance"
+            lines={[
+              "Proposals & votes tied to money.",
+              "Nightly snapshots for history.",
+            ]}
+          />
+          <ScopeCard
+            title="Public Transparency"
+            lines={[
+              "Sunlight site with Verify.",
+              "Hash + daily snapshot to GitHub.",
+            ]}
+          />
+        </Grid3>
+      </Section>
+
+      {/* Users & Top Jobs — updated */}
+      <Section label="Users & Top Jobs" border>
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+          <UserCard who="Villager/Public" job='“Show me where money went and prove bills are real.”' />
+          <UserCard who="Farmer/Member" job='“Record my harvest; see if I’ve been paid.”' />
+          <UserCard who="Storekeeper" job='“Receive → move → dispatch stock simply.”' />
+          <UserCard who="CEO/Accountant" job='“Post decisions fast; corrections via reversal only.”' />
+          <UserCard who="Investor" job='“See principal + interest; download signed statement.”' />
+          <UserCard who="Member (voter)" job='“Propose, vote, and see the money move accordingly.”' />
+          <UserCard who="Auditor/Journalist" job='“Verify files and hashes without asking anyone.”' />
+        </div>
+      </Section>
+
+      {/* Self-Sustaining Plan (ELI15) */}
       <Section label="The Self-Sustaining Plan (ELI15)" shaded>
         {/* 1) Flywheel */}
         <Block title="1) The Flywheel (one sentence)">
@@ -80,12 +148,12 @@ export default function AlumniEnginePage() {
           </ul>
         </Block>
 
-        {/* 3) Money Model */}
+        {/* 3) Money Model — updated to 2% fee + Alumni Notes clarified */}
         <Block title="3) Money Model (ELI15 math that works)">
           <ul className="mt-3 space-y-2 text-white/80">
-            <li>• <b>Platform fee 8–12%</b> at umbrella pays hosting, ops, training, audits.</li>
-            <li>• <b>Alumni Notes 10%/yr</b> for assets (CNC/mushroom/bee/packaging), 12-month lock, statements + Sunlight proofs, strictly member deposits.</li>
-            <li>• <b>Pre-orders</b> (gift boxes/subscriptions) move cash forward without debt.</li>
+            <li>• <b>Platform fee: 2%</b> of selling price at umbrella (covers hosting, ops, training, audits).</li>
+            <li>• <b>Alumni Notes: 10%/yr</b> for productive assets (CNC/mushroom/bee/packaging), 12-month lock; statements generated straight from the ledger; <b>strictly member deposits</b> with Sunlight proofs.</li>
+            <li>• <b>Pre-orders</b> (gift boxes/subscriptions) pull cash forward without debt.</li>
             <li>• <b>Piece-rate + profit share</b>: villagers are paid the same week; no cash handling outside the bank.</li>
           </ul>
 
@@ -93,9 +161,9 @@ export default function AlumniEnginePage() {
             <h4 className="text-lg font-semibold">Conservative unit test</h4>
             <ul className="mt-3 space-y-1 text-white/80">
               <li>• Per ward after 90 days → <b>NPR 300,000/month GMV</b> (mushrooms + honey + 2 festival SKUs).</li>
-              <li>• Platform @10% = <b>NPR 30,000/ward/month</b> gross to umbrella.</li>
-              <li>• At just <b>1,000 wards active</b> → <b>NPR 3 crore/month</b> for ops/media/audits/training (bulk stays with wards).</li>
-              <li>• Cash-positive long before all <b>6,743 wards</b> are live.</li>
+              <li>• Platform @<b>2%</b> = <b>NPR 6,000/ward/month</b> to umbrella.</li>
+              <li>• At <b>1,000 wards active</b> → <b>NPR 60,00,000/month</b> for ops/media/audits/training (bulk stays with wards).</li>
+              <li>• Cash-positive well before all <b>6,743 wards</b> are live (plus pre-orders and alumni asset notes).</li>
             </ul>
           </div>
         </Block>
@@ -122,7 +190,7 @@ export default function AlumniEnginePage() {
               title="Wave 3 (Months 9–12): 1,000 → 6,743"
               points={[
                 "Clone Ward Kits like franchises; add regional 3PL lanes.",
-                "Flat, public platform fee; every Friday is payout day.",
+                "Flat, public 2% platform fee; every Friday is payout day.",
               ]}
             />
           </div>
@@ -146,7 +214,7 @@ export default function AlumniEnginePage() {
             <KPI label="Bank ≈ Ledger" value="≈ 0 variance" />
             <KPI label="Payouts on Schedule" value="100%" />
             <KPI label="# Households Paid / Week" value="Increasing" />
-            <KPI label="Umbrella Take-Rate" value="8–12%" />
+            <KPI label="Umbrella Take-Rate" value="2%" />
             <KPI label="Shipping Recovery" value="Tracked" />
             <KPI label="Return Rate" value="Low & falling" />
             <KPI label="Time-to-Payout" value="Friday sacred" />
@@ -167,7 +235,7 @@ export default function AlumniEnginePage() {
         <Block title="8) Why this makes the party self-sustaining (ELI15 justification)">
           <p className="text-white/80">
             Donor money fades. <b>Receipt-backed cashflow doesn’t.</b> When every ward earns weekly and every rupee
-            is visible, the <b>platform fee</b> quietly funds the party’s operations without favors. Gatishil becomes
+            is visible, a <b>2% platform fee</b> quietly funds operations without favors. Gatishil becomes
             Nepal’s lighthouse: dignity created locally, truth published nightly, movement powered by the people it serves.
           </p>
         </Block>
@@ -181,7 +249,7 @@ export default function AlumniEnginePage() {
         </div>
       </Section>
 
-      {/* 90-Day Alumni Sprint (kept concise) */}
+      {/* 90-Day Alumni Sprint */}
       <Section label="90-Day Alumni Sprint" border>
         <div className="grid gap-6 md:grid-cols-3">
           <Sprint
@@ -307,6 +375,19 @@ function Card({
       <div className="text-3xl">{emoji}</div>
       <h3 className="mt-3 text-xl font-semibold">{title}</h3>
       <p className="mt-2 text-white/80">{text}</p>
+    </div>
+  );
+}
+
+function ScopeCard({ title, lines }: { title: string; lines: string[] }) {
+  return (
+    <div className="rounded-2xl border border-white/10 bg-black p-6">
+      <h4 className="text-lg font-semibold">{title}</h4>
+      <ul className="mt-3 space-y-2 text-white/80">
+        {lines.map((l, i) => (
+          <li key={i}>• {l}</li>
+        ))}
+      </ul>
     </div>
   );
 }
