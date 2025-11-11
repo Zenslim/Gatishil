@@ -443,9 +443,14 @@ function Bullet({
 
 function KPI({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
-      <div className="text-sm uppercase tracking-wide text-white/60">{label}</div>
-      <div className="mt-2 text-2xl font-bold">{value}</div>
+    <div className="relative rounded-2xl border border-amber-400/30 bg-gradient-to-b from-amber-400/10 to-transparent p-5 shadow-[0_0_20px_rgba(251,191,36,0.25)] hover:shadow-[0_0_30px_rgba(251,191,36,0.5)] transition">
+      <div className="absolute inset-0 rounded-2xl bg-gradient-to-r from-amber-400/20 to-yellow-400/5 opacity-40 blur-xl pointer-events-none" />
+      <div className="relative text-sm uppercase tracking-wide text-amber-300 drop-shadow-sm">
+        {label}
+      </div>
+      <div className="relative mt-2 text-3xl font-extrabold text-amber-200 drop-shadow-[0_0_6px_rgba(251,191,36,0.6)]">
+        {value}
+      </div>
     </div>
   );
 }
