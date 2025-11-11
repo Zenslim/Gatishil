@@ -32,8 +32,8 @@ export default function AlumniEnginePage() {
           </p>
           <div className="mt-8 flex flex-wrap justify-center gap-3">
             <CTA href="/join?src=alumni" label="Join a Guild" variant="primary" />
-            <CTA href="/chautari" label="Visit Chauṭarī" />
-            <CTA href="/sunlight" label="See Sunlight (Proofs)" variant="accent" />
+            <CTA href="/chautari" label="Visit Chautari" />
+            <CTA href="/sunlight" label="See Transparent Ledger (Sunlight Proofs)" variant="accent" />
           </div>
         </div>
         <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(ellipse_at_top,rgba(16,185,129,0.15),rgba(0,0,0,0))]" />
@@ -73,7 +73,7 @@ export default function AlumniEnginePage() {
           <ScopeCard
             title="Procurement & Sales"
             lines={[
-              "GRN from farmers/members.",
+              "GRN (Goods Received Note) from farmers/members.",
               "Orders & invoices to buyers.",
             ]}
           />
@@ -92,7 +92,7 @@ export default function AlumniEnginePage() {
             ]}
           />
           <ScopeCard
-            title="HR"
+            title="HR (Human Resources)"
             lines={[
               "Attendance → payroll accrual.",
               "Payouts posted as journals.",
@@ -128,7 +128,7 @@ export default function AlumniEnginePage() {
         </div>
       </Section>
 
-      {/* Self-Sustaining Plan (ELI15) */}
+      {/* Self-Sustaining Plan */}
       <Section label="The Self-Sustaining Plan (ELI15)" shaded>
         {/* 1) Flywheel */}
         <Block title="1) The Flywheel (one sentence)">
@@ -149,10 +149,10 @@ export default function AlumniEnginePage() {
         </Block>
 
         {/* 3) Money Model */}
-        <Block title="3) Money Model (ELI15 math that works)">
+        <Block title="3) Money Model (math that works)">
           <ul className="mt-3 space-y-2 text-white/80">
             <li>• <b>Platform fee: 2%</b> of selling price at umbrella (covers hosting, ops, training, audits).</li>
-            <li>• <b>Alumni Notes: 10%/yr</b> for productive assets (CNC/mushroom/bee/packaging), 12-month lock; statements generated straight from the ledger; <b>strictly member deposits</b> with Sunlight proofs.</li>
+            <li>• <b>Alumni Notes: offer members a 10% annual interest on deposits that fund community projects, with every transaction fully verified through DAO Ledger proofs.</li>
             <li>• <b>Pre-orders</b> (gift boxes/subscriptions) pull cash forward without debt.</li>
             <li>• <b>Piece-rate + profit share</b>: villagers are paid the same week; no cash handling outside the bank.</li>
           </ul>
@@ -206,7 +206,7 @@ export default function AlumniEnginePage() {
           </ul>
         </Block>
 
-        {/* 6) KPIs */}
+        {/* 6) KPI (Key Performance Indicators) */}
         <Block title="6) KPIs that prove it’s real (fits on one screen)">
           <div className="mt-6 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
             <KPI label="Per Ward: GMV" value="Climbing monthly" />
@@ -222,7 +222,7 @@ export default function AlumniEnginePage() {
         </Block>
 
         {/* 7) Risks & Counters */}
-        <Block title="7) Risks → Built-in counters (ELI15)">
+        <Block title="7) Risks → Built-in counters">
           <ul className="mt-3 space-y-2 text-white/80">
             <li>• <b>Fraud/Leakage?</b> Append-only ledger + bank import + two-key payouts.</li>
             <li>• <b>Chaos at scale?</b> Same Ward Kit, same stickers, same windows. Rhythm beats meetings.</li>
@@ -232,7 +232,7 @@ export default function AlumniEnginePage() {
         </Block>
 
         {/* 8) Why Self-Sustaining */}
-        <Block title="8) Why this makes the party self-sustaining (ELI15 justification)">
+        <Block title="8) Why this makes the party self-sustaining (justification)">
           <p className="text-white/80">
             Donor money fades. <b>Receipt-backed cashflow doesn’t.</b> When every ward earns weekly and every rupee
             is visible, a <b>2% platform fee</b> quietly funds operations without favors. Gatishil becomes
