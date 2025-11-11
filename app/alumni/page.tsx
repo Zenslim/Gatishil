@@ -209,7 +209,7 @@ export default function AlumniEnginePage() {
         {/* 6) KPI (Key Performance Indicators) */}
         <Block title="6) KPIs that prove it’s real (fits on one screen)">
           <div className="mt-6 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            <KPI label="Per Ward: GMV" value="Climbing monthly" />
+            <KPI label="Per Ward: Gross Merchandise Value" value="Climbing monthly" />
             <KPI label="On-Time Dispatch" value="≥ 95%" />
             <KPI label="Bank ≈ Ledger" value="≈ 0 variance" />
             <KPI label="Payouts on Schedule" value="100%" />
