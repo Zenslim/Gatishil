@@ -129,7 +129,7 @@ export default function AlumniEnginePage() {
       </Section>
 
       {/* Self-Sustaining Plan */}
-      <Section label="The Self-Sustaining Plan (ELI15)" shaded>
+      <Section label="The Self-Sustaining Plan" shaded>
         {/* 1) Flywheel */}
         <Block title="1) The Flywheel (one sentence)">
           <p className="text-white/80">
@@ -189,7 +189,7 @@ export default function AlumniEnginePage() {
             <Sprint
               title="Wave 3 (Months 9–12): 1,000 → 6,743"
               points={[
-                "Clone Ward Kits like franchises; add regional 3PL lanes.",
+                "Clone Ward Kits like franchises; add regional Third-Party Logistics lanes.",
                 "Flat, public 2% platform fee; every Friday is payout day.",
               ]}
             />
