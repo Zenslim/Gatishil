@@ -60,7 +60,7 @@ export default function AlumniEnginePage() {
         </Grid3>
       </Section>
 
-      {/* What it is (Scope) — updated */}
+      {/* What it is (Scope) */}
       <Section label="What it is (Scope)" shaded>
         <Grid3>
           <ScopeCard
@@ -115,7 +115,7 @@ export default function AlumniEnginePage() {
         </Grid3>
       </Section>
 
-      {/* Users & Top Jobs — updated */}
+      {/* Users & Top Jobs */}
       <Section label="Users & Top Jobs" border>
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
           <UserCard who="Villager/Public" job='“Show me where money went and prove bills are real.”' />
@@ -148,7 +148,7 @@ export default function AlumniEnginePage() {
           </ul>
         </Block>
 
-        {/* 3) Money Model — updated to 2% fee + Alumni Notes clarified */}
+        {/* 3) Money Model */}
         <Block title="3) Money Model (ELI15 math that works)">
           <ul className="mt-3 space-y-2 text-white/80">
             <li>• <b>Platform fee: 2%</b> of selling price at umbrella (covers hosting, ops, training, audits).</li>
@@ -388,6 +388,15 @@ function ScopeCard({ title, lines }: { title: string; lines: string[] }) {
           <li key={i}>• {l}</li>
         ))}
       </ul>
+    </div>
+  );
+}
+
+function UserCard({ who, job }: { who: string; job: string }) {
+  return (
+    <div className="rounded-2xl border border-white/10 bg-black p-6">
+      <div className="text-sm uppercase tracking-wide text-white/60">{who}</div>
+      <div className="mt-2 text-white/90">{job}</div>
     </div>
   );
 }
