@@ -87,7 +87,7 @@ export default function AlumniEnginePage() {
           <ScopeCard
             title="Investor Portal"
             lines={[
-              "Fixed 10% model (Alumni Notes).",
+              "Fixed 5% model (Alumni Notes).",
               "Balances/statements from ledger.",
             ]}
           />
