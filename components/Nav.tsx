@@ -1,4 +1,3 @@
-// components/Nav.tsx
 'use client';
 
 import Link from 'next/link';
@@ -6,8 +5,24 @@ import { useEffect, useRef, useState } from 'react';
 import styles from './Nav.module.css';
 
 function Icon({ name }: { name: string }) {
-  // All icons are now colorful; no currentColor usage.
   switch (name) {
+    case 'cooperative':
+      return (
+        <svg className={styles.icon} viewBox="0 0 24 24" aria-hidden>
+          <circle cx="12" cy="12" r="10" fill="#FACC15" opacity="0.15" />
+          <path
+            d="M6 12a6 6 0 0 1 12 0v4H6v-4z"
+            fill="#FACC15"
+            opacity="0.8"
+          />
+          <path
+            d="M4 16h16M9 16v2a3 3 0 0 0 6 0v-2"
+            stroke="#FACC15"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+          />
+        </svg>
+      );
     case 'about':
       return (
         <svg className={styles.icon} viewBox="0 0 24 24" aria-hidden>
@@ -93,7 +108,6 @@ function Icon({ name }: { name: string }) {
   }
 }
 
-/** Blue circular “account” icon (kept colorful) */
 function BlueLoginIcon({ className = '' }: { className?: string }) {
   return (
     <svg viewBox="0 0 48 48" width="26" height="26" className={className} aria-hidden>
@@ -109,15 +123,12 @@ export default function Nav() {
   const panelRef = useRef<HTMLDivElement>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
 
-  // Body scroll lock
   useEffect(() => {
     const el = document.documentElement;
-    if (open) el.style.overflow = 'hidden';
-    else el.style.overflow = '';
+    el.style.overflow = open ? 'hidden' : '';
     return () => { el.style.overflow = ''; };
   }, [open]);
 
-  // Close on outside click
   useEffect(() => {
     function onDocClick(e: MouseEvent) {
       if (!open) return;
@@ -130,7 +141,6 @@ export default function Nav() {
     return () => document.removeEventListener('mousedown', onDocClick);
   }, [open]);
 
-  // Close on Escape
   useEffect(() => {
     function onKey(e: KeyboardEvent) { if (e.key === 'Escape') setOpen(false); }
     document.addEventListener('keydown', onKey);
@@ -175,13 +185,13 @@ export default function Nav() {
         </div>
       </div>
 
-      {/* Full-screen Drawer */}
+      {/* Drawer */}
       <div id="global-drawer" className={`${styles.drawer} ${open ? styles.isOpen : ''}`}>
         <div className={styles.backdrop} onClick={() => setOpen(false)} />
-        <div ref={panelRef} className={styles.panel} role="dialog" aria-modal="true" aria-label="Main menu">
+        <div ref={panelRef} className={styles.panel} role="dialog" aria-modal="true">
           <div className={styles.panelHead}>
             <div className={styles.panelTitle}>Menu</div>
-            <button className={styles.closeBtn} onClick={() => setOpen(false)} aria-label="Close menu">✕</button>
+            <button className={styles.closeBtn} onClick={() => setOpen(false)}>✕</button>
           </div>
 
           <div className={styles.list}>
@@ -199,6 +209,9 @@ export default function Nav() {
             <Link href="/proposals" className={styles.link} onClick={() => setOpen(false)}><Icon name="proposals" /> Proposals</Link>
             <Link href="/members" className={styles.link} onClick={() => setOpen(false)}><Icon name="members" /> Members</Link>
             <Link href="/tax" className={styles.link} onClick={() => setOpen(false)}><Icon name="tax" /> Tax Mirror</Link>
+            <Link href="https://www.gatishilnepal.org/cooperative" className={styles.link} target="_blank" rel="noopener noreferrer" onClick={() => setOpen(false)}>
+              <Icon name="cooperative" /> Cooperative
+            </Link>
             <Link href="/#manifesto" className={styles.link} onClick={() => setOpen(false)}><Icon name="manifesto" /> Manifesto</Link>
             <Link href="/faq#dao" className={styles.link} onClick={() => setOpen(false)}><Icon name="faq" /> FAQ</Link>
 
