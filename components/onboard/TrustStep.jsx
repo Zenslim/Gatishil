@@ -2,14 +2,14 @@
 
 import React, { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { getSupabaseBrowser } from '@/lib/supabaseClient';
+import { supabase } from '@/lib/supabase/unifiedClient';
 import { createLocalPin, hasLocalPin } from '@/lib/localPin';
 
 /** Wait for a Supabase session to exist (immediately or within a short timeout). */
 async function waitForSession(ms = 8000) {
-  const supabase = getSupabaseBrowser();
+  const client = supabase;
   // 1) Already signed in?
-  const { data: { session } } = await supabase.auth.getSession();
+  const { data: { session } } = await client.auth.getSession();
   if (session?.access_token) return session;
 
   // 2) Otherwise, wait for the SIGNED_IN event
@@ -22,7 +22,7 @@ async function waitForSession(ms = 8000) {
       reject(new Error('No active session'));
     }, ms);
 
-    const { data: { subscription: sub } } = supabase.auth.onAuthStateChange((event, s) => {
+    const { data: { subscription: sub } } = client.auth.onAuthStateChange((event, s) => {
       if (event === 'SIGNED_IN' && s?.access_token && !done) {
         done = true;
         clearTimeout(timer);

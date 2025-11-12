@@ -1,6 +1,6 @@
 "use client";
 
-import { getSupabaseBrowserClient } from "@/lib/supabaseClient";
+import { supabase } from "@/lib/supabase/unifiedClient";
 import type { RealtimePostgresInsertPayload } from "@supabase/supabase-js";
 
 export type ActionType =
@@ -139,11 +139,10 @@ export type InsertActionInput = {
 };
 
 export async function logSunlightAction(input: InsertActionInput) {
-  const client = getSupabaseBrowserClient();
   const {
     data: { user },
     error: userError,
-  } = await client.auth.getUser();
+  } = await supabase.auth.getUser();
 
   if (userError) {
     throw userError;
@@ -162,7 +161,7 @@ export async function logSunlightAction(input: InsertActionInput) {
     tole_id: input.tole_id ?? null,
   } satisfies Omit<SunlightAction, "id" | "created_at">;
 
-  const { data, error } = await client
+  const { data, error } = await supabase
     .from("actions")
     .insert(payload)
     .select()
@@ -176,8 +175,7 @@ export async function logSunlightAction(input: InsertActionInput) {
 }
 
 export async function fetchRecentActions(limit = 32) {
-  const client = getSupabaseBrowserClient();
-  const { data, error } = await client
+  const { data, error } = await supabase
     .from("actions")
     .select("id, user_id, action_type, description, voice_url, ward_id, tole_id, created_at")
     .order("created_at", { ascending: false })

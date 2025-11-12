@@ -1,5 +1,6 @@
 import { cookies } from 'next/headers';
-import { createServerClient, type CookieOptions } from '@supabase/ssr';
+import { createServerClient, type CookieOptions } from '@supabase/auth-helpers-nextjs';
+import type { Database } from '@/types/supabase';
 
 type LegacyTokenPayload = {
   access_token?: string;
@@ -30,7 +31,7 @@ export function getServerSupabase() {
   const cookieStore = cookies();
   const legacy = getLegacyTokens(cookieStore.get('supabase-auth-token')?.value);
 
-  return createServerClient(url, anon, {
+  return createServerClient<Database>(url, anon, {
     cookies: {
       get(name: string) {
         const direct = cookieStore.get(name)?.value;

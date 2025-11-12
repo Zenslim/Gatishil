@@ -1,6 +1,7 @@
 // lib/supabase/server.ts
 import { cookies as nextCookies } from 'next/headers';
-import { createServerClient, type CookieOptions } from '@supabase/ssr';
+import { createServerClient, type CookieOptions } from '@supabase/auth-helpers-nextjs';
+import type { Database } from '@/types/supabase';
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
@@ -16,7 +17,7 @@ if (!url || !anon) {
 export function getSupabaseServer() {
   const store = nextCookies();
 
-  return createServerClient(url, anon, {
+  return createServerClient<Database>(url, anon, {
     cookies: {
       // Read the full cookie jar for this request
       getAll() {

@@ -1,7 +1,7 @@
 "use client";
 import Image from "next/image";
 import { useEffect, useState, useRef } from "react";
-import { supabaseBrowser } from "@/lib/supabaseBrowser";
+import { supabase } from "@/lib/supabase/unifiedClient";
 import OnboardCardLayout from "./OnboardCardLayout";
 import CameraCapture from "./CameraCapture";
 import ImageEditor from "./ImageEditor";
@@ -51,9 +51,9 @@ export default function NameFaceStep({ t, onBack, onNext }) {
     const mime = blob.type || "image/webp";
     const ext = (mime.split("/")[1] || "webp").toLowerCase();
     const key = `${uid}/${Date.now()}.${ext}`;
-    const up = await supabaseBrowser.storage.from(AVATAR_BUCKET).upload(key, blob, { contentType: mime, upsert: true });
+    const up = await supabase.storage.from(AVATAR_BUCKET).upload(key, blob, { contentType: mime, upsert: true });
     if (up.error) throw up.error;
-    return supabaseBrowser.storage.from(AVATAR_BUCKET).getPublicUrl(up.data.path).data.publicUrl;
+    return supabase.storage.from(AVATAR_BUCKET).getPublicUrl(up.data.path).data.publicUrl;
   };
 
   const confirmAndSave = async (imgBlob) => {
@@ -63,7 +63,7 @@ export default function NameFaceStep({ t, onBack, onNext }) {
       if (previewUrl?.startsWith("blob:")) URL.revokeObjectURL(previewUrl);
       setPreviewUrl(localUrl);
 
-      const { data: { user } } = await supabaseBrowser.auth.getUser();
+      const { data: { user } } = await supabase.auth.getUser();
       if (!user?.id) throw new Error("No user");
 
       const uid = user.id;
@@ -84,7 +84,7 @@ export default function NameFaceStep({ t, onBack, onNext }) {
         updated_at: new Date().toISOString(),
       };
 
-      const { error } = await supabaseBrowser
+      const { error } = await supabase
         .from("profiles")
         .upsert(row, { onConflict: "id" });
       if (error) throw error;

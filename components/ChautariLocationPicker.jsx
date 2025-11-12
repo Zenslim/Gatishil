@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { getSupabaseBrowser } from "@/lib/supabaseClient";
+import { supabase as unifiedSupabase } from "@/lib/supabase/unifiedClient";
 
 /**
  * ChautariLocationPicker.jsx — Auto-Approve Edition
@@ -15,7 +15,7 @@ export default function ChautariLocationPicker({
 }) {
   const supabaseRef = useRef(null);
   if (!supabaseRef.current) {
-    supabaseRef.current = supabaseProp ?? getSupabaseBrowser();
+    supabaseRef.current = supabaseProp ?? unifiedSupabase;
   }
   const supabase = supabaseRef.current;
 

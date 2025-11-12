@@ -2,7 +2,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import dynamic from 'next/dynamic'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { supabase } from '@/lib/supabaseClient'
+import { supabase } from '@/lib/supabase/unifiedClient'
 
 type Props = { lang?: 'en' | 'np' }
 
