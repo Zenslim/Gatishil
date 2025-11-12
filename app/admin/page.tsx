@@ -1,5 +1,6 @@
-// app/admin/page.tsx
 "use client";
+
+// app/admin/page.tsx
 export const dynamic = "force-dynamic";
 export const revalidate = false;
 

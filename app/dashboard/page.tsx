@@ -5,7 +5,7 @@ import { supabaseServer } from '@/lib/supabase/server';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-export const revalidate = 0;
+export const revalidate = false;
 
 const AVATAR_HOST_SUFFIXES = ['supabase.co', 'googleusercontent.com'];
 const AVATAR_EXACT_HOSTS = new Set([
