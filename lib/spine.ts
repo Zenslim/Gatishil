@@ -3,10 +3,10 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/supabase";
-import { getSupabaseServer } from "@/lib/supabase/server";
+import { supabaseServer } from "@/lib/supabase/server";
 
 function createClient(): SupabaseClient<Database> {
-  return getSupabaseServer();
+  return supabaseServer();
 }
 
 /**

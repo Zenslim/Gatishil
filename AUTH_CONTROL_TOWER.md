@@ -37,7 +37,7 @@ This control tower distills every moving part of Gatishil Nepal’s authenticati
 | --- | --- | --- | --- | --- |
 | `lib/supabaseClient.ts` | Client-only re-export of Supabase browser singleton. | `supabase`, `getSupabaseBrowser`. | Most client flows (Join, onboarding, login). | Wraps `lib/supabase/browser`. |
 | `lib/supabase/browser.ts` | Creates singleton browser client and mirrors tokens into cookies. | `getSupabaseBrowser`, `supabase`. | Login & onboarding UIs. | Syncs via `/api/auth/sync` on sign-in/refresh. |
-| `lib/supabase/server.ts` | SSR Supabase client respecting modern & legacy cookies. | `getSupabaseServer`. | `/dashboard`. | Reads `sb-*` cookies, falls back to legacy JSON. |
+| `lib/supabase/server.ts` | SSR Supabase client respecting modern cookies API. | `supabaseServer`. | `/dashboard`. | Uses `@supabase/ssr` helpers with Next.js cookies. |
 | `lib/supabaseServer.ts` | Older server helper with writeable cookies. | `getServerSupabase`. | `/login`. | Supports legacy cookie decoding. |
 | `lib/auth/verifyOtpClient.ts` | Legacy browser helper for the old unified `/api/otp/verify` endpoint. | `verifyOtpAndSync`. | *(unused after OTP lane split)*. | Retained for reference; new flows call Supabase directly for email and `/api/otp/phone/verify` for SMS. |
 | `lib/auth/waitForSession.ts` | Polls Supabase until a session appears. | `waitForSession`. | `verifyOtpAndSync`, `/join` email flow. | Returns tokens for cookie sync. |

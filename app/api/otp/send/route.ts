@@ -1,11 +1,8 @@
 // app/api/otp/send/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseServer } from '@/lib/supabase/server';
+import { supabaseServer } from '@/lib/supabase/server';
 
 export const runtime = 'nodejs';
-
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const SUPABASE_ANON = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
 const normalizePhone = (raw: string) => {
   const trimmed = (raw ?? '').trim();
@@ -33,8 +30,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid phone' }, { status: 400 });
     }
 
-    const res = new NextResponse(null, { status: 204 });
-    const supabase = getSupabaseServer({ request: req, response: res });
+    const supabase = supabaseServer();
 
     const { error } = await supabase.auth.signInWithOtp({ phone });
     if (error) {
@@ -44,7 +40,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: msg }, { status });
     }
 
-    return res; // 204
+    return new NextResponse(null, { status: 204 });
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || 'Server error' }, { status: 500 });
   }

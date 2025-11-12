@@ -1,6 +1,6 @@
 // app/api/otp/verify/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseServer } from '@/lib/supabase/server';
+import { supabaseServer } from '@/lib/supabase/server';
 
 export const runtime = 'nodejs';
 
@@ -35,9 +35,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid phone or token' }, { status: 400 });
     }
 
-    // Attach cookies to THIS response instance
-    const res = new NextResponse(null, { status: 204 });
-    const supabase = getSupabaseServer({ request: req, response: res });
+    const supabase = supabaseServer();
 
     // 1) Verify OTP on the server (should return a session)
     const { data, error } = await supabase.auth.verifyOtp({
@@ -61,8 +59,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'No session after verify' }, { status: 401 });
     }
 
-    // Success: cookies are now on `res`, client should redirect on 204
-    return res;
+    // Success: cookies are now stored; respond 204 to trigger client redirect
+    return new NextResponse(null, { status: 204 });
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || 'Server error' }, { status: 500 });
   }

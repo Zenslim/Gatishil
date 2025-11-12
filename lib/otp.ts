@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
-import type { Database } from "@/types/supabase";
-import { getSupabaseServer } from "@/lib/supabase/server";
+import { supabaseServer } from "@/lib/supabase/server";
 
 /**
  * Unified OTP (Email + Phone/SMS) for Next.js App Router.
@@ -33,7 +32,7 @@ function isPhoneVerify(p: any): p is { phone: string; token: string } {
 }
 
 export async function handleSend(req: Request): Promise<Response> {
-  const supabase = getSupabaseServer();
+  const supabase = supabaseServer();
 
   let body: SendPayload;
   try {
@@ -85,7 +84,7 @@ export async function handleSend(req: Request): Promise<Response> {
 }
 
 export async function handleVerify(req: Request): Promise<Response> {
-  const supabase = getSupabaseServer();
+  const supabase = supabaseServer();
 
   let body: VerifyPayload;
   try {

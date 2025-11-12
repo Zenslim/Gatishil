@@ -1,6 +1,6 @@
 // app/api/auth/sync/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseServer } from '@/lib/supabase/server';
+import { supabaseServer } from '@/lib/supabase/server';
 
 export const runtime = 'nodejs';
 
@@ -8,9 +8,8 @@ export const runtime = 'nodejs';
  * GET /api/auth/sync
  * Returns { authenticated } by reading server cookies.
  */
-export async function GET(req: NextRequest) {
-  const res = new NextResponse(null, { status: 200 });
-  const supabase = getSupabaseServer({ request: req, response: res });
+export async function GET() {
+  const supabase = supabaseServer();
 
   const { data } = await supabase.auth.getUser();
   return NextResponse.json({ authenticated: !!data?.user }, { status: 200 });
@@ -29,8 +28,6 @@ export async function GET(req: NextRequest) {
  */
 export async function POST(req: NextRequest) {
   try {
-    const res = new NextResponse(null, { status: 200 });
-
     // Read tokens from JSON body (or fallback to headers)
     let access_token = '';
     let refresh_token = '';
@@ -63,7 +60,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Create server client bound to this response and set the session
-    const supabase = getSupabaseServer({ request: req, response: res });
+    const supabase = supabaseServer();
     const { error: setErr } = await supabase.auth.setSession({
       access_token,
       refresh_token,
@@ -83,7 +80,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json(
       { ok: true, user: { id: userData.user.id, email: userData.user.email } },
-      { status: 200, headers: res.headers }
+      { status: 200 }
     );
   } catch (e: any) {
     return NextResponse.json(

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseServer } from '@/lib/supabase/server';
+import { supabaseServer } from '@/lib/supabase/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { derivePasswordFromPinSync } from '@/lib/crypto/pin';
 import { normalizeNepalToDB } from '@/lib/phone/nepal';
@@ -115,8 +115,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Account email missing' }, { status: 500 });
     }
 
-    const res = new NextResponse(null, { status: 204 });
-    const supabaseSSR = getSupabaseServer({ request: req, response: res });
+    const supabaseSSR = supabaseServer();
 
     let { error: signInErr } = await supabaseSSR.auth.signInWithPassword({
       email: authEmail,
@@ -145,7 +144,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    return res;
+    return new NextResponse(null, { status: 204 });
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || 'Unexpected error' }, { status: 500 });
   }

@@ -1,5 +1,6 @@
 "use client";
 export const dynamic = "force-dynamic";
+export const revalidate = false;
 
 import { Suspense } from "react";
 import OnboardingFlow from "@/components/OnboardingFlow";

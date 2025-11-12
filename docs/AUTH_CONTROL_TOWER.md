@@ -2,7 +2,7 @@
 
 **Status note:** Email/Phone OTP → Onboard desync was traced to cookie commits and schema drift.
 
-- `/api/auth/sync` now standardizes on `getSupabaseServer({ response })` and commits cookies on every POST/GET.
+- `/api/auth/sync` now standardizes on `supabaseServer()` and commits cookies on every POST/GET.
 - OTP handlers in `lib/otp.ts` call `commitCookies(res)` after successful verification, eliminating middleware loops.
 
 **Resolved items**

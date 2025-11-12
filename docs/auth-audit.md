@@ -196,12 +196,12 @@ if (!isSignedIn(req)) {
 }
 ```
 
-- **Protected layout:** `app/(protected)/layout.tsx` also guards server-rendered routes, calling `getSupabaseServer().auth.getUser()` and `redirect('/login?next=/dashboard')` when no user is returned. This runs after middleware and depends on server cookies being present.
+- **Protected layout:** `app/(protected)/layout.tsx` also guards server-rendered routes, calling `supabaseServer().auth.getUser()` and `redirect('/login?next=/dashboard')` when no user is returned. This runs after middleware and depends on server cookies being present.
 
 _Server layout enforces login if Supabase server client has no user._
 ```tsx
 // app/(protected)/layout.tsx (lines 7-16)
-const supa = getSupabaseServer();
+const supa = supabaseServer();
 const { data: { user } } = await supa.auth.getUser();
 
 if (!user) {
