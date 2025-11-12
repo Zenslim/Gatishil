@@ -1,9 +1,8 @@
-'use client';
+"use client";
+export const dynamic = "force-dynamic";
 
-import { Suspense } from 'react';
-import OnboardingFlow from '@/components/OnboardingFlow';
-
-export const dynamic = 'force-dynamic';
+import { Suspense } from "react";
+import OnboardingFlow from "@/components/OnboardingFlow";
 
 function Flow() {
   // Keep this tiny wrapper so Suspense can isolate the hook usage inside the tree.

@@ -1,5 +1,6 @@
 // app/auth/callback/Client.tsx
 "use client";
+export const dynamic = "force-dynamic";
 
 import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
