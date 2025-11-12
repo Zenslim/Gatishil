@@ -1,6 +1,6 @@
 "use client";
 
-import { getSupabaseBrowserClient } from "@/lib/supabaseClient";
+import { supabase } from "@/lib/supabase/unifiedClient";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import type { ActionType, SunlightAction } from "@/lib/sunlight";
 
@@ -9,8 +9,7 @@ export interface ActionRealtimeCallbacks {
 }
 
 export function subscribeToActionStream(callbacks: ActionRealtimeCallbacks = {}): RealtimeChannel {
-  const client = getSupabaseBrowserClient();
-  const channel = client
+  const channel = supabase
     .channel("chautari-actions")
     .on("postgres_changes", { event: "INSERT", schema: "public", table: "actions" }, (payload) => {
       if (callbacks.onInsert) {

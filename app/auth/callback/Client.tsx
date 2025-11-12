@@ -1,9 +1,9 @@
 // app/auth/callback/Client.tsx
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { getSupabaseBrowser } from "@/lib/supabaseClient";
+import { supabase } from "@/lib/supabase/unifiedClient";
 
 export default function Client() {
   const router = useRouter();
@@ -16,25 +16,10 @@ export default function Client() {
   const token_hash = sp.get("token_hash"); // Email magic link / OTP
   const next = sp.get("next") || "/onboard?src=join";
 
-  const supabase = useMemo(() => {
-    try {
-      return getSupabaseBrowser();
-    } catch (e) {
-      console.error(e);
-      return null;
-    }
-  }, []);
-
   useEffect(() => {
     let cancelled = false;
 
     async function run() {
-      if (!supabase) {
-        setStatus("error");
-        setMessage("Auth client is not configured.");
-        return;
-      }
-
       // If we already have a session, skip exchange and go straight to `next`.
       const { data: sessionData } = await supabase.auth.getSession();
       if (sessionData.session) {
@@ -108,7 +93,7 @@ export default function Client() {
     return () => {
       cancelled = true;
     };
-    }, [supabase, code, token_hash, next, router]);
+    }, [code, token_hash, next, router]);
 
   // Minimal UI feedback
   return (

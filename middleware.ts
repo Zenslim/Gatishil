@@ -3,7 +3,8 @@
 
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
-import { createServerClient } from '@supabase/ssr';
+import { createMiddlewareClient } from '@supabase/auth-helpers-nextjs';
+import type { Database } from '@/types/supabase';
 
 // Single source of truth: protected path prefixes
 const PROTECTED = ['/dashboard', '/onboard', '/people'];
@@ -39,29 +40,13 @@ export async function middleware(req: NextRequest) {
   // Create a mutable response; Supabase may rotate cookies into it
   const res = NextResponse.next();
 
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-  if (!url || !anon) {
-    // Fail-open if envs are missing to avoid lockout in production
+  let supabase;
+  try {
+    supabase = createMiddlewareClient<Database>({ req, res });
+  } catch (error) {
+    // Fail open if Supabase env vars are not configured
     return res;
   }
-
-  // Edge-safe cookie adapter: read from req, write into the response we return
-  const supabase = createServerClient(url, anon, {
-    cookies: {
-      getAll: () => req.cookies.getAll(),
-      setAll: (cookiesToSet) => {
-        for (const cookie of cookiesToSet) {
-          res.cookies.set({
-            ...cookie,
-            // Normalize secure defaults on the edge
-            sameSite: cookie.sameSite ?? 'lax',
-            secure: cookie.secure ?? true,
-          });
-        }
-      },
-    },
-  });
 
   // Touch auth to both verify and give Supabase a chance to refresh cookies
   const {

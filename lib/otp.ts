@@ -1,8 +1,8 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
-import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
-import { createServerClient, type CookieOptions } from "@supabase/ssr";
+import { createRouteHandlerClient, createServerClient, type CookieOptions } from "@supabase/auth-helpers-nextjs";
 import type { Session } from "@supabase/supabase-js";
+import type { Database } from "@/types/supabase";
 
 /**
  * Unified OTP (Email + Phone/SMS) for Next.js App Router.
@@ -38,7 +38,7 @@ function isPhoneVerify(p: any): p is { phone: string; token: string } {
 
 export async function handleSend(req: Request): Promise<Response> {
   const cookieStore = cookies();
-  const supabase = createRouteHandlerClient({
+  const supabase = createRouteHandlerClient<Database>({
     cookies: () => cookieStore,
     supabaseUrl: process.env.SUPABASE_URL,
     supabaseKey: process.env.SUPABASE_ANON_KEY,
@@ -95,7 +95,7 @@ export async function handleSend(req: Request): Promise<Response> {
 
 export async function handleVerify(req: Request): Promise<Response> {
   const cookieStore = cookies();
-  const supabase = createRouteHandlerClient({
+  const supabase = createRouteHandlerClient<Database>({
     cookies: () => cookieStore,
     supabaseUrl: process.env.SUPABASE_URL,
     supabaseKey: process.env.SUPABASE_ANON_KEY,
@@ -158,7 +158,7 @@ async function attachSessionCookies(response: NextResponse, session: Session, co
   if (!supabaseUrl || !supabaseKey) return;
 
   try {
-    const supabase = createServerClient(supabaseUrl, supabaseKey, {
+    const supabase = createServerClient<Database>(supabaseUrl, supabaseKey, {
       cookies: {
         get(name: string) {
           return cookieStore.get(name)?.value;

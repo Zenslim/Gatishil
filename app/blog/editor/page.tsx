@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
-import { supabase } from "@/lib/supabaseClient";
+import { supabase } from "@/lib/supabase/unifiedClient";
 import { sealAndPublish } from "@/lib/blogApi";
 import { EditorLayout } from "@/components/blog/EditorLayout";
 const MDXEditor = dynamic(() => import("@/components/blog/MDXEditor"), { ssr: false });

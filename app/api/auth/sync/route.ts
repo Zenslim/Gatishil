@@ -1,6 +1,7 @@
 // app/api/auth/sync/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { createServerClient, type CookieOptions } from '@supabase/ssr';
+import { createServerClient, type CookieOptions } from '@supabase/auth-helpers-nextjs';
+import type { Database } from '@/types/supabase';
 
 export const runtime = 'nodejs';
 
@@ -12,7 +13,7 @@ const SUPABASE_ANON = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
  * and WRITE updated auth cookies onto the same NextResponse we return.
  */
 function getSupabase(req: NextRequest, res: NextResponse) {
-  return createServerClient(SUPABASE_URL, SUPABASE_ANON, {
+  return createServerClient<Database>(SUPABASE_URL, SUPABASE_ANON, {
     cookies: {
       get(name: string) {
         return req.cookies.get(name)?.value;

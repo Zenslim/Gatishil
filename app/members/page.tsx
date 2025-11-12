@@ -1,9 +1,9 @@
 // app/members/page.tsx
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { User } from '@supabase/supabase-js';
-import { getSupabaseBrowser } from '@/lib/supabaseClient';
+import { supabase } from '@/lib/supabase/unifiedClient';
 
 type PublicCard = {
   id: string;
@@ -27,8 +27,6 @@ export default function MembersPage() {
   const [photo, setPhoto] = useState('');
   const [region, setRegion] = useState('');
   const [skillsCsv, setSkillsCsv] = useState(''); // "farmer, designer"
-
-  const supabase = useMemo(() => getSupabaseBrowser(), []);
 
   // 1) find current signed-in user (needed for RPC)
   useEffect(() => {

@@ -1,8 +1,8 @@
 // app/status/page.tsx
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import { getSupabaseBrowserClient } from '@/lib/supabaseClient';
+import { useEffect, useState } from 'react';
+import { supabase } from '@/lib/supabase/unifiedClient';
 
 type Probe = {
   label: string;
@@ -17,8 +17,6 @@ export default function StatusPage() {
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
-
-  const supabase = useMemo(() => getSupabaseBrowserClient(), []);
 
   useEffect(() => {
     const run = async () => {
@@ -130,7 +128,7 @@ export default function StatusPage() {
     };
 
     run();
-  }, [supabase, supabaseUrl, supabaseAnonKey]);
+  }, [supabaseUrl, supabaseAnonKey]);
 
   const allGood =
     probes.length > 0 &&
