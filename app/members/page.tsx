@@ -3,7 +3,7 @@
 
 import { useEffect, useState } from 'react';
 import { User } from '@supabase/supabase-js';
-import { supabase } from '@/lib/supabase/unifiedClient';
+import { supabase } from '@/lib/supabase/client';
 
 type PublicCard = {
   id: string;

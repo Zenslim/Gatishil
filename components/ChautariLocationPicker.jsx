@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { supabase as unifiedSupabase } from "@/lib/supabase/unifiedClient";
+import { supabase as unifiedSupabase } from "@/lib/supabase/client";
 
 /**
  * ChautariLocationPicker.jsx — Auto-Approve Edition

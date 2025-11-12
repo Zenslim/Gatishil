@@ -8,7 +8,7 @@ import ComboBoxMulti from "./ComboBoxMulti";
 import IntroSky from "./IntroSky";
 import AwakenedSky from "./AwakenedSky";
 import { loadOptions, bundledOptions } from "@/lib/atmaOptions";
-import { supabase } from "@/lib/supabase/unifiedClient";
+import { supabase } from "@/lib/supabase/client";
 
 const ELEMENTS = [
   { key: "occupation", id: "earth", planet: { name: "Earth", src: "/planet/earth.png", from: "bottom" }, staticLabel: "Your ROLE in SOCIETY", whispers: ["What work anchors your day?","What is your current role in society?","What’s your present profession?"] },

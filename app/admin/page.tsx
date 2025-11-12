@@ -4,7 +4,7 @@
 import dynamic from "next/dynamic";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { supabase } from "@/lib/supabase/unifiedClient";
+import { supabase } from "@/lib/supabase/client";
 
 const AdminClient = dynamic(() => import("./AdminClient"), { ssr: false });
 

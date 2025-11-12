@@ -1,7 +1,7 @@
 "use client";
 import Image from "next/image";
 import { useEffect, useState, useRef } from "react";
-import { supabase } from "@/lib/supabase/unifiedClient";
+import { supabase } from "@/lib/supabase/client";
 import OnboardCardLayout from "./OnboardCardLayout";
 import CameraCapture from "./CameraCapture";
 import ImageEditor from "./ImageEditor";

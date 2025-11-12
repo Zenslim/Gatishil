@@ -1,6 +1,6 @@
 "use client";
 
-import { supabase } from "@/lib/supabase/unifiedClient";
+import { supabase } from "@/lib/supabase/client";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import type { ActionType, SunlightAction } from "@/lib/sunlight";
 

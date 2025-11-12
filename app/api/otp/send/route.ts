@@ -1,7 +1,6 @@
 // app/api/otp/send/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { createServerClient, type CookieOptions } from '@supabase/auth-helpers-nextjs';
-import type { Database } from '@/types/supabase';
+import { getSupabaseServer } from '@/lib/supabase/server';
 
 export const runtime = 'nodejs';
 
@@ -16,19 +15,6 @@ const normalizePhone = (raw: string) => {
   if (digits.startsWith('977')) return `+${digits}`;
   return `+977${digits}`;
 };
-
-const getSupabaseSSR = (req: NextRequest, res: NextResponse) =>
-  createServerClient<Database>(SUPABASE_URL, SUPABASE_ANON, {
-    cookies: {
-      get: (name: string) => req.cookies.get(name)?.value,
-      set: (name: string, value: string, options: CookieOptions) => {
-        res.cookies.set({ name, value, ...options });
-      },
-      remove: (name: string, options: CookieOptions) => {
-        res.cookies.set({ name, value: '', ...options });
-      },
-    },
-  });
 
 export function OPTIONS() {
   return new NextResponse(null, { status: 204 });
@@ -48,7 +34,7 @@ export async function POST(req: NextRequest) {
     }
 
     const res = new NextResponse(null, { status: 204 });
-    const supabase = getSupabaseSSR(req, res);
+    const supabase = getSupabaseServer({ request: req, response: res });
 
     const { error } = await supabase.auth.signInWithOtp({ phone });
     if (error) {

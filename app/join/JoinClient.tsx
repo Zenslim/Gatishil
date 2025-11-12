@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { supabase } from '@/lib/supabase/unifiedClient';
+import { supabase } from '@/lib/supabase/client';
 import { getFriendlySupabaseEmailError } from '@/lib/auth/emailErrorHints';
 
 type Tab = 'phone' | 'email';

@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { supabase } from "@/lib/supabase/unifiedClient";
+import { supabase } from "@/lib/supabase/client";
 import OnboardCardLayout from "./OnboardCardLayout";
 import ChautariLocationPicker from "../ChautariLocationPicker";
 

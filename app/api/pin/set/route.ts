@@ -1,10 +1,9 @@
 // app/api/pin/set/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { createServerClient, type CookieOptions } from '@supabase/auth-helpers-nextjs';
+import { getSupabaseServer } from '@/lib/supabase/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { derivePasswordFromPinSync } from '@/lib/crypto/pin';
 import { randomBytes } from 'crypto';
-import type { Database } from '@/types/supabase';
 
 export const runtime = 'nodejs'; // Node crypto + SSR cookie adapter
 
@@ -12,19 +11,6 @@ const ENABLED = process.env.NEXT_PUBLIC_ENABLE_TRUST_PIN === 'true';
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_ANON = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const PIN_PEPPER = process.env.PIN_PEPPER;
-
-const getSupabaseSSR = (req: NextRequest, res: NextResponse) =>
-  createServerClient<Database>(SUPABASE_URL!, SUPABASE_ANON!, {
-    cookies: {
-      get: (name: string) => req.cookies.get(name)?.value,
-      set: (name: string, value: string, options: CookieOptions) => {
-        res.cookies.set({ name, value, ...options });
-      },
-      remove: (name: string, options: CookieOptions) => {
-        res.cookies.set({ name, value: '', ...options });
-      },
-    },
-  });
 
 export function OPTIONS() {
   return new NextResponse(null, { status: 204 });
@@ -49,7 +35,7 @@ export async function POST(req: NextRequest) {
 
     // Bind SSR client to request/response cookies
     const res = new NextResponse(null, { status: 204 });
-    const supabaseSSR = getSupabaseSSR(req, res);
+    const supabaseSSR = getSupabaseServer({ request: req, response: res });
 
     // Must be signed in to set a PIN
     const { data: me, error: meErr } = await supabaseSSR.auth.getUser();

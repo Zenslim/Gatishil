@@ -1,6 +1,6 @@
 "use client";
 
-import { supabase } from "@/lib/supabase/unifiedClient";
+import { supabase } from "@/lib/supabase/client";
 import type { RealtimePostgresInsertPayload } from "@supabase/supabase-js";
 
 export type ActionType =

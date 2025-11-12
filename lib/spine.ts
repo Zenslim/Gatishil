@@ -1,37 +1,12 @@
 // lib/spine.ts
 // One Human Spine — tiny client helpers for Next.js 14 (App Router) + Supabase SSR
 
-import { cookies } from "next/headers";
-import { createServerClient, type CookieOptions } from "@supabase/auth-helpers-nextjs";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/supabase";
+import { getSupabaseServer } from "@/lib/supabase/server";
 
 function createClient(): SupabaseClient<Database> {
-  const cookieStore = cookies();
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-  if (!url || !anon) {
-    throw new Error('Supabase client credentials missing');
-  }
-
-  return createServerClient<Database>(
-    url,
-    anon,
-    {
-      cookies: {
-        get(name: string) {
-          return cookieStore.get(name)?.value;
-        },
-        set(name: string, value: string, options: CookieOptions) {
-          cookieStore.set?.(name, value, options);
-        },
-        remove(name: string, options: CookieOptions) {
-          cookieStore.set?.(name, "", { ...options, maxAge: 0 });
-        },
-      },
-    }
-  );
+  return getSupabaseServer();
 }
 
 /**

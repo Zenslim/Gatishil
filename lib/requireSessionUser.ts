@@ -1,12 +1,11 @@
-import { cookies } from 'next/headers';
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
+import { getSupabaseServer } from '@/lib/supabase/server';
 
 /**
  * Ensures a valid Supabase session in server routes.
  * Throws if unauthenticated. Used in API handlers or server components.
  */
 export async function requireSessionUser() {
-  const supabase = createRouteHandlerClient({ cookies });
+  const supabase = getSupabaseServer();
   const {
     data: { user },
     error,

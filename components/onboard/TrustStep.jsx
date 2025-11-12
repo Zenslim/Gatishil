@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { supabase } from '@/lib/supabase/unifiedClient';
+import { supabase } from '@/lib/supabase/client';
 import { createLocalPin, hasLocalPin } from '@/lib/localPin';
 
 /** Wait for a Supabase session to exist (immediately or within a short timeout). */

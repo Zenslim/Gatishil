@@ -1,5 +1,5 @@
 "use client";
-import { supabase } from "./supabase/unifiedClient";
+import { supabase } from "./supabase/client";
 
 // Insert post with authenticated JWT
 export async function sealAndPublish(payload: {
