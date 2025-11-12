@@ -3,8 +3,8 @@
 
 import dynamic from "next/dynamic";
 import { useEffect, useState } from "react";
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import { useRouter } from "next/navigation";
+import { supabase } from "@/lib/supabase/client";
 
 const AdminClient = dynamic(() => import("./AdminClient"), { ssr: false });
 
@@ -12,22 +12,35 @@ export default function AdminPage() {
   const [allowed, setAllowed] = useState(false);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
-  const supabase = createClientComponentClient();
 
   useEffect(() => {
     const verifyRole = async () => {
-      const { data } = await supabase.auth.getUser();
-      const role =
-        data?.user?.user_metadata?.role ||
-        data?.user?.app_metadata?.role ||
-        "member";
+      // 1️⃣ Get logged-in user
+      const { data: userData, error } = await supabase.auth.getUser();
+      if (error || !userData?.user) {
+        router.push("/login?next=/admin");
+        return;
+      }
+
+      // 2️⃣ Fetch role from profiles table
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", userData.user.id)
+        .single();
+
+      const role = profile?.role;
+
+      // 3️⃣ Gate access
       if (role === "admin" || role === "editor") {
         setAllowed(true);
       } else {
-        router.push("/login?next=/admin");
+        router.push("/dashboard"); // or show friendly denial
       }
+
       setLoading(false);
     };
+
     verifyRole();
   }, []);
 
