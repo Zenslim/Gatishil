@@ -1,7 +1,8 @@
-// app/admin/page.tsx
 "use client";
 export const dynamic = "force-dynamic";
 export const revalidate = false;
+
+// app/admin/page.tsx
 
 import nextDynamic from "next/dynamic";
 import { useEffect, useState } from "react";

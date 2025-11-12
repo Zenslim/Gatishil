@@ -2,7 +2,7 @@
 import NextDynamic from 'next/dynamic';
 
 export const dynamic = 'force-dynamic';
-export const revalidate = 0;
+export const revalidate = false;
 
 const Chrome = NextDynamic(() => import('./Chrome'), { ssr: true });
 
