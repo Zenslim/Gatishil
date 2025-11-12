@@ -3,7 +3,7 @@ export const dynamic = "force-dynamic";
 
 import React, { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { supabase } from '@/lib/supabase/unifiedClient';
+import { supabase } from '@/lib/supabase/client';
 
 // Read build-time feature flag
 const ENABLE_TRUST_PIN = process.env.NEXT_PUBLIC_ENABLE_TRUST_PIN === 'true';

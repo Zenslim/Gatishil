@@ -3,7 +3,7 @@
 // lib/auth/verifyOtpClient.ts
 // Legacy convenience helper retained for callers expecting a unified interface.
 
-import { supabase } from '@/lib/supabase/unifiedClient';
+import { supabase } from '@/lib/supabase/client';
 
 type VerifyInput = { phone?: string; code?: string; email?: string; token?: string };
 

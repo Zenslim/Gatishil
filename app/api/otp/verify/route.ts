@@ -1,12 +1,8 @@
 // app/api/otp/verify/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { createServerClient, type CookieOptions } from '@supabase/auth-helpers-nextjs';
-import type { Database } from '@/types/supabase';
+import { getSupabaseServer } from '@/lib/supabase/server';
 
 export const runtime = 'nodejs';
-
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const SUPABASE_ANON = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
 const normalizePhone = (raw: string) => {
   const trimmed = (raw ?? '').trim();
@@ -16,20 +12,6 @@ const normalizePhone = (raw: string) => {
   if (digits.startsWith('977')) return `+${digits}`;
   return `+977${digits}`;
 };
-
-const getSupabaseSSR = (req: NextRequest, res: NextResponse) =>
-  createServerClient<Database>(SUPABASE_URL, SUPABASE_ANON, {
-    cookies: {
-      get: (name: string) => req.cookies.get(name)?.value,
-      set: (name: string, value: string, options: CookieOptions) => {
-        // write Set-Cookie onto the SAME response we will return
-        res.cookies.set({ name, value, ...options });
-      },
-      remove: (name: string, options: CookieOptions) => {
-        res.cookies.set({ name, value: '', ...options });
-      },
-    },
-  });
 
 export function OPTIONS() {
   return new NextResponse(null, { status: 204 });
@@ -55,7 +37,7 @@ export async function POST(req: NextRequest) {
 
     // Attach cookies to THIS response instance
     const res = new NextResponse(null, { status: 204 });
-    const supabase = getSupabaseSSR(req, res);
+    const supabase = getSupabaseServer({ request: req, response: res });
 
     // 1) Verify OTP on the server (should return a session)
     const { data, error } = await supabase.auth.verifyOtp({

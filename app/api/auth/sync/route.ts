@@ -1,33 +1,8 @@
 // app/api/auth/sync/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { createServerClient, type CookieOptions } from '@supabase/auth-helpers-nextjs';
-import type { Database } from '@/types/supabase';
+import { getSupabaseServer } from '@/lib/supabase/server';
 
 export const runtime = 'nodejs';
-
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const SUPABASE_ANON = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-
-/**
- * Build a Supabase server client that can READ cookies from the request
- * and WRITE updated auth cookies onto the same NextResponse we return.
- */
-function getSupabase(req: NextRequest, res: NextResponse) {
-  return createServerClient<Database>(SUPABASE_URL, SUPABASE_ANON, {
-    cookies: {
-      get(name: string) {
-        return req.cookies.get(name)?.value;
-      },
-      set(name: string, value: string, options: CookieOptions) {
-        // Mirror how Next sets cookies on the outgoing response
-        res.cookies.set({ name, value, ...options });
-      },
-      remove(name: string, options: CookieOptions) {
-        res.cookies.set({ name, value: '', ...options, maxAge: 0 });
-      },
-    },
-  });
-}
 
 /**
  * GET /api/auth/sync
@@ -35,7 +10,7 @@ function getSupabase(req: NextRequest, res: NextResponse) {
  */
 export async function GET(req: NextRequest) {
   const res = new NextResponse(null, { status: 200 });
-  const supabase = getSupabase(req, res);
+  const supabase = getSupabaseServer({ request: req, response: res });
 
   const { data } = await supabase.auth.getUser();
   return NextResponse.json({ authenticated: !!data?.user }, { status: 200 });
@@ -88,7 +63,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Create server client bound to this response and set the session
-    const supabase = getSupabase(req, res);
+    const supabase = getSupabaseServer({ request: req, response: res });
     const { error: setErr } = await supabase.auth.setSession({
       access_token,
       refresh_token,

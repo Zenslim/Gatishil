@@ -1,7 +1,7 @@
 'use client'
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
-import { supabase } from '@/lib/supabase/unifiedClient'
+import { supabase } from '@/lib/supabase/client'
 
 export default function Navbar() {
   const [authed, setAuthed] = useState(false)

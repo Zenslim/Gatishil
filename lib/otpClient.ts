@@ -4,7 +4,7 @@
 // Channel-specific helpers mirroring the Join experience.
 
 import { getFriendlySupabaseEmailError } from '@/lib/auth/emailErrorHints';
-import { supabase } from '@/lib/supabase/unifiedClient';
+import { supabase } from '@/lib/supabase/client';
 
 export async function sendPhoneOtp(phone: string) {
   const { error } = await supabase.auth.signInWithOtp({

@@ -1,6 +1,6 @@
 'use client'
 import { useEffect, useRef } from 'react'
-import { supabase } from '@/lib/supabase/unifiedClient'
+import { supabase } from '@/lib/supabase/client'
 
 // Ensures a minimal profiles row exists for the authenticated user.
 // It never overwrites existing profile data.

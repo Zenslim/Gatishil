@@ -4,7 +4,7 @@ export const dynamic = "force-dynamic";
 
 import { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { supabase } from '@/lib/supabase/unifiedClient';
+import { supabase } from '@/lib/supabase/client';
 
 export default function SecurityClient() {
   const router = useRouter();

@@ -3,7 +3,7 @@
 
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
-import { createMiddlewareClient } from '@supabase/auth-helpers-nextjs';
+import { createMiddlewareClient } from '@supabase/ssr';
 import type { Database } from '@/types/supabase';
 
 // Single source of truth: protected path prefixes
@@ -49,6 +49,7 @@ export async function middleware(req: NextRequest) {
   }
 
   // Touch auth to both verify and give Supabase a chance to refresh cookies
+  await supabase.auth.getSession();
   const {
     data: { user },
   } = await supabase.auth.getUser();
