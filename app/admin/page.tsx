@@ -2,12 +2,12 @@
 "use client";
 export const dynamic = "force-dynamic";
 
-import dynamic from "next/dynamic";
+import nextDynamic from "next/dynamic";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase/unifiedClient";
 
-const AdminClient = dynamic(() => import("./AdminClient"), { ssr: false });
+const AdminClient = nextDynamic(() => import("./AdminClient"), { ssr: false });
 
 export default function AdminPage() {
   const [allowed, setAllowed] = useState(false);
