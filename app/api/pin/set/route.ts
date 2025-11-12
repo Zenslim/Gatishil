@@ -1,6 +1,6 @@
 // app/api/pin/set/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseServer } from '@/lib/supabase/server';
+import { supabaseServer } from '@/lib/supabase/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { derivePasswordFromPinSync } from '@/lib/crypto/pin';
 import { randomBytes } from 'crypto';
@@ -33,9 +33,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid PIN' }, { status: 400 });
     }
 
-    // Bind SSR client to request/response cookies
-    const res = new NextResponse(null, { status: 204 });
-    const supabaseSSR = getSupabaseServer({ request: req, response: res });
+    const supabaseSSR = supabaseServer();
 
     // Must be signed in to set a PIN
     const { data: me, error: meErr } = await supabaseSSR.auth.getUser();
@@ -129,7 +127,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Success → client should redirect to /dashboard on 204
-    return res;
+    return new NextResponse(null, { status: 204 });
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || 'Server error' }, { status: 500 });
   }

@@ -1,5 +1,6 @@
-import { getSupabaseServer } from "@/lib/supabase/server";
+import { supabaseServer } from "@/lib/supabase/server";
 
-export { getSupabaseServer };
-export const getServerSupabase = getSupabaseServer;
-export default getSupabaseServer;
+export { supabaseServer };
+export const getSupabaseServer = supabaseServer;
+export const getServerSupabase = supabaseServer;
+export default supabaseServer;

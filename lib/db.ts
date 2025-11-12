@@ -1,9 +1,10 @@
 // lib/db.ts
-import { getSupabaseServer } from '@/lib/supabase/server';
+import { supabaseServer } from "@/lib/supabase/server";
 
 // Canonical export
-export { getSupabaseServer };
+export { supabaseServer };
 
 // Back-compat aliases used elsewhere in the codebase
-export const getServerSupabase = getSupabaseServer;
-export const getSupabase = getSupabaseServer;
+export const getSupabaseServer = supabaseServer;
+export const getServerSupabase = supabaseServer;
+export const getSupabase = supabaseServer;

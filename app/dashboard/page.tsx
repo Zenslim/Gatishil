@@ -1,7 +1,7 @@
 // app/dashboard/page.tsx
 import React from 'react';
 import { redirect } from 'next/navigation';
-import { getSupabaseServer } from '@/lib/supabase/server';
+import { supabaseServer } from '@/lib/supabase/server';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -38,7 +38,7 @@ function Pill({ children }: { children: React.ReactNode }) {
 
 export default async function DashboardPage() {
   // SERVER is the single source of truth. No client redirects, no loops.
-  const supabase = getSupabaseServer();
+  const supabase = supabaseServer();
 
   const { data: userRes, error: userErr } = await supabase.auth.getUser();
   // If auth lookup itself failed or there is no user → go to login (once).

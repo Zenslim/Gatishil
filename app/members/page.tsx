@@ -1,6 +1,7 @@
 // app/members/page.tsx
 "use client";
 export const dynamic = "force-dynamic";
+export const revalidate = false;
 
 import { useEffect, useState } from 'react';
 import { User } from '@supabase/supabase-js';
