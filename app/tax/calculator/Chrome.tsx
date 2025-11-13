@@ -41,7 +41,7 @@ function SectionShell({
         <div
           className={`pointer-events-none absolute inset-0 -z-10 bg-gradient-to-b ${accentMap[accent]} blur-3xl`}
         />
-        <div className="relative rounded-3xl border border-white/8 bg-white/[0.03] p-5 shadow-[0_0_100px_rgba(15,23,42,0.9)] backdrop-blur-xl sm:p-8 lg:p-10">
+        <div className="relative p-5 sm:p-8 lg:p-10">
           {children}
         </div>
       </div>
@@ -267,7 +267,7 @@ function NumberInput({
     <div className="relative">
       <input
         inputMode="numeric"
-        className="h-11 w-full rounded-xl bg-white/10 px-4 text-sm text-white outline-none placeholder-white/40 focus:bg-white/[0.16] sm:text-base"
+        className="h-11 w-full rounded-xl bg-transparent px-4 text-sm text-white outline-none border border-transparent/20 placeholder-white/40 focus:border-cyan-400/30 focus:bg-cyan-400/5 sm:text-base"
         placeholder={placeholder || '0'}
         value={value || ''}
         onChange={(e) => onChange(Number(e.target.value || 0))}
@@ -290,8 +290,8 @@ function Stat({
 }) {
   return (
     <div
-      className={`rounded-2xl border px-4 py-3 text-center sm:px-5 sm:py-4 ${
-        subtle ? 'border-white/10 bg-white/[0.03]' : 'border-white/20 bg-white/[0.06]'
+      className={`rounded-2xl px-4 py-3 text-center sm:px-5 sm:py-4 ${
+        subtle ? 'bg-transparent' : 'bg-transparent'
       }`}
     >
       <div className="mb-1 text-[11px] text-slate-200/80 sm:text-xs">{title}</div>
@@ -308,10 +308,10 @@ function HiddenTaxInfo() {
       {/* Glowing ? button */}
       <button
         onClick={() => setOpen(true)}
-        className="ml-2 text-[11px] rounded-full px-2 py-0.5 border border-white/20 
-                   bg-white/10 animate-pulse 
+        className="ml-2 text-[11px] rounded-full px-2 py-0.5 border border-transparent/20 
+                   bg-cyan-500/20 animate-pulse 
                    shadow-[0_0_8px_rgba(255,220,150,0.6)] 
-                   hover:bg-white/20"
+                   hover:bg-cyan-500/30"
       >
         ?
       </button>
@@ -326,7 +326,7 @@ function HiddenTaxInfo() {
 
           {/* Centered Modal (NEVER requires scroll) */}
           <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
-            <div className="w-full max-w-sm rounded-2xl border border-white/20 
+            <div className="w-full max-w-sm rounded-2xl border border-transparent/20 
                             bg-black/90 p-4 text-xs text-white 
                             shadow-xl backdrop-blur-xl overflow-y-auto max-h-[85vh]">
 
@@ -376,8 +376,8 @@ function HiddenTaxInfo() {
 
               <button
                 onClick={() => setOpen(false)}
-                className="mt-4 w-full rounded-xl bg-white/10 border border-white/20 py-1 
-                           text-center hover:bg-white/20"
+                className="mt-4 w-full rounded-xl bg-cyan-500/20 border border-transparent/20 py-1 
+                           text-center hover:bg-cyan-500/30"
               >
                 Close
               </button>
@@ -536,7 +536,7 @@ export default function Chrome() {
               </h2>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 {INCOME_SOURCES.map(({ key, label }) => (
-                  <div key={key} className="rounded-xl bg-white/[0.06] p-3">
+                  <div key={key} className="rounded-xl bg-transparent p-3">
                     <div className="mb-1 text-[12px] text-slate-300/90">{label}</div>
                     <NumberInput
                       value={incomeMap[key]}
@@ -548,7 +548,7 @@ export default function Chrome() {
                 ))}
               </div>
 
-              <div className="mt-3 rounded-xl bg-white/[0.04] p-3">
+              <div className="mt-3 rounded-xl bg-transparent p-3">
                 <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-300/80">
                   Business Type (for tax on your "Business" income)
                 </div>
@@ -558,10 +558,10 @@ export default function Chrome() {
                       key={bt.key}
                       type="button"
                       onClick={() => setBusinessType(bt.key)}
-                      className={`rounded-lg px-3 py-2 text-left text-xs border ${
+                      className={`rounded-lg px-3 py-2 text-left text-xs ${
                         businessType === bt.key
-                          ? 'border-amber-400/80 bg-amber-400/10 text-amber-100'
-                          : 'border-white/10 bg-white/5 text-slate-200 hover:border-amber-300/60'
+                          ? 'bg-amber-400/10 text-amber-100 border border-amber-400/80'
+                          : 'bg-transparent text-slate-200 hover:bg-amber-400/5'
                       }`}
                     >
                       {bt.label}
@@ -570,7 +570,7 @@ export default function Chrome() {
                 </div>
               </div>
 
-              <div className="mt-3 flex items-center justify-between rounded-xl bg-white/[0.06] p-4">
+              <div className="mt-3 flex items-center justify-between rounded-xl bg-transparent p-4">
                 <div className="text-sm font-semibold text-white/90">
                   Total Monthly Income
                 </div>
@@ -594,7 +594,7 @@ export default function Chrome() {
                   {CATEGORIES.map(({ key, label }) => (
                     <div
                       key={key}
-                      className="rounded-2xl border border-white/10 bg-white/[0.04] p-3"
+                      className="rounded-2xl bg-transparent p-3"
                     >
                       <div className="mb-1 text-[11px] text-slate-200/85">{label}</div>
                       <NumberInput
@@ -606,7 +606,7 @@ export default function Chrome() {
                     </div>
                   ))}
                 </div>
-                <div className="mt-3 flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 px-4 py-2">
+                <div className="mt-3 flex items-center justify-between rounded-2xl bg-transparent px-4 py-2">
                   <span className="text-[11px] text-slate-200/85 sm:text-xs">
                     Total Monthly Spending
                   </span>
@@ -616,7 +616,7 @@ export default function Chrome() {
                 </div>
               </div>
 
-              <div className="border-t border-white/10 pt-1">
+              <div className="border-t border-transparent pt-1">
                 <p className="mt-3 text-[11px] text-slate-300/80 sm:text-xs">
                   Based on your truth, this is how much of your life quietly goes to taxes
                   every month:
@@ -767,7 +767,7 @@ export default function Chrome() {
                         {pct.toFixed(1)}% · NPR {formatRs(amount)}
                       </span>
                     </div>
-                    <div className="h-2 w-full overflow-hidden rounded-full bg-white/6">
+                    <div className="h-2 w-full overflow-hidden rounded-full bg-transparent/20">
                       <motion.div
                         className={`h-full rounded-full bg-gradient-to-r ${grad}`}
                         initial={{ width: 0 }}
@@ -869,7 +869,7 @@ export default function Chrome() {
             <div className="space-y-4">
               <div className="overflow-hidden rounded-3xl border border-rose-400/40 bg-gradient-to-b from-rose-900/70 via-slate-950/90 to-black p-5 sm:p-6">
                 <motion.div
-                  className="mb-4 h-2 w-full overflow-hidden rounded-full bg-white/5"
+                  className="mb-4 h-2 w-full overflow-hidden rounded-full bg-transparent/20"
                   initial={{ backgroundPositionX: 0 }}
                   animate={{ backgroundPositionX: ['0%', '100%', '0%'] }}
                   transition={{
@@ -923,7 +923,7 @@ export default function Chrome() {
           <div className="grid items-center gap-6 lg:grid-cols-2 lg:gap-8">
             <div className="space-y-4">
               <motion.div
-                className="relative overflow-hidden rounded-3xl border border-white/25 bg-gradient-to-b from-slate-50/10 via-slate-900/60 to-black px-4 py-5 font-mono text-sm sm:px-6 sm:py-6"
+                className="relative overflow-hidden rounded-3xl border border-transparent/20 bg-gradient-to-b from-slate-50/5 via-slate-900/30 to-black/50 px-4 py-5 font-mono text-sm sm:px-6 sm:py-6"
                 initial={{ y: 40, opacity: 0 }}
                 whileInView={{ y: 0, opacity: 1 }}
                 viewport={{ once: true }}
@@ -988,7 +988,7 @@ export default function Chrome() {
                   Share this truth if you dare:
                 </div>
                 <textarea
-                  className="h-28 w-full rounded-2xl border border-white/15 bg-black/40 px-3 py-2 text-[11px] text-slate-100 placeholder-slate-500/60 sm:text-xs"
+                  className="h-28 w-full rounded-2xl border border-transparent/15 bg-black/40 px-3 py-2 text-[11px] text-slate-100 placeholder-slate-500/60 sm:text-xs"
                   value={shareMessage}
                   readOnly
                 />
