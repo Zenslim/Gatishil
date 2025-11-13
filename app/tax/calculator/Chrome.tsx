@@ -303,64 +303,80 @@ function HiddenTaxInfo() {
 
   return (
     <div className="relative inline-block">
+      {/* The ? button */}
       <button
-        onClick={() => setOpen(!open)}
-        className="ml-2 text-xs rounded-full bg-white/10 px-2 py-1 border border-white/20 hover:bg-white/20"
+        onClick={() => setOpen(true)}
+        className="ml-2 text-[11px] rounded-full bg-white/10 px-2 py-0.5 border border-white/20 hover:bg-white/20"
       >
         ?
       </button>
 
+      {/* Modal */}
       {open && (
-        <div className="absolute z-50 mt-2 w-80 rounded-2xl border border-white/20 bg-black/90 p-4 text-xs text-white backdrop-blur-xl shadow-xl">
-          <p className="font-semibold mb-2">✅ TRUE Hidden Tax (Inside Every Price)</p>
-
-          <p className="mb-1">1️⃣ <b>VAT (13%)</b> — applied on top of everything.</p>
-
-          <p className="mb-1">
-            2️⃣ <b>Excise Duty (up to 40%+)</b><br/>
-            Petrol/Diesel 35–40%<br/>
-            Alcohol 40–75%<br/>
-            Tobacco 70–120%<br/>
-            Electronics 5–15%
-          </p>
-
-          <p className="mb-1">
-            3️⃣ <b>Customs Duty (10% → 200%)</b><br/>
-            Clothing 30–80%<br/>
-            Vehicles 40–200%<br/>
-            Packaged goods 10–25%
-          </p>
-
-          <p className="mb-1">
-            4️⃣ <b>Local Government Taxes</b><br/>
-            Road levy, pollution fee, municipal tax (1–3%)
-          </p>
-
-          <p className="mb-1">
-            5️⃣ <b>Profit Tax Passed to Consumers (20–30%)</b><br/>
-            Corporate income tax is baked into the MRP.
-          </p>
-
-          <p className="mb-1">
-            6️⃣ <b>VAT calculated on customs + excise + profit</b><br/>
-            This compounds the total tax.
-          </p>
-
-          <p className="mt-3 text-rose-300">
-            🟥 <b>Result:</b> Most Nepalis pay:<br/>
-            • 35–70% on normal goods<br/>
-            • 80–200% on imports<br/>
-            • 200–350% on vehicles, alcohol, tobacco<br/>
-            → Before direct income tax.
-          </p>
-
-          <button
+        <>
+          {/* Backdrop */}
+          <div
             onClick={() => setOpen(false)}
-            className="mt-3 w-full rounded-xl bg-white/10 border border-white/20 py-1 text-center hover:bg-white/20"
-          >
-            Close
-          </button>
-        </div>
+            className="fixed inset-0 z-[9998] bg-black/50 backdrop-blur-sm"
+          />
+
+          {/* Popup */}
+          <div className="fixed left-1/2 top-1/2 z-[9999] w-[85%] max-w-sm -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-white/20 bg-black/90 p-4 text-xs text-white shadow-xl backdrop-blur-xl">
+            <p className="font-semibold mb-3">
+              ✅ TRUE Hidden Tax (Inside Every Price)
+            </p>
+
+            <p className="mb-2">
+              <b>1️⃣ VAT (13%)</b> — applied on top of everything.
+            </p>
+
+            <p className="mb-2">
+              <b>2️⃣ Excise Duty (up to 40%+)</b> <br />
+              Petrol/Diesel 35–40% <br />
+              Alcohol 40–75% <br />
+              Tobacco 70–120% <br />
+              Electronics 5–15%
+            </p>
+
+            <p className="mb-2">
+              <b>3️⃣ Customs Duty (10% → 200%)</b> <br />
+              Clothing 30–80% <br />
+              Vehicles 40–200% <br />
+              Packaged goods 10–25%
+            </p>
+
+            <p className="mb-2">
+              <b>4️⃣ Local Government Taxes</b> <br />
+              Road levy, pollution fee, municipal tax (1–3%)
+            </p>
+
+            <p className="mb-2">
+              <b>5️⃣ Profit Tax Passed to Consumers (20–30%)</b> <br />
+              Corporate income tax is baked into the MRP.
+            </p>
+
+            <p className="mb-2">
+              <b>6️⃣ VAT calculated on customs + excise + profit</b> <br />
+              This compounds the total burden.
+            </p>
+
+            <p className="mt-3 text-rose-300">
+              🟥 <b>Result:</b> Most Nepalis pay: <br />
+              • 35–70% on normal goods <br />
+              • 80–200% on imports <br />
+              • 200–350% on vehicles, alcohol, tobacco <br />
+              → Before income tax.
+            </p>
+
+            {/* Close button */}
+            <button
+              onClick={() => setOpen(false)}
+              className="mt-4 w-full rounded-xl bg-white/10 border border-white/20 py-1 text-center hover:bg-white/20"
+            >
+              Close
+            </button>
+          </div>
+        </>
       )}
     </div>
   );
@@ -495,11 +511,18 @@ export default function Chrome() {
             <h1 className="mt-2 bg-gradient-to-r from-cyan-200 via-white to-fuchsia-200 bg-clip-text text-2xl font-extrabold text-transparent sm:text-3xl lg:text-4xl">
               “I only pay 1% tax.” … Are you SURE?
             </h1>
-            <p className="mt-3 mx-auto max-w-2xl text-sm text-slate-200/80 sm:text-base">
-              Most Nepalis silently lose more than <span className="font-semibold">50%</span> of
-              every रु 100 they spend — through visible and hidden taxes.
-            </p>
-          </div>
+             <p className="mt-3 mx-auto max-w-2xl text-sm text-slate-200/80 sm:text-base">
+    WAKE UP: Most Nepalis lose{" "}
+    <span className="font-semibold text-amber-200 animate-pulse drop-shadow-[0_0_10px_rgba(255,200,80,0.45)]">
+      35%–200%
+    </span>{" "}
+    of every rupee to hidden taxes. What’s{" "}
+    <span className="text-amber-100 animate-pulse drop-shadow-[0_0_12px_rgba(255,230,160,0.5)]">
+      your
+    </span>{" "}
+    real number?
+  </p>
+</div>
 
           <div className="grid gap-6 lg:grid-cols-2 lg:gap-8">
             {/* income inputs */}
