@@ -105,7 +105,7 @@ const BUDGET_SHARES = {
 /** ───────────────── data model ───────────────── **/
 const INCOME_SOURCES = [
   { key: 'employment', label: '💼 Primary Employment (+1% Social Security)' },
-  { key: 'business', label: '🏢 Business Income (Progressive Tax)' },
+  { key: 'business', label: '🏢 Business Income (25%/ 30%/ 20%/ 0%)' },
   { key: 'remittances', label: '✈️ Remittances (TAX-EXEMPT personal)' },
   { key: 'agriculture', label: '🌾 Agriculture (TAX-EXEMPT)' },
   { key: 'investment', label: '🏠 Investment (TDS avg 5.5%)' },
@@ -132,6 +132,13 @@ function formatRs(n: number) {
   const v = Math.round(n || 0);
   return v.toLocaleString('en-NP');
 }
+const BUSINESS_TYPES = [
+  { key: 'general', label: '🏢 General Corporation (25%)', rate: 0.25 },
+  { key: 'bank', label: '🏦 Bank / Insurance / Telecom (30%)', rate: 0.30 },
+  { key: 'special', label: '💻 Special Industry (IT, Agro, Tourism — 20%)', rate: 0.20 },
+  { key: 'coop', label: '🌾 Agricultural Cooperative (0%)', rate: 0 },
+] as const;
+type BusinessTypeKey = (typeof BUSINESS_TYPES)[number]['key'];
 
 function progressiveTax(annual: number) {
   // Implements the FY 2082/83 slabs from the doc:
@@ -174,17 +181,24 @@ function progressiveTax(annual: number) {
   return tax;
 }
 
-function directTaxAnnualByCategory(monthly: Record<IncomeKey, number>) {
+function directTaxAnnualByCategory(
+  monthly: Record<IncomeKey, number>,
+  businessType: BusinessTypeKey,
+) {
   let total = 0;
 
   const employmentA = (monthly.employment || 0) * 12;
   if (employmentA > 0) {
+    // Salary: slabs ABOVE 500,000 + 1% SST (capped)
     total += progressiveTax(employmentA);
     total += Math.min(employmentA * 0.01, 5000);
   }
 
   const businessA = (monthly.business || 0) * 12;
-  if (businessA > 0) total += progressiveTax(businessA);
+  if (businessA > 0) {
+    const bt = BUSINESS_TYPES.find((b) => b.key === businessType) ?? BUSINESS_TYPES[0];
+    total += businessA * bt.rate;
+  }
 
   const investA = (monthly.investment || 0) * 12;
   if (investA > 0) total += investA * 0.055;
@@ -194,8 +208,7 @@ function directTaxAnnualByCategory(monthly: Record<IncomeKey, number>) {
     const net = pensionA * 0.75;
     total += progressiveTax(net);
   }
-
-  return total;
+  return total; // annual
 }
 
 function hiddenTaxMonthly(spend: Record<CatKey, number>) {
@@ -207,7 +220,7 @@ function hiddenTaxMonthly(spend: Record<CatKey, number>) {
 
   for (const { key } of CATEGORIES) {
     const amt = spend[key] || 0;
-    const vat = amt * (VATABLE_SHARE[key] ?? 0) * VAT_RATE;
+    const vat = amt * VAT_RATE;
     const exc = amt * ((EXCISE as any)[key] ?? 0);
     const total = vat + exc;
     sum += total;
@@ -279,6 +292,7 @@ export default function Chrome() {
     investment: 0,
     otherIncome: 0,
   });
+const [businessType, setBusinessType] = useState<BusinessTypeKey>('general');
 
   // spending (no pre-inserted numbers – user will fill)
   const [spend, setSpend] = useState<Record<CatKey, number>>({
@@ -311,10 +325,10 @@ export default function Chrome() {
     monthlyIncome > 0 ? (overspendAmount / monthlyIncome) * 100 : 0;
   const isOverspending = overspendAmount > 0;
 
-  const annualDirectTax = useMemo(
-    () => directTaxAnnualByCategory(incomeMap),
-    [incomeMap],
-  );
+ const annualDirectTax = useMemo(
+  () => directTaxAnnualByCategory(incomeMap, businessType),
+  [incomeMap, businessType],
+);
   const monthlyDirectTax = annualDirectTax / 12;
 
   const { sum: monthlyHiddenTax } = useMemo(
@@ -424,36 +438,48 @@ export default function Chrome() {
                 Add how much comes in every month. Not what you declare — what
                 you actually earn.
               </p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {INCOME_SOURCES.map(({ key, label }) => (
-                  <div
-                    key={key}
-                    className="rounded-2xl bg-white/[0.04] border border-white/10 p-3"
-                  >
-                    <div className="text-[11px] text-slate-200/85 mb-1">
-                      {label}
-                    </div>
-                    <NumberInput
-                      value={incomeMap[key]}
-                      onChange={(v) =>
-                        setIncomeMap((m) => ({ ...m, [key]: v }))
-                      }
-                      placeholder="0"
-                      right="NPR"
-                    />
-                  </div>
-                ))}
-              </div>
-              <div className="mt-4 flex items-center justify-between rounded-2xl border border-cyan-300/30 bg-cyan-400/10 px-4 py-3">
-                <span className="text-xs sm:text-sm text-cyan-50/90 font-medium">
-                  Total Monthly Income (truth)
-                </span>
-                <span className="text-lg sm:text-xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-amber-200 via-white to-fuchsia-200">
-                  NPR {formatRs(monthlyIncome)}
-                </span>
-              </div>
-            </div>
+             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+  {INCOME_SOURCES.map(({ key, label }) => (
+    <div key={key} className="rounded-xl bg-white/[0.06] p-3">
+      <div className="text-[12px] text-slate-300/90 mb-1">{label}</div>
+      <NumberInput
+        value={incomeMap[key]}
+        onChange={(v) => setIncomeMap((m) => ({ ...m, [key]: v }))}
+        placeholder="0"
+        right="NPR"
+      />
+    </div>
+  ))}
+</div>
 
+<div className="mt-3 rounded-xl bg-white/[0.04] p-3">
+  <div className="text-[11px] uppercase tracking-wide text-slate-300/80 font-semibold mb-2">
+    Business Type (for tax on your “Business” income)
+  </div>
+  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+    {BUSINESS_TYPES.map((bt) => (
+      <button
+        key={bt.key}
+        type="button"
+        onClick={() => setBusinessType(bt.key)}
+        className={`text-left text-xs rounded-lg px-3 py-2 border ${
+          businessType === bt.key
+            ? 'border-amber-400/80 bg-amber-400/10 text-amber-100'
+            : 'border-white/10 bg-white/5 text-slate-200 hover:border-amber-300/60'
+        }`}
+      >
+        {bt.label}
+      </button>
+    ))}
+  </div>
+</div>
+
+<div className="rounded-xl bg-white/[0.06] p-4 flex items-center justify-between mt-3">
+  <div className="text-sm text-white/90 font-semibold">Total Monthly Income</div>
+  <div className="text-xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-amber-300 via-white to-fuchsia-300">
+    NPR {formatRs(monthlyIncome)}
+  </div>
+</div>
             {/* spending + headline rate */}
             <div className="space-y-5">
               <div>
