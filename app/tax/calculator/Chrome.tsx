@@ -303,78 +303,83 @@ function HiddenTaxInfo() {
 
   return (
     <div className="relative inline-block">
-      {/* The ? button */}
+      {/* Glowing ? button */}
       <button
         onClick={() => setOpen(true)}
-        className="ml-2 text-[11px] rounded-full bg-white/10 px-2 py-0.5 border border-white/20 hover:bg-white/20"
+        className="ml-2 text-[11px] rounded-full px-2 py-0.5 border border-white/20 
+                   bg-white/10 animate-pulse 
+                   shadow-[0_0_8px_rgba(255,220,150,0.6)] 
+                   hover:bg-white/20"
       >
         ?
       </button>
 
-      {/* Modal */}
       {open && (
         <>
-          {/* Backdrop */}
+          {/* Backdrop (full screen) */}
           <div
             onClick={() => setOpen(false)}
-            className="fixed inset-0 z-[9998] bg-black/50 backdrop-blur-sm"
+            className="fixed inset-0 z-[9998] bg-black/60 backdrop-blur-sm"
           />
 
-          {/* Popup */}
-          <div className="fixed left-1/2 top-1/2 z-[9999] w-[85%] max-w-sm -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-white/20 bg-black/90 p-4 text-xs text-white shadow-xl backdrop-blur-xl">
-            <p className="font-semibold mb-3">
-              ✅ TRUE Hidden Tax (Inside Every Price)
-            </p>
+          {/* Centered Modal (NEVER requires scroll) */}
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
+            <div className="w-full max-w-sm rounded-2xl border border-white/20 
+                            bg-black/90 p-4 text-xs text-white 
+                            shadow-xl backdrop-blur-xl overflow-y-auto max-h-[85vh]">
 
-            <p className="mb-2">
-              <b>1️⃣ VAT (13%)</b> — applied on top of everything.
-            </p>
+              <p className="font-semibold mb-3">
+                ✅ TRUE Hidden Tax (Inside Every Price)
+              </p>
 
-            <p className="mb-2">
-              <b>2️⃣ Excise Duty (up to 40%+)</b> <br />
-              Petrol/Diesel 35–40% <br />
-              Alcohol 40–75% <br />
-              Tobacco 70–120% <br />
-              Electronics 5–15%
-            </p>
+              <p className="mb-2"><b>1️⃣ VAT (13%)</b> — applied on top of everything.</p>
 
-            <p className="mb-2">
-              <b>3️⃣ Customs Duty (10% → 200%)</b> <br />
-              Clothing 30–80% <br />
-              Vehicles 40–200% <br />
-              Packaged goods 10–25%
-            </p>
+              <p className="mb-2">
+                <b>2️⃣ Excise Duty (up to 40%+)</b><br/>
+                Petrol/Diesel 35–40%<br/>
+                Alcohol 40–75%<br/>
+                Tobacco 70–120%<br/>
+                Electronics 5–15%
+              </p>
 
-            <p className="mb-2">
-              <b>4️⃣ Local Government Taxes</b> <br />
-              Road levy, pollution fee, municipal tax (1–3%)
-            </p>
+              <p className="mb-2">
+                <b>3️⃣ Customs Duty (10% → 200%)</b><br/>
+                Clothing 30–80%<br/>
+                Vehicles 40–200%<br/>
+                Packaged goods 10–25%
+              </p>
 
-            <p className="mb-2">
-              <b>5️⃣ Profit Tax Passed to Consumers (20–30%)</b> <br />
-              Corporate income tax is baked into the MRP.
-            </p>
+              <p className="mb-2">
+                <b>4️⃣ Local Government Taxes</b><br/>
+                Road levy, pollution fee, municipal tax (1–3%)
+              </p>
 
-            <p className="mb-2">
-              <b>6️⃣ VAT calculated on customs + excise + profit</b> <br />
-              This compounds the total burden.
-            </p>
+              <p className="mb-2">
+                <b>5️⃣ Profit Tax Passed to Consumers (20–30%)</b><br/>
+                Corporate income tax is baked into the MRP.
+              </p>
 
-            <p className="mt-3 text-rose-300">
-              🟥 <b>Result:</b> Most Nepalis pay: <br />
-              • 35–70% on normal goods <br />
-              • 80–200% on imports <br />
-              • 200–350% on vehicles, alcohol, tobacco <br />
-              → Before income tax.
-            </p>
+              <p className="mb-2">
+                <b>6️⃣ VAT calculated on customs + excise + profit</b><br/>
+                This compounds everything.
+              </p>
 
-            {/* Close button */}
-            <button
-              onClick={() => setOpen(false)}
-              className="mt-4 w-full rounded-xl bg-white/10 border border-white/20 py-1 text-center hover:bg-white/20"
-            >
-              Close
-            </button>
+              <p className="mt-3 text-rose-300">
+                🟥 <b>Result:</b> Nepalis silently lose:<br/>
+                • 35–70% on normal goods<br/>
+                • 80–200% on imports<br/>
+                • 200–350% on vehicles, alcohol, tobacco<br/>
+                → BEFORE income tax.
+              </p>
+
+              <button
+                onClick={() => setOpen(false)}
+                className="mt-4 w-full rounded-xl bg-white/10 border border-white/20 py-1 
+                           text-center hover:bg-white/20"
+              >
+                Close
+              </button>
+            </div>
           </div>
         </>
       )}
@@ -1003,22 +1008,52 @@ export default function Chrome() {
                   rel="noreferrer"
                   className="flex items-center justify-center rounded-2xl border border-sky-400/60 bg-sky-500/20 px-3 py-2 transition hover:bg-sky-500/30"
                 >
-                  🐦 Post on X
-                </a>
-                <div className="flex items-center justify-center rounded-2xl border border-emerald-400/60 bg-emerald-500/15 px-3 py-2">
-                  📎 Screenshot &amp; share
-                </div>
-                <a
-                  href="/tax"
-                  className="flex items-center justify-center rounded-2xl border border-amber-300/60 bg-amber-500/15 px-3 py-2 transition hover:bg-amber-500/25"
-                >
-                  ☀️ Open Sunlight
-                </a>
-              </div>
-            </div>
-          </div>
-        </div>
-      </SectionShell>
+               <div className="mt-4 grid grid-cols-2 gap-3 text-[11px] sm:text-xs">
+
+  {/* Post on X */}
+  <a
+    href={`https://twitter.com/intent/tweet?text=${encodeURIComponent(shareMessage)}`}
+    target="_blank"
+    rel="noreferrer"
+    className="flex items-center justify-center rounded-2xl border border-sky-400/60 bg-sky-500/20 px-3 py-2 
+               transition hover:bg-sky-500/30 hover:scale-[1.02]"
+  >
+    🐦 Post on X
+  </a>
+
+  {/* Native mobile share */}
+  <button
+    onClick={async () => {
+      if (navigator.share) {
+        try {
+          await navigator.share({
+            title: "My Nepal Tax Reflection",
+            text: shareMessage,
+            url: "https://www.gatishilnepal.org/tax",
+          });
+        } catch (err) {
+          console.log("Share cancelled", err);
+        }
+      } else {
+        alert("Sharing is not supported on this device.");
+      }
+    }}
+    className="flex items-center justify-center rounded-2xl border border-emerald-400/60 bg-emerald-500/15 px-3 py-2 
+               transition hover:bg-emerald-500/25 hover:scale-[1.02] 
+               shadow-[0_0_10px_rgba(16,185,129,0.3)]"
+>
+  📎 Share
+</button>
+</div>   {/* closes share row */}
+
+</div>   {/* closes receipt wrapper */}
+
+</div>   {/* closes left column */}
+
+</div>   {/* closes grid */}
+
+</SectionShell>
+
 
       {/* 5. THE MIRROR OF COURAGE */}
       <SectionShell id="courage" accent="gold">
@@ -1119,10 +1154,10 @@ export default function Chrome() {
               href="/join"
               className="inline-flex items-center justify-center rounded-full bg-gradient-to-r from-amber-300 via-orange-400 to-rose-400 px-6 py-3 text-sm font-semibold text-slate-950 shadow-[0_0_40px_rgba(248,250,252,0.5)] transition hover:scale-[1.02] active:scale-[0.99] sm:px-8 sm:py-3.5 sm:text-base"
             >
-              Join the Digital Chauṭarī — I want to see the ledger
+              Join the Digital Chautari — I want to see the ledger
             </a>
             <p className="max-w-sm text-[11px] text-slate-300/80 sm:text-xs">
-              When you step into the Chauṭarī, you are not a follower. You are a
+              When you step into the Chautari, you are not a follower. You are a
               co-auditor of Nepal&apos;s future.
             </p>
           </div>
