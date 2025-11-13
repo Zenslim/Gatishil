@@ -1037,9 +1037,9 @@ export default function Chrome() {
     📎 Share
 </button>
 </div> {/* closes share row */}
-</div> {/* closes receipt wrapper */}
-</div> {/* closes left column */}
+</div> {/* closes right column */}
 </div> {/* closes grid */}
+</div> {/* closes section content */}
 </SectionShell>
 
       {/* 5. THE MIRROR OF COURAGE */}
