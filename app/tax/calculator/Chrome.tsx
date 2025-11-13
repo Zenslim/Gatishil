@@ -245,7 +245,7 @@ function NumberInput({
     <div className="relative">
       <input
         inputMode="numeric"
-        className="h-11 w-full rounded-xl bg-white/5 px-4 text-sm text-white outline-none placeholder-white/40 focus:bg-white/10 sm:text-base"
+        className="h-11 w-full rounded-xl bg-white/10 hover:bg-white/15 focus:bg-white/20 ring-1 ring-white/10 focus:ring-white/20 backdrop-blur-md shadow-[0_0_12px_rgba(255,255,255,0.08)] focus:shadow-[0_0_20px_rgba(255,255,255,0.15)] px-4 text-white text-sm outline-none placeholder-white/40 transition-all duration-200"
         placeholder={placeholder || '0'}
         value={value || ''}
         onChange={(e) => onChange(Number(e.target.value || 0))}
@@ -935,7 +935,7 @@ export default function Chrome() {
                   Share this truth if you dare:
                 </div>
                 <textarea
-                  className="h-28 w-full rounded-2xl bg-black/40 px-3 py-2 text-[11px] text-slate-100 placeholder-slate-500/60 sm:text-xs"
+                  className="h-28 w-full rounded-xl bg-white/10 hover:bg-white/15 focus:bg-white/20 ring-1 ring-white/10 focus:ring-white/20 backdrop-blur-md shadow-[0_0_12px_rgba(255,255,255,0.08)] focus:shadow-[0_0_20px_rgba(255,255,255,0.15)] px-4 py-3 text-white text-sm outline-none placeholder-white/40 transition-all duration-200"
                   value={shareMessage}
                   readOnly
                 />
