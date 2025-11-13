@@ -254,28 +254,28 @@ export default function Chrome() {
   const mounted = useMounted();
   const [trust, setTrust] = useState(40); // perceived honesty %
 
-  // incomes (default demo values)
+  // incomes (no pre-inserted numbers – user will fill)
   const [incomeMap, setIncomeMap] = useState<Record<IncomeKey, number>>({
-    employment: 150_000,
-    business: 50_000,
-    remittances: 80_000,
-    agriculture: 25_000,
-    investment: 30_000,
-    otherIncome: 20_000,
+    employment: 0,
+    business: 0,
+    remittances: 0,
+    agriculture: 0,
+    investment: 0,
+    otherIncome: 0,
   });
 
-  // spending (default demo values)
+  // spending (no pre-inserted numbers – user will fill)
   const [spend, setSpend] = useState<Record<CatKey, number>>({
-    foodHome: 15_000,
-    eatingOut: 8_000,
-    housing: 30_000,
-    utilities: 8_000,
-    transport: 12_000,
-    education: 5_000,
-    clothing: 4_000,
-    personalCare: 3_000,
-    entertainment: 6_000,
-    other: 9_000,
+    foodHome: 0,
+    eatingOut: 0,
+    housing: 0,
+    utilities: 0,
+    transport: 0,
+    education: 0,
+    clothing: 0,
+    personalCare: 0,
+    entertainment: 0,
+    other: 0,
   });
 
   // derived income & tax
@@ -284,6 +284,16 @@ export default function Chrome() {
     [incomeMap],
   );
   const annualIncome = monthlyIncome * 12;
+
+  const monthlySpend = useMemo(
+    () => Object.values(spend).reduce((s, v) => s + (v || 0), 0),
+    [spend],
+  );
+
+  const overspendAmount = Math.max(0, monthlySpend - monthlyIncome);
+  const overspendPct =
+    monthlyIncome > 0 ? (overspendAmount / monthlyIncome) * 100 : 0;
+  const isOverspending = overspendAmount > 0;
 
   const annualDirectTax = useMemo(
     () => directTaxAnnualByCategory(incomeMap),
@@ -458,6 +468,14 @@ export default function Chrome() {
                     </div>
                   ))}
                 </div>
+                <div className="mt-3 flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 px-4 py-2">
+                  <span className="text-[11px] sm:text-xs text-slate-200/85">
+                    Total Monthly Spending
+                  </span>
+                  <span className="text-sm sm:text-base font-semibold text-white">
+                    NPR {formatRs(monthlySpend)}
+                  </span>
+                </div>
               </div>
 
               <div className="pt-1 border-t border-white/10">
@@ -495,6 +513,54 @@ export default function Chrome() {
                   “I pay only 1%” was a sweet dream. This is the real alarm
                   clock.
                 </p>
+
+                {/* Red flag overspend warning */}
+                {isOverspending && (
+                  <motion.div
+                    className="mt-4 rounded-2xl border border-rose-500/70 bg-rose-500/20 px-4 py-3 sm:px-5 sm:py-4 text-left sm:text-sm text-[11px] text-rose-50/95"
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{
+                      opacity: 1,
+                      scale: [1, 1.03, 1],
+                      boxShadow: [
+                        '0 0 0 rgba(248,113,113,0.0)',
+                        '0 0 30px rgba(248,113,113,0.6)',
+                        '0 0 0 rgba(248,113,113,0.0)',
+                      ],
+                    }}
+                    transition={{
+                      duration: 1.4,
+                      repeat: Infinity,
+                      repeatType: 'reverse',
+                    }}
+                  >
+                    <div className="font-semibold flex items-center gap-2 mb-1">
+                      <span className="text-[13px] sm:text-sm">
+                        ⚠️ Budget Alert: Spending Exceeds Income
+                      </span>
+                    </div>
+                    <p>
+                      Your monthly spending (
+                      <span className="font-semibold">
+                        NPR {formatRs(monthlySpend)}
+                      </span>
+                      ) exceeds your income (
+                      <span className="font-semibold">
+                        NPR {formatRs(monthlyIncome)}
+                      </span>
+                      ) by{' '}
+                      <span className="font-semibold">
+                        NPR {formatRs(overspendAmount)} (
+                        {overspendPct.toFixed(1)}%)
+                      </span>
+                      . Time to embrace a{' '}
+                      <span className="underline decoration-rose-200/80">
+                        frugal lifestyle
+                      </span>
+                      — or this gap becomes silent debt slavery.
+                    </p>
+                  </motion.div>
+                )}
               </div>
             </div>
           </div>
@@ -679,7 +745,10 @@ export default function Chrome() {
                   At your trust level:
                 </div>
                 <div className="text-2xl sm:text-3xl font-extrabold text-rose-100">
-                  {((waste / Math.max(1, annualTotalTax)) * 100).toFixed(1)}%
+                  {annualTotalTax
+                    ? ((waste / annualTotalTax) * 100).toFixed(1)
+                    : '0.0'}
+                  %
                 </div>
                 <div className="text-[11px] sm:text-xs text-slate-200/85">
                   of your own hard-earned tax feels like it simply disappears.
@@ -749,7 +818,7 @@ export default function Chrome() {
                     Days worked for state:
                   </span>
                   <span className="text-sm font-semibold text-amber-200">
-                    {govDays} days (~{govMonths} months)
+                    {govDays} days (~{govMonths} months, until {dateLabel})
                   </span>
                 </div>
                 <div className="flex items-center justify-between mb-3">
@@ -842,8 +911,8 @@ export default function Chrome() {
               <div className="absolute inset-0 rounded-3xl border border-yellow-300/40 bg-gradient-to-b from-slate-900 via-slate-950 to-black overflow-hidden">
                 <div className="absolute inset-0 opacity-80 bg-[radial-gradient(circle_at_top,_rgba(250,204,21,0.2),_transparent_60%),radial-gradient(circle_at_bottom,_rgba(96,165,250,0.15),_transparent_60%)]" />
                 <div className="absolute inset-6 sm:inset-8">
-                  {/* simple constellation of dots */}
-                  {Array.from({ length: 90 }).map((_, i) => (
+                  {/* constellation of dots – reduced count for smoother performance */}
+                  {Array.from({ length: 45 }).map((_, i) => (
                     <motion.div
                       // eslint-disable-next-line react/no-array-index-key
                       key={i}
@@ -862,7 +931,7 @@ export default function Chrome() {
                         duration: 3 + (i % 5),
                         repeat: Infinity,
                         repeatType: 'reverse',
-                        delay: i * 0.03,
+                        delay: i * 0.04,
                       }}
                     />
                   ))}
