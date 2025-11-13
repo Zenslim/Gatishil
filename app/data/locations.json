@@ -1,0 +1,124 @@
+{
+  "$schema": "https://gatishilnepal.org/schemas/locations.v1.json",
+  "version": 1,
+  "notes": "Design-only seed spec for progressive dropdowns. Arrays are hierarchical via foreign keys. Use as JSON source now; mirror to Supabase tables later without changing shape.",
+  "nepal": {
+    "provinces": [
+      { "id": 1, "name": "Koshi Pradesh" },
+      { "id": 2, "name": "Madhesh Pradesh" },
+      { "id": 3, "name": "Bagmati Pradesh" },
+      { "id": 4, "name": "Gandaki Pradesh" },
+      { "id": 5, "name": "Lumbini Pradesh" },
+      { "id": 6, "name": "Karnali Pradesh" },
+      { "id": 7, "name": "Sudurpashchim Pradesh" }
+    ],
+    "districts": [
+      { "id": 301, "province_id": 3, "name": "Kathmandu" },
+      { "id": 302, "province_id": 3, "name": "Lalitpur" },
+      { "id": 303, "province_id": 3, "name": "Bhaktapur" },
+
+      { "id": 401, "province_id": 4, "name": "Kaski" },
+      { "id": 402, "province_id": 4, "name": "Gorkha" }
+      /* … add all districts with their province_id */
+    ],
+    "local_levels": [
+      /* kind: Metropolitan=Metro, Sub-Metropolitan=SubMetro, Municipality=Nagar, Rural Municipality=Gaun */
+      { "id": 30001, "district_id": 301, "name": "Kathmandu Metropolitan City", "kind": "Metro" },
+      { "id": 30002, "district_id": 302, "name": "Lalitpur Metropolitan City", "kind": "Metro" },
+      { "id": 30003, "district_id": 303, "name": "Madhyapur Thimi Municipality", "kind": "Nagar" },
+
+      { "id": 40001, "district_id": 401, "name": "Pokhara Metropolitan City", "kind": "Metro" }
+      /* … add all 753 local levels with district_id + kind */
+    ],
+    "wards": [
+      /* Ward numbers are integers; one record per ward in each local_level */
+      { "id": 3000101, "local_level_id": 30001, "ward_no": 1 },
+      { "id": 3000102, "local_level_id": 30001, "ward_no": 2 },
+      { "id": 3000103, "local_level_id": 30001, "ward_no": 3 },
+
+      { "id": 4000101, "local_level_id": 40001, "ward_no": 1 },
+      { "id": 4000102, "local_level_id": 40001, "ward_no": 2 }
+      /* … continue for all wards under each local_level */
+    ],
+    "toles": [
+      /* User-extendable, optional at onboarding; tie to ward_id */
+      { "id": 1, "ward_id": 3000101, "name": "Asan" },
+      { "id": 2, "ward_id": 3000102, "name": "Basantapur" }
+      /* … community-added over time */
+    ]
+  },
+
+  "diaspora": {
+    "countries": [
+      { "code": "AE", "name": "United Arab Emirates" },
+      { "code": "QA", "name": "Qatar" },
+      { "code": "MY", "name": "Malaysia" },
+      { "code": "SA", "name": "Saudi Arabia" },
+      { "code": "JP", "name": "Japan" },
+      { "code": "GB", "name": "United Kingdom" },
+      { "code": "US", "name": "United States" },
+      { "code": "AU", "name": "Australia" }
+      /* … ISO 3166 full list can be merged later without breaking shape */
+    ],
+    "cities": [
+      { "id": 10001, "country_code": "AE", "name": "Dubai" },
+      { "id": 10002, "country_code": "AE", "name": "Abu Dhabi" },
+
+      { "id": 20001, "country_code": "QA", "name": "Doha" },
+
+      { "id": 30001, "country_code": "MY", "name": "Kuala Lumpur" },
+
+      { "id": 40001, "country_code": "SA", "name": "Riyadh" },
+      { "id": 40002, "country_code": "SA", "name": "Jeddah" },
+
+      { "id": 50001, "country_code": "JP", "name": "Tokyo" },
+
+      { "id": 60001, "country_code": "GB", "name": "London" },
+      { "id": 60002, "country_code": "GB", "name": "Birmingham" },
+
+      { "id": 70001, "country_code": "US", "name": "New York" },
+      { "id": 70002, "country_code": "US", "name": "Dallas" },
+      { "id": 70003, "country_code": "US", "name": "San Francisco" },
+
+      { "id": 80001, "country_code": "AU", "name": "Sydney" },
+      { "id": 80002, "country_code": "AU", "name": "Melbourne" }
+
+      /* … extend freely; users can add if missing */
+    ]
+  },
+
+  "ui_contract": {
+    "progressive_disclosure": {
+      "nepal": ["province", "district", "local_level", "ward", "tole_optional_last"],
+      "diaspora": ["country", "city_add_if_missing"]
+    },
+    "search_behavior": {
+      "district": "search within selected province",
+      "local_level": "search within selected district",
+      "tole": "free text search; allow add if not found",
+      "city": "free text search; allow add if not found"
+    },
+    "add_if_missing_rules": {
+      "tole": { "allowed": true, "requires": "ward_id" },
+      "city": { "allowed": true, "requires": "country_code" }
+    },
+    "normalize_on_select": {
+      "nepal_result_example": {
+        "type": "ward",
+        "id": 3000101,
+        "ward_no": 1,
+        "local_level_id": 30001,
+        "district_id": 301,
+        "province_id": 3,
+        "label": "Bagmati Pradesh / Kathmandu / Kathmandu Metropolitan City / Ward 1 / Asan"
+      },
+      "diaspora_result_example": {
+        "type": "city",
+        "id": 70001,
+        "city_id": 70001,
+        "country_code": "US",
+        "label": "United States / New York"
+      }
+    }
+  }
+}
