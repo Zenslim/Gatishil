@@ -483,6 +483,7 @@ const [businessType, setBusinessType] = useState<BusinessTypeKey>('general');
             {/* spending + headline rate */}
             <div className="space-y-5">
               <div>
+                </div>
                 <h2 className="text-sm sm:text-base font-semibold text-cyan-100 mb-3">
                   2️⃣ Your Monthly Spending — where it vanishes
                 </h2>
