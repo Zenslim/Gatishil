@@ -134,27 +134,43 @@ function formatRs(n: number) {
 }
 
 function progressiveTax(annual: number) {
+  // Implements the FY 2082/83 slabs from the doc:
+  // First 500,000 → 1% SST only (handled separately in directTaxAnnualByCategory)
+  // Amount above 500,000 → 10% / 20% / 30% / 36% / 39% progressive
   let tax = 0;
-  if (annual <= 500_000) tax = annual * 0.01;
-  else if (annual <= 700_000) tax = 500_000 * 0.01 + (annual - 500_000) * 0.1;
-  else if (annual <= 1_000_000) tax = 500_000 * 0.01 + 200_000 * 0.1 + (annual - 700_000) * 0.2;
-  else if (annual <= 2_000_000)
-    tax = 500_000 * 0.01 + 200_000 * 0.1 + 300_000 * 0.2 + (annual - 1_000_000) * 0.3;
-  else if (annual <= 5_000_000)
-    tax =
-      500_000 * 0.01 +
-      200_000 * 0.1 +
-      300_000 * 0.2 +
-      1_000_000 * 0.3 +
-      (annual - 2_000_000) * 0.36;
-  else
-    tax =
-      500_000 * 0.01 +
-      200_000 * 0.1 +
-      300_000 * 0.2 +
-      1_000_000 * 0.3 +
-      3_000_000 * 0.36 +
-      (annual - 5_000_000) * 0.39;
+
+  // Only tax income ABOVE 500,000 with slab rates
+  let remaining = Math.max(0, annual - 500_000);
+
+  if (remaining <= 0) return 0;
+
+  // Next 200,000 @ 10%
+  const slab1 = Math.min(remaining, 200_000);
+  tax += slab1 * 0.10;
+  remaining -= slab1;
+  if (remaining <= 0) return tax;
+
+  // Next 300,000 @ 20%
+  const slab2 = Math.min(remaining, 300_000);
+  tax += slab2 * 0.20;
+  remaining -= slab2;
+  if (remaining <= 0) return tax;
+
+  // Next 1,000,000 @ 30%
+  const slab3 = Math.min(remaining, 1_000_000);
+  tax += slab3 * 0.30;
+  remaining -= slab3;
+  if (remaining <= 0) return tax;
+
+  // Next 3,000,000 @ 36%
+  const slab4 = Math.min(remaining, 3_000_000);
+  tax += slab4 * 0.36;
+  remaining -= slab4;
+  if (remaining <= 0) return tax;
+
+  // Above 5,000,000 @ 39%
+  tax += remaining * 0.39;
+
   return tax;
 }
 
