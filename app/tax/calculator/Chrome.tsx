@@ -35,27 +35,19 @@ function SectionShell({
     gold: 'from-yellow-400/40 via-yellow-100/10 to-transparent',
     dawn: 'from-orange-400/40 via-amber-200/10 to-transparent',
   };
-
-  return (
+    return (
     <section id={id} className="py-8 sm:py-12">
-      <motion.div
-        className="relative mx-auto w-full max-w-5xl px-4 sm:px-6 lg:px-10"
-        initial={{ opacity: 0, y: 40 }}
-        whileInView={{ opacity: 1, y: 0 }}
-        viewport={{ once: true, amount: 0.35 }}
-        transition={{ duration: 0.9, ease: 'easeOut' }}
-      >
+      <div className="relative mx-auto w-full max-w-5xl px-4 sm:px-6 lg:px-10">
         <div
           className={`pointer-events-none absolute inset-0 -z-10 bg-gradient-to-b ${accentMap[accent]} blur-3xl`}
         />
         <div className="relative rounded-3xl border border-white/8 bg-white/[0.03] p-5 shadow-[0_0_100px_rgba(15,23,42,0.9)] backdrop-blur-xl sm:p-8 lg:p-10">
           {children}
         </div>
-      </motion.div>
+      </div>
     </section>
   );
 }
-
 /** ───────────────── constants ───────────────── **/
 const VAT_RATE = 0.13 as const;
 const VATABLE_SHARE = {
@@ -387,7 +379,7 @@ export default function Chrome() {
               Nepal True Tax Mirror
             </p>
             <h1 className="mt-2 bg-gradient-to-r from-cyan-200 via-white to-fuchsia-200 bg-clip-text text-2xl font-extrabold text-transparent sm:text-3xl lg:text-4xl">
-              🛑 “I only pay 1% tax.” … Are you SURE? 🛑
+              “I only pay 1% tax.” … Are you SURE?
             </h1>
             <p className="mt-3 mx-auto max-w-2xl text-sm text-slate-200/80 sm:text-base">
               Most Nepalis silently lose more than <span className="font-semibold">50%</span> of
