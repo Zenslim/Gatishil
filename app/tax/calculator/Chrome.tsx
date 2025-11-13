@@ -1035,18 +1035,12 @@ export default function Chrome() {
                shadow-[0_0_10px_rgba(16,185,129,0.3)]"
   >
     📎 Share
-  </button>
-
-</div>   {/* closes share row */}
-
-</div>   {/* closes receipt wrapper */}
-
-</div>   {/* closes left column */}
-
-</div>   {/* closes grid */}
-
+</button>
+</div> {/* closes share row */}
+</div> {/* closes receipt wrapper */}
+</div> {/* closes left column */}
+</div> {/* closes grid */}
 </SectionShell>
-
 
       {/* 5. THE MIRROR OF COURAGE */}
       <SectionShell id="courage" accent="gold">
