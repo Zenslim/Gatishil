@@ -497,11 +497,7 @@ export default function Chrome() {
   /** lifetime view (narrative-level) */
   const yearsLeft = LIFETIME.retireAge - LIFETIME.currentAge;
   const lifetimeTax = Math.max(0, annualTotalTax * yearsLeft);
-
-  const shareMessage = `I already pay NPR ${formatRs(
-    Math.round(annualTotalTax),
-  )} in taxes every year. Where does it go? #MeroKarKhoi #ReceiptOfPower`;
-
+const shareMessage = `I already pay NPR ${formatRs(Math.round(annualTotalTax))} in taxes every year. Where does it go? #MeroKarKhoi #ReceiptOfPower`;
   return (
     <main className="relative min-h-screen bg-black text-white">
       <Starfield />
