@@ -187,19 +187,66 @@ function directTaxAnnualByCategory(
 
   return total; // annual
 }
-
 function hiddenTaxMonthly(spend: Record<CatKey, number>) {
   let sum = 0;
   const breakdown: Record<CatKey, { amount: number; pctOfIncome: number }> = {} as any;
 
+  // Weighted averages per Nepal market realities
+  const CUSTOMS: Record<CatKey, number> = {
+    foodHome: 0.12,
+    eatingOut: 0.08,
+    housing: 0.00,
+    utilities: 0.05,
+    transport: 0.22,        // fuel + parts
+    education: 0.05,
+    clothing: 0.40,         // Nepal's highest slab
+    personalCare: 0.22,
+    entertainment: 0.25,
+    other: 0.18,
+  };
+
+  const EXCISE: Record<CatKey, number> = {
+    foodHome: 0.02,
+    eatingOut: 0.03,
+    housing: 0.00,
+    utilities: 0.02,
+    transport: 0.10,        // fuel excise
+    education: 0.00,
+    clothing: 0.00,
+    personalCare: 0.05,
+    entertainment: 0.07,
+    other: 0.03,
+  };
+
+  // Local govt taxes (road, pollution, municipality)
+  const LOCAL_TAX = 0.02;   // 2%
+
+  // Corporate profit tax passed to consumers
+  const PROFIT_PASS = 0.22; // 22%
+
   for (const { key } of CATEGORIES) {
-    const amt = spend[key] || 0;
-    const vat = amt * VAT_RATE * (VATABLE_SHARE as any)[key];
-    const exc = amt * ((EXCISE as any)[key] ?? 0);
-    const total = vat + exc;
-    sum += total;
-    breakdown[key] = { amount: total, pctOfIncome: 0 };
+    const spendAmt = spend[key] || 0;
+
+    // Step 1: customs + excise + profit
+    const customs = spendAmt * CUSTOMS[key];
+    const excise = spendAmt * EXCISE[key];
+    const profit = spendAmt * PROFIT_PASS;
+    const local = spendAmt * LOCAL_TAX;
+
+    // Step 2: VAT on top of EVERYTHING
+    const vat = (spendAmt + customs + excise + profit) * VAT_RATE;
+
+    // Step 3: total hidden tax inside final price
+    const totalHidden = customs + excise + local + profit + vat;
+
+    sum += totalHidden;
+
+    breakdown[key] = {
+      amount: totalHidden,
+      pctOfIncome: 0,
+    };
   }
+
   return { sum, breakdown };
 }
 
@@ -248,6 +295,73 @@ function Stat({
     >
       <div className="mb-1 text-[11px] text-slate-200/80 sm:text-xs">{title}</div>
       <div className="text-lg font-extrabold text-white sm:text-xl">{value}</div>
+    </div>
+  );
+}
+function HiddenTaxInfo() {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div className="relative inline-block">
+      <button
+        onClick={() => setOpen(!open)}
+        className="ml-2 text-xs rounded-full bg-white/10 px-2 py-1 border border-white/20 hover:bg-white/20"
+      >
+        ?
+      </button>
+
+      {open && (
+        <div className="absolute z-50 mt-2 w-80 rounded-2xl border border-white/20 bg-black/90 p-4 text-xs text-white backdrop-blur-xl shadow-xl">
+          <p className="font-semibold mb-2">✅ TRUE Hidden Tax (Inside Every Price)</p>
+
+          <p className="mb-1">1️⃣ <b>VAT (13%)</b> — applied on top of everything.</p>
+
+          <p className="mb-1">
+            2️⃣ <b>Excise Duty (up to 40%+)</b><br/>
+            Petrol/Diesel 35–40%<br/>
+            Alcohol 40–75%<br/>
+            Tobacco 70–120%<br/>
+            Electronics 5–15%
+          </p>
+
+          <p className="mb-1">
+            3️⃣ <b>Customs Duty (10% → 200%)</b><br/>
+            Clothing 30–80%<br/>
+            Vehicles 40–200%<br/>
+            Packaged goods 10–25%
+          </p>
+
+          <p className="mb-1">
+            4️⃣ <b>Local Government Taxes</b><br/>
+            Road levy, pollution fee, municipal tax (1–3%)
+          </p>
+
+          <p className="mb-1">
+            5️⃣ <b>Profit Tax Passed to Consumers (20–30%)</b><br/>
+            Corporate income tax is baked into the MRP.
+          </p>
+
+          <p className="mb-1">
+            6️⃣ <b>VAT calculated on customs + excise + profit</b><br/>
+            This compounds the total tax.
+          </p>
+
+          <p className="mt-3 text-rose-300">
+            🟥 <b>Result:</b> Most Nepalis pay:<br/>
+            • 35–70% on normal goods<br/>
+            • 80–200% on imports<br/>
+            • 200–350% on vehicles, alcohol, tobacco<br/>
+            → Before direct income tax.
+          </p>
+
+          <button
+            onClick={() => setOpen(false)}
+            className="mt-3 w-full rounded-xl bg-white/10 border border-white/20 py-1 text-center hover:bg-white/20"
+          >
+            Close
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -499,11 +613,17 @@ export default function Chrome() {
                       value={`NPR ${formatRs(monthlyDirectTax)}`}
                       subtle
                     />
-                    <Stat
-                      title="Hidden (price) tax / mo"
-                      value={`NPR ${formatRs(monthlyHiddenTax)}`}
-                      subtle
-                    />
+                   <Stat
+  title={
+    <div className="flex items-center gap-1">
+      Hidden (price) tax / mo
+      <HiddenTaxInfo />
+    </div>
+  }
+  value={`NPR ${formatRs(monthlyHiddenTax)}`}
+  subtle
+/>
+
                   </div>
                 </div>
                 <p className="mt-3 text-[11px] italic text-slate-300/80 sm:text-xs">
