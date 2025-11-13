@@ -245,6 +245,9 @@ export default function Chrome() {
   const [cartText, setCartText] = useState('');
   const [friction, setFriction] = useState(5); // %
   const [bracketIncome, setBracketIncome] = useState(500_000);
+  const [accountableOpen, setAccountableOpen] = useState(false);
+const [trust, setTrust] = useState(40);
+
 
   // Derived
   const monthlyIncome = useMemo(
