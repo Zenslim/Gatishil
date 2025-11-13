@@ -5,12 +5,6 @@ import { motion } from 'framer-motion';
 import { useEffect, useMemo, useState } from 'react';
 
 /** ───────────────── visuals / utils ───────────────── **/
-function useMounted() {
-  const [m, set] = useState(false);
-  useEffect(() => set(true), []);
-  return m;
-}
-
 function Starfield() {
   return (
     <motion.div
@@ -44,7 +38,7 @@ function SectionShell({
   return (
     <section
       id={id}
-      className="min-h-screen flex items-center py-16 sm:py-20"
+     className="py-8 sm:py-12"
     >
       <motion.div
         className="relative w-full max-w-5xl mx-auto px-4 sm:px-6 lg:px-10"
@@ -280,7 +274,6 @@ function Stat({
 
 /** ───────────────── main component ───────────────── **/
 export default function Chrome() {
-  const mounted = useMounted();
   const [trust, setTrust] = useState(40); // perceived honesty %
 
   // incomes (no pre-inserted numbers – user will fill)
@@ -401,9 +394,6 @@ const [businessType, setBusinessType] = useState<BusinessTypeKey>('general');
   const shareMessage = `I already pay NPR ${formatRs(
     Math.round(annualTotalTax),
   )} in taxes every year. Where does it go? #MeroKarKhoi #ReceiptOfPower`;
-
-  if (!mounted) return null;
-
   return (
     <main className="relative min-h-screen bg-black text-white">
       <Starfield />
@@ -416,13 +406,10 @@ const [businessType, setBusinessType] = useState<BusinessTypeKey>('general');
               Nepal True Tax Mirror
             </p>
             <h1 className="mt-2 text-2xl sm:text-3xl lg:text-4xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-cyan-200 via-white to-fuchsia-200">
-              “I only pay 1% tax”… are you sure?
+             🛑I only pay 1% tax." ... Are You SURE?🛑
             </h1>
             <p className="mt-3 text-sm sm:text-base text-slate-200/80 max-w-2xl mx-auto">
-              Tell the truth to this calculator once, and it will tell the truth
-              back to you. Not just salary tax — your{' '}
-              <span className="underline decoration-cyan-300/80">
-                whole life&apos;s hidden tax
+              Most Nepalis Pay 50% or more on Rs 100 spent
               </span>
               .
             </p>
@@ -434,11 +421,7 @@ const [businessType, setBusinessType] = useState<BusinessTypeKey>('general');
               <h2 className="text-sm sm:text-base font-semibold text-cyan-100 mb-3">
                 1️⃣ Your Monthly Income — all sources
               </h2>
-              <p className="text-[11px] sm:text-xs text-slate-300/80 mb-3">
-                Add how much comes in every month. Not what you declare — what
-                you actually earn.
-              </p>
-             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
   {INCOME_SOURCES.map(({ key, label }) => (
     <div key={key} className="rounded-xl bg-white/[0.06] p-3">
       <div className="text-[12px] text-slate-300/90 mb-1">{label}</div>
