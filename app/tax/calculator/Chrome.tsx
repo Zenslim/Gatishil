@@ -1000,14 +1000,6 @@ export default function Chrome() {
                 </p>
               </div>
               <div className="grid grid-cols-3 gap-3 text-[11px] sm:text-xs">
-                <a
-                  href={`https://twitter.com/intent/tweet?text=${encodeURIComponent(
-                    shareMessage,
-                  )}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="flex items-center justify-center rounded-2xl border border-sky-400/60 bg-sky-500/20 px-3 py-2 transition hover:bg-sky-500/30"
-                >
                <div className="mt-4 grid grid-cols-2 gap-3 text-[11px] sm:text-xs">
 
   {/* Post on X */}
@@ -1041,9 +1033,10 @@ export default function Chrome() {
     className="flex items-center justify-center rounded-2xl border border-emerald-400/60 bg-emerald-500/15 px-3 py-2 
                transition hover:bg-emerald-500/25 hover:scale-[1.02] 
                shadow-[0_0_10px_rgba(16,185,129,0.3)]"
->
-  📎 Share
-</button>
+  >
+    📎 Share
+  </button>
+
 </div>   {/* closes share row */}
 
 </div>   {/* closes receipt wrapper */}
