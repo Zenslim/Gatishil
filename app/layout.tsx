@@ -58,17 +58,39 @@ export default function RootLayout({
   return (
     <html lang="en">
       <head>
-        {/* Explicit <link> tags help Google and Apple detect the favicon faster */}
+        {/* Favicon + PWA basics */}
         <link rel="icon" href="/favicon.ico" type="image/x-icon" />
         <link rel="shortcut icon" href="/favicon.ico" />
         <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
         <meta name="theme-color" content="#000000" />
+
+        {/* iOS PWA friendliness */}
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta
+          name="apple-mobile-web-app-status-bar-style"
+          content="black-translucent"
+        />
       </head>
       <body className={`${inter.className} bg-black text-white antialiased`}>
         {/* Global navbar */}
         <Nav />
-        {/* Removed top padding that created the visible gap under Nav */}
+        {/* Content */}
         <main className="min-h-screen">{children}</main>
+
+        {/* PWA Service Worker Registration */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              if ("serviceWorker" in navigator) {
+                window.addEventListener("load", () => {
+                  navigator.serviceWorker
+                    .register("/sw.js")
+                    .catch((err) => console.error("SW registration failed", err));
+                });
+              }
+            `
+          }}
+        />
       </body>
     </html>
   );
