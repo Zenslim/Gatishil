@@ -4,7 +4,7 @@
 import { motion } from 'framer-motion';
 import { useEffect, useMemo, useState } from 'react';
 
-/** ───────────────── visuals ───────────────── **/
+/** ───────────────── visuals / utils ───────────────── **/
 function useMounted() {
   const [m, set] = useState(false);
   useEffect(() => set(true), []);
@@ -15,7 +15,7 @@ function Starfield() {
   return (
     <motion.div
       aria-hidden
-      className="pointer-events-none fixed inset-0 -z-10 bg-black"
+      className="pointer-events-none fixed inset-0 -z-10 bg-gradient-to-b from-black via-slate-950 to-slate-900"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 0.8 }}
@@ -23,15 +23,56 @@ function Starfield() {
   );
 }
 
-/** ───────────────── constants (from mirror) ───────────────── **/
+function SectionShell({
+  id,
+  children,
+  accent,
+}: {
+  id: string;
+  children: React.ReactNode;
+  accent: 'cyan' | 'amber' | 'red' | 'white' | 'gold' | 'dawn';
+}) {
+  const accentMap: Record<string, string> = {
+    cyan: 'from-cyan-400/40 via-cyan-200/10 to-transparent',
+    amber: 'from-amber-400/40 via-amber-100/10 to-transparent',
+    red: 'from-rose-500/40 via-rose-200/10 to-transparent',
+    white: 'from-white/40 via-slate-200/10 to-transparent',
+    gold: 'from-yellow-400/40 via-yellow-100/10 to-transparent',
+    dawn: 'from-orange-400/40 via-amber-200/10 to-transparent',
+  };
+
+  return (
+    <section
+      id={id}
+      className="min-h-screen flex items-center py-16 sm:py-20"
+    >
+      <motion.div
+        className="relative w-full max-w-5xl mx-auto px-4 sm:px-6 lg:px-10"
+        initial={{ opacity: 0, y: 40 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true, amount: 0.35 }}
+        transition={{ duration: 0.9, ease: 'easeOut' }}
+      >
+        <div
+          className={`pointer-events-none absolute inset-0 -z-10 bg-gradient-to-b ${accentMap[accent]} blur-3xl`}
+        />
+        <div className="relative rounded-3xl border border-white/8 bg-white/[0.03] shadow-[0_0_100px_rgba(15,23,42,0.9)] backdrop-blur-xl p-5 sm:p-8 lg:p-10">
+          {children}
+        </div>
+      </motion.div>
+    </section>
+  );
+}
+
+/** ───────────────── constants ───────────────── **/
 const VAT_RATE = 0.13 as const;
 const VATABLE_SHARE = {
-  foodHome: 0.60,
+  foodHome: 0.6,
   eatingOut: 0.95,
   housing: 0.0,
   utilities: 1.0,
-  transport: 0.70,
-  education: 0.80,
+  transport: 0.7,
+  education: 0.8,
   clothing: 1.0,
   personalCare: 1.0,
   entertainment: 1.0,
@@ -52,27 +93,33 @@ const LIFETIME = {
   retireAge: 60,
   daysInYear: 365,
   workingHoursPerYear: 2000,
-  luxuryCarPrice: 3_500_000,
 };
+
+/** national budget shares for "Where My Tax Goes" **/
+const BUDGET_SHARES = {
+  recurrent: 0.613, // 61.3% — running the machine
+  capital: 0.189, // 18.9% — building the future
+  debt: 0.197, // 19.7% — paying old loans
+} as const;
 
 /** ───────────────── data model ───────────────── **/
 const INCOME_SOURCES = [
   { key: 'employment', label: '💼 Primary Employment (+1% Social Security)' },
   { key: 'business', label: '🏢 Business Income (Progressive Tax)' },
-  { key: 'remittances', label: '✈️ Remittances (TAX-EXEMPT for personal)' },
-  { key: 'agriculture', label: '🌾 Agriculture (100% TAX-EXEMPT)' },
+  { key: 'remittances', label: '✈️ Remittances (TAX-EXEMPT personal)' },
+  { key: 'agriculture', label: '🌾 Agriculture (TAX-EXEMPT)' },
   { key: 'investment', label: '🏠 Investment (TDS avg 5.5%)' },
-  { key: 'otherIncome', label: '👴 Pension (+25% deduction, NO SST)' },
+  { key: 'otherIncome', label: '👴 Pension (+25% deduction, no SST)' },
 ] as const;
 type IncomeKey = (typeof INCOME_SOURCES)[number]['key'];
 
 const CATEGORIES = [
   { key: 'foodHome', label: '🍎 Food (Home)' },
   { key: 'eatingOut', label: '🍽️ Eating Out' },
-  { key: 'housing', label: '🏠 Housing/Rent' },
+  { key: 'housing', label: '🏠 Housing / Rent' },
   { key: 'utilities', label: '⚡ Utilities' },
   { key: 'transport', label: '🚗 Transport' },
-  { key: 'education', label: '📚 Education/Health' },
+  { key: 'education', label: '📚 Education / Health' },
   { key: 'clothing', label: '👕 Clothing' },
   { key: 'personalCare', label: '🧴 Personal Care' },
   { key: 'entertainment', label: '🎬 Entertainment' },
@@ -85,31 +132,27 @@ function formatRs(n: number) {
   const v = Math.round(n || 0);
   return v.toLocaleString('en-NP');
 }
-function toCrore(npr: number) {
-  const crore = npr / 10_000_000;
-  return crore >= 10 ? crore.toFixed(1) : crore.toFixed(2);
-}
 
 function progressiveTax(annual: number) {
   let tax = 0;
   if (annual <= 500_000) tax = annual * 0.01;
-  else if (annual <= 700_000) tax = 500_000 * 0.01 + (annual - 500_000) * 0.10;
-  else if (annual <= 1_000_000) tax = 500_000 * 0.01 + 200_000 * 0.10 + (annual - 700_000) * 0.20;
+  else if (annual <= 700_000) tax = 500_000 * 0.01 + (annual - 500_000) * 0.1;
+  else if (annual <= 1_000_000) tax = 500_000 * 0.01 + 200_000 * 0.1 + (annual - 700_000) * 0.2;
   else if (annual <= 2_000_000)
-    tax = 500_000 * 0.01 + 200_000 * 0.10 + 300_000 * 0.20 + (annual - 1_000_000) * 0.30;
+    tax = 500_000 * 0.01 + 200_000 * 0.1 + 300_000 * 0.2 + (annual - 1_000_000) * 0.3;
   else if (annual <= 5_000_000)
     tax =
       500_000 * 0.01 +
-      200_000 * 0.10 +
-      300_000 * 0.20 +
-      1_000_000 * 0.30 +
+      200_000 * 0.1 +
+      300_000 * 0.2 +
+      1_000_000 * 0.3 +
       (annual - 2_000_000) * 0.36;
   else
     tax =
       500_000 * 0.01 +
-      200_000 * 0.10 +
-      300_000 * 0.20 +
-      1_000_000 * 0.30 +
+      200_000 * 0.1 +
+      300_000 * 0.2 +
+      1_000_000 * 0.3 +
       3_000_000 * 0.36 +
       (annual - 5_000_000) * 0.39;
   return tax;
@@ -135,17 +178,21 @@ function directTaxAnnualByCategory(monthly: Record<IncomeKey, number>) {
     const net = pensionA * 0.75;
     total += progressiveTax(net);
   }
-  return total; // annual
+
+  return total;
 }
 
 function hiddenTaxMonthly(spend: Record<CatKey, number>) {
   let sum = 0;
-  const breakdown: Record<CatKey, { amount: number; pctOfIncome: number }> = {} as any;
+  const breakdown: Record<
+    CatKey,
+    { amount: number; pctOfIncome: number }
+  > = {} as any;
 
   for (const { key } of CATEGORIES) {
     const amt = spend[key] || 0;
     const vat = amt * (VATABLE_SHARE[key] ?? 0) * VAT_RATE;
-    const exc = amt * (EXCISE as any)[key] ? amt * (EXCISE as any)[key] : 0;
+    const exc = amt * ((EXCISE as any)[key] ?? 0);
     const total = vat + exc;
     sum += total;
     breakdown[key] = { amount: total, pctOfIncome: 0 };
@@ -153,7 +200,7 @@ function hiddenTaxMonthly(spend: Record<CatKey, number>) {
   return { sum, breakdown };
 }
 
-/** ───────────────── UI controls (borderless) ───────────────── **/
+/** ───────────────── UI controls ───────────────── **/
 function NumberInput({
   value,
   onChange,
@@ -169,46 +216,35 @@ function NumberInput({
     <div className="relative">
       <input
         inputMode="numeric"
-        className="w-full rounded-xl bg-white/10 focus:bg-white/[0.12] outline-none px-4 h-12 text-white placeholder-white/40"
+        className="w-full rounded-xl bg-white/10 focus:bg-white/[0.16] outline-none px-4 h-11 text-sm sm:text-base text-white placeholder-white/40"
         placeholder={placeholder || '0'}
         value={value || ''}
         onChange={(e) => onChange(Number(e.target.value || 0))}
       />
-      <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-white/60">
+      <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[11px] text-white/60">
         {right}
       </span>
     </div>
   );
 }
 
-function Field({
-  label,
-  suffix,
+function Stat({
+  title,
   value,
-  onChange,
+  subtle,
 }: {
-  label: string;
-  suffix?: string;
-  value: number;
-  onChange: (v: number) => void;
+  title: string;
+  value: string;
+  subtle?: boolean;
 }) {
   return (
-    <div className="rounded-xl bg-white/[0.06] p-3">
-      <div className="text-[12px] text-slate-300/90 mb-1">{label}</div>
-      <NumberInput value={value} onChange={onChange} right={suffix || ''} />
-    </div>
-  );
-}
-
-function Stat({ title, value, highlight = false }: { title: string; value: string; highlight?: boolean }) {
-  return (
     <div
-      className={`rounded-xl p-4 ${
-        highlight ? 'bg-white/[0.12]' : 'bg-white/[0.06]'
+      className={`rounded-2xl border px-4 py-3 sm:px-5 sm:py-4 text-center ${
+        subtle ? 'border-white/10 bg-white/[0.03]' : 'border-white/20 bg-white/[0.06]'
       }`}
     >
-      <div className="text-[12px] text-slate-300/80 mb-1">{title}</div>
-      <div className="text-xl font-extrabold text-white">{value}</div>
+      <div className="text-[11px] sm:text-xs text-slate-200/80 mb-1">{title}</div>
+      <div className="text-lg sm:text-xl font-extrabold text-white">{value}</div>
     </div>
   );
 }
@@ -216,8 +252,9 @@ function Stat({ title, value, highlight = false }: { title: string; value: strin
 /** ───────────────── main component ───────────────── **/
 export default function Chrome() {
   const mounted = useMounted();
+  const [trust, setTrust] = useState(40); // perceived honesty %
 
-  // incomes (default mirror values)
+  // incomes (default demo values)
   const [incomeMap, setIncomeMap] = useState<Record<IncomeKey, number>>({
     employment: 150_000,
     business: 50_000,
@@ -227,7 +264,7 @@ export default function Chrome() {
     otherIncome: 20_000,
   });
 
-  // spending (default mirror values)
+  // spending (default demo values)
   const [spend, setSpend] = useState<Record<CatKey, number>>({
     foodHome: 15_000,
     eatingOut: 8_000,
@@ -241,614 +278,666 @@ export default function Chrome() {
     other: 9_000,
   });
 
-  // Truth Pack inputs
-  const [cartText, setCartText] = useState('');
-  const [friction, setFriction] = useState(5); // %
-  const [bracketIncome, setBracketIncome] = useState(500_000);
-  const [accountableOpen, setAccountableOpen] = useState(false);
-const [trust, setTrust] = useState(40);
-
-
-  // Derived
+  // derived income & tax
   const monthlyIncome = useMemo(
     () => Object.values(incomeMap).reduce((s, v) => s + (v || 0), 0),
-    [incomeMap]
+    [incomeMap],
   );
   const annualIncome = monthlyIncome * 12;
 
-  // direct tax (annual, mirror logic)
-  const annualDirectTax = useMemo(() => directTaxAnnualByCategory(incomeMap), [incomeMap]);
+  const annualDirectTax = useMemo(
+    () => directTaxAnnualByCategory(incomeMap),
+    [incomeMap],
+  );
   const monthlyDirectTax = annualDirectTax / 12;
 
-  // hidden tax
-  const { sum: monthlyHiddenTax, breakdown } = useMemo(() => hiddenTaxMonthly(spend), [spend]);
+  const { sum: monthlyHiddenTax } = useMemo(
+    () => hiddenTaxMonthly(spend),
+    [spend],
+  );
 
-  // total & effective
   const monthlyTotalTax = monthlyDirectTax + monthlyHiddenTax;
-  const effectiveRatePct = monthlyIncome ? (monthlyTotalTax / monthlyIncome) * 100 : 0;
+  const annualTotalTax = monthlyTotalTax * 12;
+
+  const effectiveRatePct = monthlyIncome
+    ? (monthlyTotalTax / monthlyIncome) * 100
+    : 0;
   const uncertainty = effectiveRatePct * UNCERTAINTY;
   const lowEstimate = effectiveRatePct - uncertainty;
   const highEstimate = effectiveRatePct + uncertainty;
 
-  // fill pctOfIncome in breakdown
-  Object.keys(breakdown).forEach((k) => {
-    const kk = k as CatKey;
-    breakdown[kk].pctOfIncome = monthlyIncome ? (breakdown[kk].amount / monthlyIncome) * 100 : 0;
-  });
-
-  // warnings
-  const overspend = Math.max(0, Object.values(spend).reduce((s, v) => s + v, 0) - monthlyIncome);
-  const overspendPct = monthlyIncome ? (overspend / monthlyIncome) * 100 : 0;
-
-  /** Tax Freedom Day */
+  /** tax freedom day */
   const taxShare = monthlyIncome ? monthlyTotalTax / monthlyIncome : 0;
-  const govDays = Math.max(0, Math.floor(LIFETIME.daysInYear * taxShare));
+  const govDays = Math.max(
+    0,
+    Math.floor(LIFETIME.daysInYear * Math.min(1, taxShare)),
+  );
   const govMonths = +(govDays / 30).toFixed(1);
   const dateLabel = useMemo(() => {
     const y = new Date().getFullYear();
     const dayOfYear = 1 + govDays;
     const dt = new Date(y, 0, dayOfYear);
-    const m = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][dt.getMonth()];
+    const m = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ][dt.getMonth()];
     return `${m} ${dt.getDate()}`;
   }, [govDays]);
 
-  /** Life Hours */
-  const hoursForTaxes = Math.floor(LIFETIME.workingHoursPerYear * (effectiveRatePct / 100));
-  const hoursPerDay = (hoursForTaxes / 365).toFixed(1);
-  const hoursPerMonth = Math.floor(hoursForTaxes / 12);
+  /** life hours lost to tax */
+  const hoursForTaxes = Math.floor(
+    LIFETIME.workingHoursPerYear * (effectiveRatePct / 100),
+  );
   const workingDaysLost = Math.floor(hoursForTaxes / 8);
 
-  /** Lifetime Tax Burden */
+  /** where my tax goes (national budget shares) */
+  const recurrent = annualTotalTax * BUDGET_SHARES.recurrent;
+  const capital = annualTotalTax * BUDGET_SHARES.capital;
+  const debt = annualTotalTax * BUDGET_SHARES.debt;
+  const recurrentPct = annualTotalTax
+    ? (recurrent / annualTotalTax) * 100
+    : 0;
+  const capitalPct = annualTotalTax ? (capital / annualTotalTax) * 100 : 0;
+  const debtPct = annualTotalTax ? (debt / annualTotalTax) * 100 : 0;
+
+  /** trust / leak */
+  const waste = annualTotalTax * ((100 - trust) / 100);
+  const effectiveUse = annualTotalTax - waste;
+
+  /** lifetime view (for narrative, not ultra precise finance) */
   const yearsLeft = LIFETIME.retireAge - LIFETIME.currentAge;
-  const annualTotalTax = monthlyTotalTax * 12;
   const lifetimeTax = Math.max(0, annualTotalTax * yearsLeft);
-  const lifetimeTaxCrore = lifetimeTax / 10_000_000;
-  const yearsWorkingForGov = yearsLeft * (effectiveRatePct / 100);
-  const carsLost = Math.floor(lifetimeTax / LIFETIME.luxuryCarPrice);
 
-  /** Bracket creep quick calc */
-  const bracketTax = progressiveTax(bracketIncome);
-  const bracketRate = (bracketTax / Math.max(1, bracketIncome)) * 100;
-
-  /** Cart scanner (≈25% hidden) */
-  const cart = useMemo(() => {
-    const items = cartText.split(/[,;\n]/).map((s) => s.trim()).filter(Boolean);
-    let total = 0;
-    let hidden = 0;
-    items.forEach((line) => {
-      const m = line.match(/(\d+)/);
-      if (m) {
-        const price = parseInt(m[1]!, 10);
-        total += price;
-        hidden += price * 0.25;
-      }
-    });
-    return { total, hidden };
-  }, [cartText]);
-
-  /** Friction dial text */
-  const frictionImpact = (() => {
-    const f = friction;
-    if (f <= 5) return { text: `Low friction! Only ${f}% leakage — money mostly reaches purpose.`, color: '#4ade80' };
-    if (f <= 15) return { text: `Moderate friction. ${f}% leakage — some inefficiency, still manageable.`, color: '#fbbf24' };
-    if (f <= 25) return { text: `High friction! ${f}% disappears in delays, bribes, inefficiencies.`, color: '#f97316' };
-    return { text: `Severe friction! ${f}% leakage — major corruption and waste.`, color: '#ef4444' };
-  })();
-
-  const micro = (() => {
-    const hiddenPct = (monthlyHiddenTax / Math.max(1, monthlyTotalTax)) * 100;
-    if (effectiveRatePct > 25) {
-      return `Wow. ${hiddenPct.toFixed(0)}% of your tax comes from everyday spending. If you feel prices more than pay slips, this is why.`;
-    } else if (effectiveRatePct > 15) {
-      return `You’re paying about NPR ${formatRs(monthlyHiddenTax)} per month in hidden taxes. The real question: do you know where it goes?`;
-    }
-    return `Even at ${effectiveRatePct.toFixed(1)}%, hidden taxes are ~${hiddenPct.toFixed(0)}% of your total. That’s the price of living in a modern economy.`;
-  })();
+  const shareMessage = `I already pay NPR ${formatRs(
+    Math.round(annualTotalTax),
+  )} in taxes every year. Where does it go? #MeroKarKhoi #ReceiptOfPower`;
 
   if (!mounted) return null;
 
   return (
-    <main className="relative">
+    <main className="relative min-h-screen bg-black text-white">
       <Starfield />
-      <section className="relative z-10">
-        <div className="max-w-3xl md:max-w-4xl lg:max-w-5xl mx-auto px-4 sm:px-6 lg:px-10 py-10">
-          {/* header */}
+
+      {/* 1. THE SLEEP OF NUMBERS */}
+      <SectionShell id="sleep" accent="cyan">
+        <div className="space-y-6 sm:space-y-8">
           <div className="text-center">
-            <h1 className="text-3xl sm:text-4xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-cyan-200 via-white to-fuchsia-200">
+            <p className="text-xs uppercase tracking-[0.25em] text-cyan-200/80">
               Nepal True Tax Mirror
+            </p>
+            <h1 className="mt-2 text-2xl sm:text-3xl lg:text-4xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-cyan-200 via-white to-fuchsia-200">
+              “I only pay 1% tax”… are you sure?
             </h1>
-            <p className="mt-2 text-slate-300/80">
-              Stop feeling the pinch without knowing why. This shows your complete tax story.
+            <p className="mt-3 text-sm sm:text-base text-slate-200/80 max-w-2xl mx-auto">
+              Tell the truth to this calculator once, and it will tell the truth
+              back to you. Not just salary tax — your{' '}
+              <span className="underline decoration-cyan-300/80">
+                whole life&apos;s hidden tax
+              </span>
+              .
             </p>
           </div>
 
-          {/* ─── single-scroll container ─── */}
-          <div className="mt-8 space-y-6">
-            {/* Inputs: Income */}
-            <div className="rounded-2xl bg-white/[0.04] p-6">
-              <h2 className="text-lg font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-cyan-200 via-white to-fuchsia-200">
-                Tell Us The Truth
+          <div className="grid lg:grid-cols-2 gap-6 lg:gap-8">
+            {/* income inputs */}
+            <div>
+              <h2 className="text-sm sm:text-base font-semibold text-cyan-100 mb-3">
+                1️⃣ Your Monthly Income — all sources
               </h2>
-              <div className="mt-4">
-                <div className="text-sm text-white/90 font-semibold">Monthly Income — 6 Sources</div>
-                <p className="text-xs text-slate-300/80 italic mb-2">
-                  Add your monthly income from all sources. Direct tax is computed automatically.
-                </p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {INCOME_SOURCES.map(({ key, label }) => (
-                    <div key={key} className="rounded-xl bg-white/[0.06] p-3">
-                      <div className="text-[12px] text-slate-300/90 mb-1">{label}</div>
-                      <NumberInput
-                        value={incomeMap[key]}
-                        onChange={(v) => setIncomeMap((m) => ({ ...m, [key]: v }))}
-                        placeholder="0"
-                        right="NPR"
-                      />
-                    </div>
-                  ))}
-                </div>
-                <div className="rounded-xl bg-white/[0.06] p-4 flex items-center justify-between mt-3">
-                  <div className="text-sm text-white/90 font-semibold">Total Monthly Income</div>
-                  <div className="text-xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-amber-300 via-white to-fuchsia-300">
-                    NPR {formatRs(monthlyIncome)}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Direct tax summary */}
-            <div className="rounded-2xl bg-white/[0.04] p-6">
-              <div className="text-sm font-semibold">Direct Tax Calculation (FY 2082/83)</div>
-              <div className="text-xs text-slate-300/80 mt-1">
-                Annual Income: <b>NPR {formatRs(annualIncome)}</b><br />
-                Annual Tax: <b>NPR {formatRs(annualDirectTax)}</b><br />
-                Effective Rate: <b>{((annualDirectTax / Math.max(1, annualIncome)) * 100).toFixed(1)}%</b><br />
-                Monthly Tax: <b>NPR {formatRs(monthlyDirectTax)}</b>
-              </div>
-              <div className="text-[11px] text-slate-300/70 mt-3">
-                <b>Income Tax Treatment:</b><br />
-                💼 Employment: Progressive (1%–39%) + 1% Social Security (max 5,000)<br />
-                🏢 Business: Progressive (1%–39%)<br />
-                ✈️ Remittances: <b>TAX-EXEMPT</b> (personal)<br />
-                🌾 Agriculture: <b>100% TAX-EXEMPT</b><br />
-                🏠 Investment: <b>TDS avg 5.5%</b> (Interest 6%, Dividend 5%, Gains 7.5%/5%)<br />
-                👴 Pension: Progressive + 25% deduction, no SST
-              </div>
-            </div>
-
-            {/* Spending */}
-            <div className="rounded-2xl bg-white/[0.04] p-6">
-              <div className="text-sm text-white/90 font-semibold">Monthly Spending</div>
-              <p className="text-xs text-slate-300/80 italic mb-2">
-                Used to compute hidden VAT/excise embedded in prices.
+              <p className="text-[11px] sm:text-xs text-slate-300/80 mb-3">
+                Add how much comes in every month. Not what you declare — what
+                you actually earn.
               </p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {CATEGORIES.map(({ key, label }) => (
-                  <div key={key} className="rounded-xl bg-white/[0.06] p-3">
-                    <div className="text-[12px] text-slate-300/90 mb-1">{label}</div>
+                {INCOME_SOURCES.map(({ key, label }) => (
+                  <div
+                    key={key}
+                    className="rounded-2xl bg-white/[0.04] border border-white/10 p-3"
+                  >
+                    <div className="text-[11px] text-slate-200/85 mb-1">
+                      {label}
+                    </div>
                     <NumberInput
-                      value={spend[key]}
-                      onChange={(v) => setSpend((m) => ({ ...m, [key]: v }))}
+                      value={incomeMap[key]}
+                      onChange={(v) =>
+                        setIncomeMap((m) => ({ ...m, [key]: v }))
+                      }
                       placeholder="0"
                       right="NPR"
                     />
                   </div>
                 ))}
               </div>
-            </div>
-
-            {/* Headline numbers */}
-            <div className="rounded-2xl bg-white/[0.04] p-6 text-center">
-              <div className="text-5xl font-extrabold text-rose-300 drop-shadow">
-                {effectiveRatePct.toFixed(1)}%
-              </div>
-              <div className="text-slate-300/90 text-sm">
-                Range: {lowEstimate.toFixed(1)}% – {highEstimate.toFixed(1)}% (±5% uncertainty)
-              </div>
-
-              <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="rounded-xl p-4 text-center bg-gradient-to-br from-emerald-900/30 to-cyan-900/20">
-                  <div className="text-2xl font-extrabold text-emerald-200">NPR {formatRs(monthlyDirectTax)}</div>
-                  <div className="text-white/90 text-sm">Visible Tax</div>
-                </div>
-                <div className="rounded-xl p-4 text-center bg-gradient-to-br from-rose-900/30 to-amber-900/20">
-                  <div className="text-2xl font-extrabold text-rose-200">NPR {formatRs(monthlyHiddenTax)}</div>
-                  <div className="text-white/90 text-sm">Hidden Tax</div>
-                </div>
-              </div>
-
-              {overspend > 0 && (
-                <div className="mt-4 rounded-xl p-4 bg-gradient-to-r from-rose-600/60 to-amber-600/40 text-white animate-pulse">
-                  <div className="font-semibold">Budget Alert: Spending Exceeds Income</div>
-                  <div className="text-sm opacity-90">
-                    Your monthly spending exceeds income by <b>NPR {formatRs(overspend)}</b> ({overspendPct.toFixed(1)}%).
-                    Time to embrace a frugal lifestyle!
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Tax Freedom Journey */}
-            <div className="rounded-2xl bg-white/[0.04] p-6">
-              <h3 className="text-lg font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-cyan-200 via-white to-fuchsia-200">
-                Your Tax Freedom Journey
-              </h3>
-              <p className="text-slate-300/90 text-sm mt-1">
-                The day each year when you stop working for the government — and start working for yourself.
-              </p>
-
-              <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <Stat title="Tax Freedom Day" value={dateLabel} highlight />
-                <Stat title="Days worked for Govt." value={`${govDays} days`} />
-                <Stat title="≈ Months of slavery" value={`${govMonths} months`} />
-              </div>
-
-              <div className="mt-4">
-                <div className="text-[12px] text-white/70 mb-1">Year Timeline</div>
-                <div className="h-3 w-full rounded-full bg-white/10 overflow-hidden">
-                  <motion.div
-                    initial={{ width: 0 }}
-                    animate={{ width: `${Math.min(100, (govDays / 365) * 100)}%` }}
-                    transition={{ duration: 0.8 }}
-                    className="h-full bg-gradient-to-r from-rose-400 via-amber-300 to-emerald-300"
-                  />
-                </div>
+              <div className="mt-4 flex items-center justify-between rounded-2xl border border-cyan-300/30 bg-cyan-400/10 px-4 py-3">
+                <span className="text-xs sm:text-sm text-cyan-50/90 font-medium">
+                  Total Monthly Income (truth)
+                </span>
+                <span className="text-lg sm:text-xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-amber-200 via-white to-fuchsia-200">
+                  NPR {formatRs(monthlyIncome)}
+                </span>
               </div>
             </div>
 
-            {/* Life Hours */}
-            <div className="rounded-2xl bg-gradient-to-br from-indigo-700/50 to-fuchsia-700/40 p-6 text-white">
-              <h3 className="text-lg font-extrabold">⏰ Your Time for the State</h3>
-              <div className="mt-3 text-3xl font-extrabold">{formatRs(hoursForTaxes)} hrs</div>
-              <div className="text-sm opacity-90">That’s {workingDaysLost} working days!</div>
-              <div className="mt-4 grid grid-cols-3 gap-3 text-center">
-                <div className="rounded-xl bg-white/10 p-3">
-                  <div className="text-xl font-extrabold">{hoursPerDay}</div>
-                  <div className="text-xs opacity-90">Hours per day</div>
-                </div>
-                <div className="rounded-xl bg-white/10 p-3">
-                  <div className="text-xl font-extrabold">{hoursPerMonth}</div>
-                  <div className="text-xs opacity-90">Hours per month</div>
-                </div>
-                <div className="rounded-xl bg-white/10 p-3">
-                  <div className="text-xl font-extrabold">{workingDaysLost}</div>
-                  <div className="text-xs opacity-90">Working days lost</div>
-                </div>
-              </div>
-            </div>
-
-            {/* Hidden tax heatmap */}
-            <div className="rounded-2xl bg-white/[0.04] p-6">
-              <h3 className="text-lg font-extrabold text-white">Your Hidden Tax Receipt</h3>
-              <div className="mt-3 space-y-2">
-                {Object.entries(breakdown)
-                  .sort((a, b) => b[1].amount - a[1].amount)
-                  .map(([key, data]) => {
-                    const pct = monthlyHiddenTax > 0 ? (data.amount / monthlyHiddenTax) * 100 : 0;
-                    return (
-                      <div key={key} className="flex items-center gap-3">
-                        <div className="w-44 text-xs text-slate-200">
-                          {CATEGORIES.find((c) => c.key === (key as CatKey))?.label}
-                        </div>
-                        <div className="flex-1 h-2 rounded bg-white/10 overflow-hidden">
-                          <div
-                            className="h-full rounded bg-gradient-to-r from-rose-400 to-amber-300"
-                            style={{ width: `${pct}%` }}
-                          />
-                        </div>
-                        <div className="w-36 text-right text-xs text-slate-300">
-                          NPR {formatRs(data.amount)}
-                        </div>
+            {/* spending + headline rate */}
+            <div className="space-y-5">
+              <div>
+                <h2 className="text-sm sm:text-base font-semibold text-cyan-100 mb-3">
+                  2️⃣ Your Monthly Spending — where it vanishes
+                </h2>
+                <p className="text-[11px] sm:text-xs text-slate-300/80 mb-3">
+                  This is how prices silently collect VAT and excise on behalf
+                  of the state.
+                </p>
+                <div className="grid grid-cols-2 gap-3">
+                  {CATEGORIES.map(({ key, label }) => (
+                    <div
+                      key={key}
+                      className="rounded-2xl bg-white/[0.04] border border-white/10 p-3"
+                    >
+                      <div className="text-[11px] text-slate-200/85 mb-1">
+                        {label}
                       </div>
-                    );
-                  })}
-              </div>
-            </div>
-
-            {/* Price Ghosts */}
-            <div className="rounded-2xl bg-white/[0.04] p-6">
-              <h3 className="text-lg font-extrabold text-white">Price Ghosts: Your Rs 100 Journey</h3>
-              <div className="mt-3 space-y-2 text-sm text-slate-200">
-                {[
-                  ['💰 Original Price', 100],
-                  ['🏢 Import Duty', 15],
-                  ['⛽ Excise Tax', 8],
-                  ['📄 VAT on Duty', 3],
-                  ['💼 Corporate Tax', 12],
-                  ['💳 Payment Fees', 4],
-                  ['💱 FX Spread', 2],
-                ].map(([label, amt]) => (
-                  <div key={label as string} className="flex items-center justify-between rounded bg-white/5 p-2">
-                    <span>{label as string}</span>
-                    <span className="font-semibold">NPR {amt as number}</span>
-                  </div>
-                ))}
-                <div className="rounded bg-rose-600/60 p-3 text-white">
-                  <b>Total Hidden Tax: NPR 44 (44% of your money!)</b><br />
-                  <small>You only get Rs 56 worth of actual goods for your Rs 100</small>
+                      <NumberInput
+                        value={spend[key]}
+                        onChange={(v) =>
+                          setSpend((m) => ({ ...m, [key]: v }))
+                        }
+                        placeholder="0"
+                        right="NPR"
+                      />
+                    </div>
+                  ))}
                 </div>
               </div>
-            </div>
 
-            {/* Bracket Creep */}
-            <div className="rounded-2xl bg-white/[0.04] p-6">
-              <h3 className="text-lg font-extrabold text-white">Bracket Creep: Income vs Brackets</h3>
-              <div className="text-xs text-slate-300/90">Income: NPR {formatRs(bracketIncome)}</div>
-              <input
-                type="range"
-                min={400_000}
-                max={1_000_000}
-                step={10_000}
-                value={bracketIncome}
-                onChange={(e) => setBracketIncome(Number(e.target.value))}
-                className="w-full mt-3"
-              />
-              <div className="mt-2 text-sm text-slate-200">
-                Estimated tax: <b>NPR {formatRs(bracketTax)}</b> — effective <b>{bracketRate.toFixed(1)}%</b>.
-              </div>
-            </div>
-
-            {/* Cart Scanner */}
-            <div className="rounded-2xl bg-gradient-to-br from-cyan-700/40 to-emerald-700/40 p-6">
-              <h3 className="text-lg font-extrabold text-white">Your Cart, Your Truth</h3>
-              <p className="text-xs text-white/80">Enter a quick shopping list (e.g., “1kg rice 80, 2L milk 120, recharge 100”)</p>
-              <textarea
-                className="w-full h-28 mt-2 rounded-xl bg-white/10 p-3 text-sm text-white placeholder-white/50"
-                value={cartText}
-                onChange={(e) => setCartText(e.target.value)}
-                placeholder="1kg rice 80, 2L milk 120, 1kg chicken 400, phone recharge 100"
-              />
-              {cart.total > 0 && (
-                <div className="mt-3 rounded bg-rose-600/60 p-3 text-white text-center">
-                  <div className="text-2xl font-extrabold">{Math.round(cart.hidden)}</div>
-                  <div className="text-sm opacity-90">
-                    NPR in hidden taxes (≈25%) from cart total NPR {formatRs(cart.total)}
+              <div className="pt-1 border-t border-white/10">
+                <p className="mt-3 text-[11px] sm:text-xs text-slate-300/80">
+                  Based on your truth, this is how much of your life quietly
+                  goes to taxes every month:
+                </p>
+                <div className="mt-3 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
+                  <div className="flex-1">
+                    <div className="text-[11px] text-slate-300/80">
+                      Effective total tax rate
+                    </div>
+                    <div className="mt-1 text-4xl sm:text-5xl font-extrabold text-cyan-100 drop-shadow-[0_0_40px_rgba(34,211,238,0.5)]">
+                      {effectiveRatePct.toFixed(1)}%
+                    </div>
+                    <div className="mt-1 text-[11px] text-slate-300/80">
+                      Range: {lowEstimate.toFixed(1)}% –{' '}
+                      {highEstimate.toFixed(1)}% (±5% uncertainty)
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 sm:w-60">
+                    <Stat
+                      title="Visible (income) tax / mo"
+                      value={`NPR ${formatRs(monthlyDirectTax)}`}
+                      subtle
+                    />
+                    <Stat
+                      title="Hidden (price) tax / mo"
+                      value={`NPR ${formatRs(monthlyHiddenTax)}`}
+                      subtle
+                    />
                   </div>
                 </div>
-              )}
-            </div>
-
-            {/* Compliance Cost */}
-            <div className="rounded-2xl bg-white/[0.04] p-6">
-              <h3 className="text-lg font-extrabold text-white">Compliance Cost: Your Paperwork Tax</h3>
-              <div className="text-3xl font-extrabold text-white">
-                35 hrs <span className="text-sm font-semibold opacity-80">/ year</span>
-              </div>
-              <div className="text-sm text-slate-300/90">At NPR 2,000/hr → <b>NPR {formatRs(70_000)}/year</b></div>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3 text-center text-xs text-slate-200">
-                {[
-                  ['Filing Returns', '8 hrs'],
-                  ['Gathering Docs', '12 hrs'],
-                  ['Follow-up & Queries', '5 hrs'],
-                  ['Mind Space', '10 hrs'],
-                ].map(([k, v]) => (
-                  <div key={k} className="rounded-xl bg-white/10 p-3">
-                    <div className="font-semibold">{k}</div>
-                    <div>{v}</div>
-                  </div>
-                ))}
+                <p className="mt-3 text-[11px] sm:text-xs text-slate-300/80 italic">
+                  “I pay only 1%” was a sweet dream. This is the real alarm
+                  clock.
+                </p>
               </div>
             </div>
-
-            {/* Friction Dial */}
-            <div className="rounded-2xl bg-white/[0.04] p-6">
-              <h3 className="text-lg font-extrabold text-white">Corruption Friction: What Gets Lost</h3>
-              <div className="flex items-center gap-4">
-                <input
-                  type="range"
-                  min={0}
-                  max={40}
-                  step={1}
-                  value={friction}
-                  onChange={(e) => setFriction(Number(e.target.value))}
-                  className="flex-1"
-                />
-                <div className="w-16 text-right text-white">{friction}%</div>
-              </div>
-              <div className="mt-2 text-sm" style={{ color: frictionImpact.color }}>
-                {frictionImpact.text}
-              </div>
-            </div>
-
-            {/* One Rupee, Five Hands */}
-            <div className="rounded-2xl bg-white/[0.04] p-6">
-              <h3 className="text-lg font-extrabold text-white">One Rupee, Five Hands: The Journey</h3>
-              <div className="mt-3 grid grid-cols-2 sm:grid-cols-5 gap-3 text-center text-slate-200">
-                {[
-                  ['👤 You Earn', '100%'],
-                  ['💰 Gov Tax', '25%'],
-                  ['💳 VAT/Sales', '15%'],
-                  ['🏢 Corp Tax', '10%'],
-                  ['🔄 Friction', '5%'],
-                ].map(([k, v]) => (
-                  <div key={k} className="rounded-xl bg-white/10 p-3">
-                    <div className="text-lg">{k}</div>
-                    <div className="font-semibold">{v}</div>
-                  </div>
-                ))}
-              </div>
-              <div className="mt-3 rounded bg-rose-600/60 p-3 text-white text-center">
-                <div className="text-2xl font-extrabold">NPR 45</div>
-                <div className="text-sm opacity-90">From your original NPR 100, only NPR 45 reaches you!</div>
-                <div className="text-xs opacity-80">You lose 55% to the system before you even see your money</div>
-              </div>
-            </div>
-
-            {/* micro text */}
-            <div className="rounded-xl bg-gradient-to-r from-amber-50/10 to-rose-50/10 p-4">
-              <div className="text-sm font-semibold">If you feel prices more than pay slips…</div>
-              <div className="text-slate-300/90 text-sm mt-1">{micro}</div>
-            </div>
-
-            {/* Lifetime Burden */}
-            <div className="rounded-2xl bg-gradient-to-br from-slate-800/60 to-slate-900/40 p-6 text-white">
-              <h3 className="text-lg font-extrabold">Your Lifetime Tax Legacy</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-3">
-                <Stat title="Lifetime Taxes" value={`NPR ${toCrore(lifetimeTax)} Cr`} highlight />
-                <Stat title="Years for Govt." value={`${yearsWorkingForGov.toFixed(1)} yrs`} />
-                <Stat title="Luxury Cars You Could Buy" value={`${carsLost}`} />
-              </div>
-              <p className="mt-3 text-sm text-slate-200/90">
-                {lifetimeTaxCrore > 5
-                  ? `You'll give the government ${lifetimeTaxCrore.toFixed(
-                      1,
-                    )} crores over your working life — enough to buy ${carsLost} luxury cars, or multiple houses.`
-                  : lifetimeTaxCrore > 2
-                  ? `Lifetime burden: ${lifetimeTaxCrore.toFixed(
-                      1,
-                    )} crores NPR; you're basically working ${yearsWorkingForGov.toFixed(
-                      1,
-                    )} years for people you'll never meet.`
-                  : lifetimeTaxCrore > 0.5
-                  ? `Even moderately, you'll pay ${(lifetimeTax / 100000).toFixed(
-                      0,
-                    )} lakhs in taxes — rupees that could have been retirement.`
-                  : `Despite lower earnings, lifetime tax still totals ${(lifetimeTax / 100000).toFixed(
-                      0,
-                    )} lakhs. Small streams become rivers over time.`}
-                {lifetimeTax > 50_000_000 ? ' Plus, inflation will make future rupees worth less.' : ''}
-              </p>
-              <p className="mt-2 text-slate-300/80 text-xs">
-                Assumptions: age {LIFETIME.currentAge}→{LIFETIME.retireAge}, Rs {formatRs(LIFETIME.luxuryCarPrice)} per car.
-              </p>
-            </div>
-{/* ──────────────────────────────────────────────── */}
-{/*           STAGE 3 — ACCOUNTABLENESS             */}
-{/*   Inserted after Lifetime Tax Legacy section     */}
-{/* ──────────────────────────────────────────────── */}
-
-{/* 1️⃣ Where My Tax Goes — Public Utilization View */}
-<div className="rounded-2xl bg-white/[0.04] p-6 mt-6">
-  <h3 className="text-lg font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-amber-300 via-white to-yellow-200">
-    Where My Tax Goes
-  </h3>
-  <p className="text-sm text-slate-300/80 mt-1">
-    Estimated allocation if your tax were used effectively.
-  </p>
-
-  <div className="mt-4 space-y-2 text-slate-200 text-sm">
-    {[
-      ['🏥 Health', 18],
-      ['🎓 Education', 17],
-      ['🛣 Infrastructure', 22],
-      ['⚔️ Defense', 10],
-      ['🧑‍💼 Administration', 14],
-      ['💸 Debt / Interest', 12],
-      ['🌿 Environment', 7],
-    ].map(([label, pct]) => (
-      <div key={label} className="flex items-center gap-3">
-        <div className="w-40">{label}</div>
-        <div className="flex-1 h-2 rounded bg-white/10 overflow-hidden">
-          <motion.div
-            initial={{ width: 0 }}
-            whileInView={{ width: `${pct}%` }}
-            transition={{ duration: 0.8 }}
-            className="h-full bg-gradient-to-r from-yellow-300 via-amber-300 to-orange-300"
-          />
-        </div>
-        <div className="w-12 text-right">{pct}%</div>
-      </div>
-    ))}
-  </div>
-</div>
-
-{/* 2️⃣ Demand Accountability — Social Pressure Mechanism */}
-<div className="rounded-2xl bg-white/[0.04] p-6 mt-6">
-  <h3 className="text-lg font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-amber-300 via-white to-yellow-200">
-    Demand Accountability
-  </h3>
-  <p className="mt-1 text-sm text-slate-300/70">
-    Your taxes build Nepal — now ask where they go.
-  </p>
-
-  <button
-    onClick={() => setAccountableOpen(!accountableOpen)}
-    className="mt-3 px-4 py-2 rounded-xl bg-gradient-to-r from-rose-500 to-amber-500 text-white font-semibold"
-  >
-    Where is my money?
-  </button>
-
-  {accountableOpen && (
-    <motion.div
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="mt-4 bg-black/40 p-4 rounded-xl text-sm"
-    >
-      <textarea
-        className="w-full h-28 bg-white/10 p-3 rounded text-white text-sm"
-        defaultValue={`I contribute NPR ${formatRs(
-          Math.round(annualTotalTax)
-        )} in taxes every year. #MeroKarKhoi — I deserve transparency.`}
-      />
-      <div className="mt-2 text-slate-300/80">
-        Share: [Facebook] [X] [Instagram]
-      </div>
-    </motion.div>
-  )}
-</div>
-
-{/* 3️⃣ National Honesty Meter — Trust Slider */}
-<div className="rounded-2xl bg-white/[0.04] p-6 mt-6">
-  <h3 className="text-lg font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-amber-300 via-white to-yellow-200">
-    National Honesty Meter
-  </h3>
-  <p className="text-xs text-slate-300/70 mt-1">
-    Slide to estimate how much of your tax you believe is used effectively.
-  </p>
-
-  <input
-    type="range"
-    min={0}
-    max={100}
-    value={trust}
-    onChange={(e) => setTrust(Number(e.target.value))}
-    className="w-full mt-4"
-  />
-
-  <div className="mt-2 text-sm text-slate-200">
-    You trust: <b>{trust}%</b>
-  </div>
-  <div className="text-xs text-slate-300/80">
-    If only {trust}% is used, NPR {formatRs(Math.round((1 - trust / 100) * annualTotalTax))}
-    {' '}is effectively wasted each year.
-  </div>
-</div>
-
-{/* 4️⃣ Top Tax Stories — Mini Awareness Feed */}
-<div className="rounded-2xl bg-white/[0.04] p-6 mt-6">
-  <h3 className="text-lg font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-amber-300 via-white to-yellow-200">
-    How Your Taxes Shape Nepal
-  </h3>
-
-  <ul className="mt-4 space-y-2 text-sm text-slate-200">
-    <li>• Government announces NPR 3B for rural roads this fiscal year.</li>
-    <li>• Audit reveals procurement leak of 20% across departments.</li>
-    <li>• New community hospital completed using VAT contributions.</li>
-  </ul>
-</div>
-
-{/* 5️⃣ Proud Taxpayer Badge */}
-<div className="rounded-2xl bg-white/[0.04] p-6 mt-6 text-center">
-  <h3 className="text-lg font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-amber-300 via-white to-yellow-200">
-    Proud Taxpayer Badge
-  </h3>
-
-  <div className="mt-4 rounded-xl bg-gradient-to-r from-yellow-400/20 to-amber-400/20 p-6 text-white text-lg font-extrabold">
-    🎖 I Pay Taxes That Build Nepal
-  </div>
-
-  <p className="text-xs text-slate-300/80 mt-2">
-    (Feature: Add “Download Badge” — coming soon)
-  </p>
-</div>
-
-            {/* footer */}
-            <footer className="py-8 text-sm text-slate-300 text-center">
-              Built with ❤️ by Gatishil — numbers match the Mirror, wrapped in our cosmic Gatishil style.
-            </footer>
           </div>
         </div>
-      </section>
+      </SectionShell>
+
+      {/* 2. THE MACHINE YOU FEED */}
+      <SectionShell id="machine" accent="amber">
+        <div className="space-y-6 sm:space-y-8">
+          <div className="text-center">
+            <p className="text-xs uppercase tracking-[0.3em] text-amber-200/80">
+              Where your tax actually goes
+            </p>
+            <h2 className="mt-2 text-2xl sm:text-3xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-amber-200 via-white to-orange-300">
+              You don&apos;t just fund “development”. You fund the whole machine.
+            </h2>
+            <p className="mt-3 text-sm sm:text-base text-slate-200/85 max-w-2xl mx-auto">
+              Using Nepal&apos;s real budget shares (2081/82), your annual tax
+              is split into three lives: the machine (recurrent), the future
+              (capital), and the past (debt).
+            </p>
+          </div>
+
+          <div className="grid lg:grid-cols-2 gap-6 lg:gap-8 items-center">
+            {/* rings / bars */}
+            <div className="space-y-4">
+              <div className="text-[11px] sm:text-xs text-slate-300/80 mb-1">
+                Annual tax based on your inputs:
+              </div>
+              <div className="text-3xl sm:text-4xl font-extrabold text-amber-100 drop-shadow-[0_0_40px_rgba(251,191,36,0.6)]">
+                NPR {formatRs(annualTotalTax)}
+              </div>
+              <div className="mt-5 space-y-3">
+                {[
+                  {
+                    label: 'Recurrent — the machine (salaries, admin, grants, interest)',
+                    amount: recurrent,
+                    pct: recurrentPct,
+                    grad: 'from-amber-400 to-yellow-200',
+                  },
+                  {
+                    label: 'Capital — the future (roads, bridges, schools, hospitals)',
+                    amount: capital,
+                    pct: capitalPct,
+                    grad: 'from-emerald-400 to-lime-200',
+                  },
+                  {
+                    label: 'Debt — the past (repaying old domestic & foreign loans)',
+                    amount: debt,
+                    pct: debtPct,
+                    grad: 'from-rose-400 to-orange-300',
+                  },
+                ].map(({ label, amount, pct, grad }) => (
+                  <div key={label}>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-[11px] sm:text-xs text-slate-200/90">
+                        {label}
+                      </span>
+                      <span className="text-[11px] sm:text-xs text-slate-100 font-semibold">
+                        {pct.toFixed(1)}% · NPR {formatRs(amount)}
+                      </span>
+                    </div>
+                    <div className="h-2 w-full rounded-full bg-white/6 overflow-hidden">
+                      <motion.div
+                        className={`h-full rounded-full bg-gradient-to-r ${grad}`}
+                        initial={{ width: 0 }}
+                        whileInView={{ width: `${Math.min(100, pct)}%` }}
+                        viewport={{ once: true }}
+                        transition={{ duration: 1, ease: 'easeOut' }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* narrative */}
+            <div className="space-y-4">
+              <div className="rounded-3xl border border-amber-400/40 bg-amber-400/5 px-4 py-4 sm:px-5 sm:py-5">
+                <p className="text-sm sm:text-base font-serif leading-relaxed text-amber-50/95">
+                  “Most of your effort does not build new things. It keeps the
+                  old machine humming, and pays for mistakes made before you
+                  were even born.”
+                </p>
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                <Stat
+                  title="For the machine"
+                  value={`${recurrentPct.toFixed(1)}%`}
+                />
+                <Stat
+                  title="Builds the future"
+                  value={`${capitalPct.toFixed(1)}%`}
+                  subtle
+                />
+                <Stat
+                  title="Pays the past"
+                  value={`${debtPct.toFixed(1)}%`}
+                  subtle
+                />
+              </div>
+              <p className="text-[11px] sm:text-xs text-slate-300/85">
+                You are not just a “taxpayer”. You are the fuel that keeps this
+                entire structure alive. The question is not “do you pay?”, it is
+                “what do you keep alive with your payment?”.
+              </p>
+            </div>
+          </div>
+        </div>
+      </SectionShell>
+
+      {/* 3. THE LEAK OF TRUST */}
+      <SectionShell id="leak" accent="red">
+        <div className="space-y-6 sm:space-y-8">
+          <div className="text-center">
+            <p className="text-xs uppercase tracking-[0.25em] text-rose-200/80">
+              The leak of trust
+            </p>
+            <h2 className="mt-2 text-2xl sm:text-3xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-rose-200 via-white to-orange-300">
+              How much of this do you believe is used honestly?
+            </h2>
+            <p className="mt-3 text-sm sm:text-base text-slate-200/85 max-w-2xl mx-auto">
+              This slider is not about the government&apos;s official report.
+              It is about your gut. Your lived sense of honesty.
+            </p>
+          </div>
+
+          <div className="grid lg:grid-cols-2 gap-6 lg:gap-8 items-center">
+            <div className="space-y-4">
+              <div className="flex items-center gap-3">
+                <span className="text-[11px] sm:text-xs text-slate-200/90">
+                  Your trust in how honestly taxes are used
+                </span>
+                <span className="text-sm sm:text-base font-semibold text-rose-100">
+                  {trust}%
+                </span>
+              </div>
+              <input
+                type="range"
+                min={0}
+                max={100}
+                step={1}
+                value={trust}
+                onChange={(e) => setTrust(Number(e.target.value))}
+                className="w-full accent-rose-400"
+              />
+              <div className="mt-3 grid grid-cols-2 gap-3">
+                <Stat
+                  title="Looks honestly used"
+                  value={`NPR ${formatRs(effectiveUse)}/yr`}
+                  subtle
+                />
+                <Stat
+                  title="Feels leaked, wasted or stolen"
+                  value={`NPR ${formatRs(waste)}/yr`}
+                />
+              </div>
+              <p className="mt-3 text-[11px] sm:text-xs text-rose-50/90 font-serif leading-relaxed">
+                “You are not poor because you didn&apos;t work hard. You are
+                poorer because the bridge between your effort and your future
+                leaks every year — quietly, politely, without sirens.”
+              </p>
+            </div>
+
+            <div className="space-y-4">
+              <div className="overflow-hidden rounded-3xl border border-rose-400/40 bg-gradient-to-b from-rose-900/70 via-slate-950/90 to-black p-5 sm:p-6">
+                <motion.div
+                  className="h-2 w-full rounded-full bg-white/5 overflow-hidden mb-4"
+                  initial={{ backgroundPositionX: 0 }}
+                  animate={{ backgroundPositionX: ['0%', '100%', '0%'] }}
+                  transition={{
+                    duration: 6,
+                    repeat: Infinity,
+                    ease: 'linear',
+                  }}
+                  style={{
+                    backgroundImage:
+                      'repeating-linear-gradient(90deg, rgba(248,113,113,0.9), rgba(248,113,113,0.9) 10px, transparent 10px, transparent 20px)',
+                  }}
+                />
+                <div className="text-xs text-slate-200/85 mb-1">
+                  At your trust level:
+                </div>
+                <div className="text-2xl sm:text-3xl font-extrabold text-rose-100">
+                  {((waste / Math.max(1, annualTotalTax)) * 100).toFixed(1)}%
+                </div>
+                <div className="text-[11px] sm:text-xs text-slate-200/85">
+                  of your own hard-earned tax feels like it simply disappears.
+                </div>
+                <div className="mt-4 rounded-2xl bg-rose-500/20 border border-rose-300/40 px-4 py-3 text-[11px] sm:text-xs text-rose-50/95">
+                  “You are not just being taxed. You are being trained to accept
+                  it without question.”
+                </div>
+              </div>
+              <p className="text-[11px] sm:text-xs text-slate-300/80">
+                When millions of honest people accept this quietly, the system
+                calls it &quot;stability&quot;. When those people begin to
+                question, it is called awakening.
+              </p>
+            </div>
+          </div>
+        </div>
+      </SectionShell>
+
+      {/* 4. THE RECEIPT OF POWER */}
+      <SectionShell id="receipt" accent="white">
+        <div className="space-y-6 sm:space-y-8">
+          <div className="text-center">
+            <p className="text-xs uppercase tracking-[0.25em] text-slate-100/80">
+              Receipt of power
+            </p>
+            <h2 className="mt-2 text-2xl sm:text-3xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-slate-100 via-white to-cyan-200">
+              You&apos;re not a subject. You&apos;re a shareholder.
+            </h2>
+            <p className="mt-3 text-sm sm:text-base text-slate-200/85 max-w-2xl mx-auto">
+              Every rupee you&apos;ve paid is a tiny share in this country. This
+              calculator simply prints your receipt.
+            </p>
+          </div>
+
+          <div className="grid lg:grid-cols-2 gap-6 lg:gap-8 items-center">
+            <div className="space-y-4">
+              <motion.div
+                className="relative overflow-hidden rounded-3xl border border-white/25 bg-gradient-to-b from-slate-50/10 via-slate-900/60 to-black px-4 py-5 sm:px-6 sm:py-6 font-mono text-sm"
+                initial={{ y: 40, opacity: 0 }}
+                whileInView={{ y: 0, opacity: 1 }}
+                viewport={{ once: true }}
+                transition={{ duration: 0.9, ease: 'easeOut' }}
+              >
+                <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-sky-300 via-white to-violet-300" />
+                <div className="flex items-center justify-between text-[11px] text-slate-200/80 mb-2">
+                  <span>NEPAL TRUE TAX MIRROR</span>
+                  <span>{new Date().getFullYear()}</span>
+                </div>
+                <div className="border-t border-dashed border-slate-500/50 my-2" />
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[11px] text-slate-300">Annual tax:</span>
+                  <span className="text-base sm:text-lg font-extrabold text-white">
+                    NPR {formatRs(annualTotalTax)}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[11px] text-slate-300">
+                    Effective rate:
+                  </span>
+                  <span className="text-sm font-semibold text-cyan-200">
+                    {effectiveRatePct.toFixed(1)}%
+                  </span>
+                </div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[11px] text-slate-300">
+                    Days worked for state:
+                  </span>
+                  <span className="text-sm font-semibold text-amber-200">
+                    {govDays} days (~{govMonths} months)
+                  </span>
+                </div>
+                <div className="flex items-center justify-between mb-3">
+                  <span className="text-[11px] text-slate-300">
+                    Lifetime contribution (till {LIFETIME.retireAge}):
+                  </span>
+                  <span className="text-sm font-semibold text-emerald-200">
+                    NPR {formatRs(lifetimeTax)}
+                  </span>
+                </div>
+                <div className="border-t border-dashed border-slate-500/50 my-2" />
+                <p className="text-[11px] text-slate-100/90 leading-relaxed font-serif">
+                  “You have already bought a large piece of this nation with
+                  your honesty. You do not owe it blind obedience. It owes you
+                  transparent truth.”
+                </p>
+                <div className="mt-3 border-t border-dashed border-slate-500/50 pt-2 flex items-center justify-between text-[10px] text-slate-400">
+                  <span>#MeroKarKhoi</span>
+                  <span>#ReceiptOfPower</span>
+                </div>
+              </motion.div>
+
+              <p className="text-[11px] sm:text-xs text-slate-300/80">
+                A receipt is proof of payment — and proof of the right to ask
+                questions. Keep this mental receipt whenever someone tells you
+                to “just trust the system”.
+              </p>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <div className="text-[11px] sm:text-xs text-slate-200/90 mb-1">
+                  Share this truth if you dare:
+                </div>
+                <textarea
+                  className="w-full h-28 rounded-2xl border border-white/15 bg-black/40 px-3 py-2 text-[11px] sm:text-xs text-slate-100 placeholder-slate-500/60"
+                  value={shareMessage}
+                  readOnly
+                />
+                <p className="mt-2 text-[11px] sm:text-xs text-slate-300/80">
+                  Copy and paste anywhere — TikTok, Facebook, X, Instagram. One
+                  honest receipt can embarrass a thousand empty speeches.
+                </p>
+              </div>
+              <div className="grid grid-cols-3 gap-3 text-[11px] sm:text-xs">
+                <a
+                  href={`https://twitter.com/intent/tweet?text=${encodeURIComponent(
+                    shareMessage,
+                  )}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex items-center justify-center rounded-2xl border border-sky-400/60 bg-sky-500/20 px-3 py-2 hover:bg-sky-500/30 transition"
+                >
+                  🐦 Post on X
+                </a>
+                <div className="flex items-center justify-center rounded-2xl border border-emerald-400/60 bg-emerald-500/15 px-3 py-2">
+                  📎 Screenshot &amp; share
+                </div>
+                <a
+                  href="/tax"
+                  className="flex items-center justify-center rounded-2xl border border-amber-300/60 bg-amber-500/15 px-3 py-2 hover:bg-amber-500/25 transition"
+                >
+                  ☀️ Open Sunlight
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </SectionShell>
+
+      {/* 5. THE MIRROR OF COURAGE */}
+      <SectionShell id="courage" accent="gold">
+        <div className="space-y-6 sm:space-y-8">
+          <div className="text-center">
+            <p className="text-xs uppercase tracking-[0.3em] text-yellow-200/80">
+              From “I” to “We”
+            </p>
+            <h2 className="mt-2 text-2xl sm:text-3xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-yellow-200 via-white to-emerald-200">
+              Imagine every honest taxpayer holding their receipt at once.
+            </h2>
+            <p className="mt-3 text-sm sm:text-base text-slate-200/85 max-w-2xl mx-auto">
+              One person asking “Where is my money?” is a complaint. A million
+              asking it together is a peaceful revolution.
+            </p>
+          </div>
+
+          <div className="grid lg:grid-cols-2 gap-6 lg:gap-10 items-center">
+            <div className="relative h-64 sm:h-72 lg:h-80">
+              {/* abstract "map" of dots */}
+              <div className="absolute inset-0 rounded-3xl border border-yellow-300/40 bg-gradient-to-b from-slate-900 via-slate-950 to-black overflow-hidden">
+                <div className="absolute inset-0 opacity-80 bg-[radial-gradient(circle_at_top,_rgba(250,204,21,0.2),_transparent_60%),radial-gradient(circle_at_bottom,_rgba(96,165,250,0.15),_transparent_60%)]" />
+                <div className="absolute inset-6 sm:inset-8">
+                  {/* simple constellation of dots */}
+                  {Array.from({ length: 90 }).map((_, i) => (
+                    <motion.div
+                      // eslint-disable-next-line react/no-array-index-key
+                      key={i}
+                      className="absolute h-1 w-1 rounded-full bg-yellow-300/90 shadow-[0_0_10px_rgba(250,204,21,0.9)]"
+                      style={{
+                        top: `${10 + (i * 73) % 80}%`,
+                        left: `${5 + (i * 47) % 90}%`,
+                      }}
+                      initial={{ opacity: 0, scale: 0.4 }}
+                      whileInView={{
+                        opacity: [0.1, 1, 0.4],
+                        scale: [0.4, 1, 0.8],
+                      }}
+                      viewport={{ once: true }}
+                      transition={{
+                        duration: 3 + (i % 5),
+                        repeat: Infinity,
+                        repeatType: 'reverse',
+                        delay: i * 0.03,
+                      }}
+                    />
+                  ))}
+                </div>
+                <div className="absolute inset-x-0 bottom-0 p-3 sm:p-4 bg-gradient-to-t from-black/80 via-black/40 to-transparent text-center text-[10px] sm:text-xs text-yellow-100">
+                  Each dot is a citizen who stopped being shy and started being
+                  sovereign.
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div className="rounded-3xl border border-yellow-400/60 bg-yellow-500/10 px-4 py-4 sm:px-5 sm:py-6">
+                <p className="text-sm sm:text-base font-serif leading-relaxed text-yellow-50/95">
+                  “The powerless did not build this country by begging. They
+                  built it by working, paying, and trusting. The real question
+                  now is: will they continue to trust blindly, or will they ask
+                  to see the ledger?”
+                </p>
+              </div>
+              <p className="text-[11px] sm:text-xs text-slate-200/85">
+                When enough receipts are held up in the sunlight, the throne has
+                two choices: become honest, or become empty. There is no third
+                option.
+              </p>
+            </div>
+          </div>
+        </div>
+      </SectionShell>
+
+      {/* 6. THE AWAKENING */}
+      <SectionShell id="awakening" accent="dawn">
+        <div className="space-y-6 sm:space-y-8 text-center max-w-3xl mx-auto">
+          <p className="text-xs uppercase tracking-[0.3em] text-amber-200/80">
+            The quiet rebellion
+          </p>
+          <h2 className="mt-2 text-2xl sm:text-3xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-orange-200 via-white to-emerald-200">
+            You&apos;ve paid enough. Now ask enough.
+          </h2>
+          <p className="mt-3 text-sm sm:text-base text-slate-200/85">
+            This calculator was not built to make you proud of paying more tax.
+            It was built to remind you that{' '}
+            <span className="font-semibold text-amber-100">
+              you already pay enough to demand the truth
+            </span>
+            .
+          </p>
+
+          <div className="mt-4 rounded-3xl border border-amber-300/60 bg-amber-500/15 px-4 py-5 sm:px-6 sm:py-6">
+            <p className="text-sm sm:text-base font-serif leading-relaxed text-amber-50/95">
+              “Freedom does not begin when a law is repealed. Freedom begins the
+              day you stop being proud of blind obedience — and start being
+              proud of awake responsibility.”
+            </p>
+          </div>
+
+          <div className="mt-4 flex flex-col items-center gap-3">
+            <a
+              href="/join"
+              className="inline-flex items-center justify-center rounded-full bg-gradient-to-r from-amber-300 via-orange-400 to-rose-400 px-6 py-3 sm:px-8 sm:py-3.5 text-sm sm:text-base font-semibold text-slate-950 shadow-[0_0_40px_rgba(248,250,252,0.5)] hover:scale-[1.02] active:scale-[0.99] transition"
+            >
+              Join the Digital Chauṭarī — I want to see the ledger
+            </a>
+            <p className="text-[11px] sm:text-xs text-slate-300/80 max-w-sm">
+              When you step into the Chauṭarī, you are not a follower. You are a
+              co-auditor of Nepal&apos;s future.
+            </p>
+          </div>
+
+          <footer className="pt-4 text-[10px] sm:text-[11px] text-slate-400">
+            Built with ❤️ by Gatishil — for every powerless soul who secretly
+            knew they were the real power all along.
+          </footer>
+        </div>
+      </SectionShell>
     </main>
   );
 }
