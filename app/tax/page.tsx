@@ -107,12 +107,12 @@ export default function TaxLanding() {
             <div className="grid md:grid-cols-5 gap-8">
               <div className="md:col-span-3">
                 <h2 className="text-2xl md:text-3xl font-bold text-yellow-300">🕵️ The Problem</h2>
+          <motion.p className="mt-3 text-slate-200/90">
+            Nepal collects a massive share of revenue from <span className="font-semibold text-rose-200">indirect taxes</span> — VAT, excise,
+            customs and hidden levies. You never see them on a payslip, but every price tag quietly bleeds your wallet dry.
+          </motion.p>
                 <p className="mt-3 text-slate-200/90">
-                  Nepal collects a large share of revenue from <span className="font-semibold">indirect taxes</span> — VAT, excise,
-                  customs and levies. You rarely see them on a payslip, but you feel them in every price tag.
-                </p>
-                <p className="mt-3 text-slate-200/90">
-                  Every grocery run, ride, top‑up and bill quietly funds the state. This page makes that layer visible.
+                  Every grocery run, fuel purchase, and phone bill secretly funds the state. This page strips away the illusion and reveals the invisible tax layer that drains your dreams.
                 </p>
               </div>
               <div className="md:col-span-2">
@@ -146,13 +146,13 @@ export default function TaxLanding() {
             📊 See The Impact: Real‑feel Scenarios
           </motion.h3>
           <motion.p className="mt-2 text-center text-slate-300/90" {...fadeUp(0.03)}>
-            Based on typical Nepal spending patterns and current rates.
+            See how hidden taxes quietly devour your paycheck — based on real Nepal spending patterns and current rates.
           </motion.p>
 
           <div className="mt-6 grid md:grid-cols-3 gap-5">
-            <Scenario income="NPR 150,000/mo" rate="21.3%" label="Middle‑class professional" total="NPR 32,000" />
-            <Scenario income="NPR 300,000/mo" rate="28.3%" label="High‑income earner" total="NPR 85,000" />
-            <Scenario income="NPR 80,000/mo" rate="16.9%" label="Lower‑income earner" total="NPR 13,500" />
+            <Scenario income="NPR 150,000/mo" rate="31.5%" label="Middle‑class professional" total="NPR 47,237" />
+            <Scenario income="NPR 300,000/mo" rate="40.1%" label="High‑income earner" total="NPR 120,390" />
+            <Scenario income="NPR 80,000/mo" rate="23.5%" label="Lower‑income earner" total="NPR 18,819" />
           </div>
         </div>
       </section>
@@ -164,14 +164,14 @@ export default function TaxLanding() {
             <h3 className="text-base sm:text-lg font-semibold">🧾 Receipt Heatmap (demo)</h3>
             <p className="text-xs sm:text-sm text-slate-300/80 mt-1">Watch where the hidden layer actually sits.</p>
             <div className="mt-3 space-y-4">
-              <Bar label="Fuel" value={72} hint="Excise + VAT inside pump price" />
+              <Bar label="Fuel" value={70} hint="Excise + VAT inside pump price" />
               <Bar label="Telecom" value={38} hint="Service charges embedded" />
               <Bar label="Eating out" value={24} hint="Mostly VATable" />
               <Bar label="Utilities" value={12} hint="Mixed pass‑through" />
             </div>
             <div className="mt-6 border-t border-white/10 pt-4 grid grid-cols-2 gap-4">
-              <Stat title="Visible" value="Rs 8,540" sub="TDS + property" />
-              <Stat title="Hidden" value="Rs 13,780" sub="VAT + excise est." highlight />
+              <Stat title="Visible" value="Rs 27,083" sub="Income tax est." />
+              <Stat title="Hidden" value="Rs 20,153" sub="VAT + excise est." highlight />
             </div>
             <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: .3, duration: .5 }} className="mt-4 text-sm text-slate-300/80">
               Example only — your real number appears instantly in the calculator.
@@ -179,10 +179,11 @@ export default function TaxLanding() {
           </motion.aside>
 
           <motion.div className="lg:col-span-7 rounded-2xl border border-white/10 bg-white/5 p-6 md:p-8" {...fadeUp(0.05)}>
-            <h3 className="text-xl md:text-2xl font-semibold">How it computes</h3>
+            <h3 className="text-xl md:text-2xl font-semibold">How it really works</h3>
             <p className="mt-3 text-slate-200/90">
-              Estimated Indirect Tax = Σ(Spendᵢ × PassThroughᵢ). Total Tax = Direct + Estimated Indirect. Effective Rate = Total Tax / Gross Income.
-              A low–high range is shown using preset tables. Assumptions are editable.
+              The government doesn't just tax your income — it taxes your entire life. Every rupee you spend carries a hidden layer of VAT, excise, customs, and profit-pass-through taxes.
+              <span className="font-semibold text-cyan-200">Your true tax rate = Direct income tax + Hidden price taxes.</span>
+              We calculate both using Nepal's actual tax schedules and spending patterns.
             </p>
             <div className="mt-5 flex flex-wrap gap-3">
               <a href="/tax/calculator" className="px-5 py-3 rounded-2xl bg-amber-400 text-black font-semibold">Open Calculator</a>
@@ -195,10 +196,10 @@ export default function TaxLanding() {
       <section className="relative z-10 py-8 sm:py-12">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <motion.h3 className="text-2xl md:text-3xl font-extrabold" {...fadeUp(0)}>
-            Ready to face the mirror?
+            Ready to see the truth?
           </motion.h3>
           <motion.p className="mt-2 text-slate-300/90" {...fadeUp(0.04)}>
-            Stop wondering where the paycheck goes. See your complete tax story.
+            Stop being told you "only pay 1% tax." Face the mirror and discover what you really pay.
           </motion.p>
           <motion.a
             href="/tax/calculator"
