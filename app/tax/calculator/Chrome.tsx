@@ -5,7 +5,6 @@ import { motion } from 'framer-motion';
 import { useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 
-/** ───────────────── visuals / utils ───────────────── **/
 function Starfield() {
   return (
     <motion.div
@@ -18,11 +17,7 @@ function Starfield() {
   );
 }
 
-function SectionShell({
-  id,
-  children,
-  accent,
-}: {
+function SectionShell({ id, children, accent }: {
   id: string;
   children: ReactNode;
   accent: 'cyan' | 'amber' | 'red' | 'white' | 'gold' | 'dawn';
@@ -36,19 +31,15 @@ function SectionShell({
     dawn: 'from-orange-400/40 via-amber-200/10 to-transparent',
   };
   return (
-    <section id={id} className="py-8 sm:py-12">
-      <div className="relative mx-auto w-full max-w-5xl px-4 sm:px-6 lg:px-10">
-        <div
-          className={`pointer-events-none absolute inset-0 -z-10 bg-gradient-to-b ${accentMap[accent]} blur-3xl`}
-        />
-        <div className="relative p-5 sm:p-8 lg:p-10">
-          {children}
-        </div>
+    <section id={id} className="py-16 relative overflow-hidden">
+      <div className={`pointer-events-none absolute inset-0 -z-10 bg-gradient-to-b ${accentMap[accent]} blur-[120px] opacity-40`} />
+      <div className="max-w-6xl mx-auto px-6">
+        {children}
       </div>
     </section>
   );
 }
-/** ───────────────── constants ───────────────── **/
+
 const VAT_RATE = 0.13 as const;
 const VATABLE_SHARE = {
   foodHome: 0.6,
@@ -79,14 +70,12 @@ const LIFETIME = {
   workingHoursPerYear: 2000,
 };
 
-/** national budget shares for "Where My Tax Goes" **/
 const BUDGET_SHARES = {
-  recurrent: 0.613, // 61.3% — running the machine
-  capital: 0.189, // 18.9% — building the future
-  debt: 0.197, // 19.7% — paying old loans
+  recurrent: 0.613,
+  capital: 0.189,
+  debt: 0.197,
 } as const;
 
-/** ───────────────── data model ───────────────── **/
 const INCOME_SOURCES = [
   { key: 'employment', label: '💼 Primary Employment (+1% Social Security)' },
   { key: 'business', label: '🏢 Business Income (25%/ 30%/ 20%/ 0%)' },
@@ -119,16 +108,12 @@ const BUSINESS_TYPES = [
 ] as const;
 type BusinessTypeKey = (typeof BUSINESS_TYPES)[number]['key'];
 
-/** ───────────────── helpers ───────────────── **/
 function formatRs(n: number) {
   const v = Math.round(n || 0);
   return v.toLocaleString('en-NP');
 }
 
 function progressiveTax(annual: number) {
-  // Implements FY 2082/83 slabs:
-  // First 500,000 → 1% SST only (handled separately)
-  // Amount above 500,000 → 10% / 20% / 30% / 36% / 39%
   let tax = 0;
 
   let remaining = Math.max(0, annual - 500_000);
@@ -167,7 +152,7 @@ function directTaxAnnualByCategory(
   const employmentA = (monthly.employment || 0) * 12;
   if (employmentA > 0) {
     total += progressiveTax(employmentA);
-    total += Math.min(employmentA * 0.01, 5000); // 1% SST
+    total += Math.min(employmentA * 0.01, 5000);
   }
 
   const businessA = (monthly.business || 0) * 12;
@@ -185,22 +170,21 @@ function directTaxAnnualByCategory(
     total += progressiveTax(net);
   }
 
-  return total; // annual
+  return total;
 }
 
 function hiddenTaxMonthly(spend: Record<CatKey, number>) {
   let sum = 0;
   const breakdown: Record<CatKey, { amount: number; pctOfIncome: number }> = {} as any;
 
-  // Weighted averages per Nepal market realities
   const CUSTOMS: Record<CatKey, number> = {
     foodHome: 0.12,
     eatingOut: 0.08,
     housing: 0.00,
     utilities: 0.05,
-    transport: 0.22,        // fuel + parts
+    transport: 0.22,
     education: 0.05,
-    clothing: 0.40,         // Nepal's highest slab
+    clothing: 0.40,
     personalCare: 0.22,
     entertainment: 0.25,
     other: 0.18,
@@ -211,7 +195,7 @@ function hiddenTaxMonthly(spend: Record<CatKey, number>) {
     eatingOut: 0.03,
     housing: 0.00,
     utilities: 0.02,
-    transport: 0.10,        // fuel excise
+    transport: 0.10,
     education: 0.00,
     clothing: 0.00,
     personalCare: 0.05,
@@ -219,25 +203,20 @@ function hiddenTaxMonthly(spend: Record<CatKey, number>) {
     other: 0.03,
   };
 
-  // Local govt taxes (road, pollution, municipality)
-  const LOCAL_TAX = 0.02;   // 2%
+  const LOCAL_TAX = 0.02;
 
-  // Corporate profit tax passed to consumers
-  const PROFIT_PASS = 0.22; // 22%
+  const PROFIT_PASS = 0.22;
 
   for (const { key } of CATEGORIES) {
     const spendAmt = spend[key] || 0;
 
-    // Step 1: customs + excise + profit
     const customs = spendAmt * CUSTOMS[key];
     const excise = spendAmt * EXCISE_LOCAL[key];
     const profit = spendAmt * PROFIT_PASS;
     const local = spendAmt * LOCAL_TAX;
 
-    // Step 2: VAT on top of EVERYTHING
     const vat = (spendAmt + customs + excise + profit) * VAT_RATE;
 
-    // Step 3: total hidden tax inside final price
     const totalHidden = customs + excise + local + profit + vat;
 
     sum += totalHidden;
@@ -251,7 +230,6 @@ function hiddenTaxMonthly(spend: Record<CatKey, number>) {
   return { sum, breakdown };
 }
 
-/** ───────────────── UI controls ───────────────── **/
 function NumberInput({
   value,
   onChange,
@@ -267,7 +245,7 @@ function NumberInput({
     <div className="relative">
       <input
         inputMode="numeric"
-        className="h-11 w-full rounded-xl bg-transparent px-4 text-sm text-white outline-none border border-transparent/20 placeholder-white/40 focus:border-cyan-400/30 focus:bg-cyan-400/5 sm:text-base"
+        className="h-11 w-full rounded-xl bg-white/5 px-4 text-sm text-white outline-none placeholder-white/40 focus:bg-white/10 sm:text-base"
         placeholder={placeholder || '0'}
         value={value || ''}
         onChange={(e) => onChange(Number(e.target.value || 0))}
@@ -289,12 +267,8 @@ function Stat({
   subtle?: boolean;
 }) {
   return (
-    <div
-      className={`rounded-2xl px-4 py-3 text-center sm:px-5 sm:py-4 ${
-        subtle ? 'bg-transparent' : 'bg-transparent'
-      }`}
-    >
-      <div className="mb-1 text-[11px] text-slate-200/80 sm:text-xs">{title}</div>
+    <div>
+      <div className="text-[11px] text-slate-200/80 sm:text-xs">{title}</div>
       <div className="text-lg font-extrabold text-white sm:text-xl">{value}</div>
     </div>
   );
@@ -305,30 +279,22 @@ function HiddenTaxInfo() {
 
   return (
     <div className="relative inline-block">
-      {/* Glowing ? button */}
       <button
         onClick={() => setOpen(true)}
-        className="ml-2 text-[11px] rounded-full px-2 py-0.5 border border-transparent/20 
-                   bg-cyan-500/20 animate-pulse 
-                   shadow-[0_0_8px_rgba(255,220,150,0.6)] 
-                   hover:bg-cyan-500/30"
+        className="ml-2 text-[11px] rounded-full px-2 py-0.5 bg-cyan-500/20 animate-pulse hover:bg-cyan-500/30"
       >
         ?
       </button>
 
       {open && (
         <>
-          {/* Backdrop (full screen) */}
           <div
             onClick={() => setOpen(false)}
             className="fixed inset-0 z-[9998] bg-black/60 backdrop-blur-sm"
           />
 
-          {/* Centered Modal (NEVER requires scroll) */}
           <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
-            <div className="w-full max-w-sm rounded-2xl border border-transparent/20 
-                            bg-black/90 p-4 text-xs text-white 
-                            shadow-xl backdrop-blur-xl overflow-y-auto max-h-[85vh]">
+            <div className="w-full max-w-sm bg-black/80 p-4 text-xs text-white backdrop-blur-xl overflow-y-auto max-h-[85vh]">
 
               <p className="font-semibold mb-3">
                 ✅ TRUE Hidden Tax (Inside Every Price)
@@ -376,8 +342,7 @@ function HiddenTaxInfo() {
 
               <button
                 onClick={() => setOpen(false)}
-                className="mt-4 w-full rounded-xl bg-cyan-500/20 border border-transparent/20 py-1 
-                           text-center hover:bg-cyan-500/30"
+                className="mt-4 w-full rounded-xl bg-cyan-500/20 py-1 text-center hover:bg-cyan-500/30"
               >
                 Close
               </button>
@@ -389,11 +354,9 @@ function HiddenTaxInfo() {
   );
 }
 
-/** ───────────────── main component ───────────────── **/
 export default function Chrome() {
-  const [trust, setTrust] = useState(40); // perceived honesty %
+  const [trust, setTrust] = useState(40);
 
-  // incomes (user fills; no presets)
   const [incomeMap, setIncomeMap] = useState<Record<IncomeKey, number>>({
     employment: 0,
     business: 0,
@@ -404,7 +367,6 @@ export default function Chrome() {
   });
   const [businessType, setBusinessType] = useState<BusinessTypeKey>('general');
 
-  // spending (user fills; no presets)
   const [spend, setSpend] = useState<Record<CatKey, number>>({
     foodHome: 0,
     eatingOut: 0,
@@ -418,7 +380,6 @@ export default function Chrome() {
     other: 0,
   });
 
-  // derived income & tax
   const monthlyIncome = useMemo(
     () => Object.values(incomeMap).reduce((s, v) => s + (v || 0), 0),
     [incomeMap],
@@ -450,7 +411,6 @@ export default function Chrome() {
   const lowEstimate = effectiveRatePct - uncertainty;
   const highEstimate = effectiveRatePct + uncertainty;
 
-  /** tax freedom day */
   const taxShare = monthlyIncome ? monthlyTotalTax / monthlyIncome : 0;
   const govDays = Math.max(
     0,
@@ -478,13 +438,11 @@ export default function Chrome() {
     return `${m} ${dt.getDate()}`;
   }, [govDays]);
 
-  /** life hours lost to tax */
   const hoursForTaxes = Math.floor(
     LIFETIME.workingHoursPerYear * (effectiveRatePct / 100),
   );
   const workingDaysLost = Math.floor(hoursForTaxes / 8);
 
-  /** where my tax goes (national budget shares) */
   const recurrent = annualTotalTax * BUDGET_SHARES.recurrent;
   const capital = annualTotalTax * BUDGET_SHARES.capital;
   const debt = annualTotalTax * BUDGET_SHARES.debt;
@@ -492,11 +450,9 @@ export default function Chrome() {
   const capitalPct = annualTotalTax ? (capital / annualTotalTax) * 100 : 0;
   const debtPct = annualTotalTax ? (debt / annualTotalTax) * 100 : 0;
 
-  /** trust / leak */
   const waste = annualTotalTax * ((100 - trust) / 100);
   const effectiveUse = annualTotalTax - waste;
 
-  /** lifetime view (narrative-level) */
   const yearsLeft = LIFETIME.retireAge - LIFETIME.currentAge;
   const lifetimeTax = Math.max(0, annualTotalTax * yearsLeft);
   const shareMessage = `I already pay NPR ${formatRs(Math.round(annualTotalTax))} in taxes every year. Where does it go? #MeroKarKhoi #ReceiptOfPower`;
@@ -505,7 +461,6 @@ export default function Chrome() {
     <main className="relative min-h-screen bg-black text-white">
       <Starfield />
 
-      {/* 1. THE SLEEP OF NUMBERS */}
       <SectionShell id="sleep" accent="cyan">
         <div className="space-y-6 sm:space-y-8">
           <div className="text-center">
@@ -529,14 +484,13 @@ export default function Chrome() {
           </div>
 
           <div className="grid gap-6 lg:grid-cols-2 lg:gap-8">
-            {/* income inputs */}
             <div>
               <h2 className="mb-3 text-sm font-semibold text-cyan-100 sm:text-base">
                 1️⃣ Your Monthly Income — all sources
               </h2>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 {INCOME_SOURCES.map(({ key, label }) => (
-                  <div key={key} className="rounded-xl bg-transparent p-3">
+                  <div key={key} className="rounded-xl p-3">
                     <div className="mb-1 text-[12px] text-slate-300/90">{label}</div>
                     <NumberInput
                       value={incomeMap[key]}
@@ -548,7 +502,7 @@ export default function Chrome() {
                 ))}
               </div>
 
-              <div className="mt-3 rounded-xl bg-transparent p-3">
+              <div className="mt-3 rounded-xl p-3">
                 <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-300/80">
                   Business Type (for tax on your "Business" income)
                 </div>
@@ -560,7 +514,7 @@ export default function Chrome() {
                       onClick={() => setBusinessType(bt.key)}
                       className={`rounded-lg px-3 py-2 text-left text-xs ${
                         businessType === bt.key
-                          ? 'bg-amber-400/10 text-amber-100 border border-amber-400/80'
+                          ? 'bg-amber-400/10 text-amber-100'
                           : 'bg-transparent text-slate-200 hover:bg-amber-400/5'
                       }`}
                     >
@@ -570,7 +524,7 @@ export default function Chrome() {
                 </div>
               </div>
 
-              <div className="mt-3 flex items-center justify-between rounded-xl bg-transparent p-4">
+              <div className="mt-3 flex items-center justify-between rounded-xl p-4">
                 <div className="text-sm font-semibold text-white/90">
                   Total Monthly Income
                 </div>
@@ -580,7 +534,6 @@ export default function Chrome() {
               </div>
             </div>
 
-            {/* spending + headline rate */}
             <div className="space-y-5">
               <div>
                 <h2 className="mb-3 text-sm font-semibold text-cyan-100 sm:text-base">
@@ -594,7 +547,7 @@ export default function Chrome() {
                   {CATEGORIES.map(({ key, label }) => (
                     <div
                       key={key}
-                      className="rounded-2xl bg-transparent p-3"
+                      className="rounded-2xl p-3"
                     >
                       <div className="mb-1 text-[11px] text-slate-200/85">{label}</div>
                       <NumberInput
@@ -606,7 +559,7 @@ export default function Chrome() {
                     </div>
                   ))}
                 </div>
-                <div className="mt-3 flex items-center justify-between rounded-2xl bg-transparent px-4 py-2">
+                <div className="mt-3 flex items-center justify-between rounded-2xl px-4 py-2">
                   <span className="text-[11px] text-slate-200/85 sm:text-xs">
                     Total Monthly Spending
                   </span>
@@ -656,10 +609,9 @@ export default function Chrome() {
                   "I pay only 1%" was a sweet dream. This is the real alarm clock.
                 </p>
 
-                {/* Red flag overspend warning */}
                 {isOverspending && (
                   <motion.div
-                    className="mt-4 rounded-2xl border border-rose-500/70 bg-rose-500/20 px-4 py-3 text-left text-[11px] text-rose-50/95 sm:px-5 sm:py-4 sm:text-sm"
+                    className="mt-4 rounded-2xl bg-rose-500/20 px-4 py-3 text-left text-[11px] text-rose-50/95 sm:px-5 sm:py-4 sm:text-sm"
                     initial={{ opacity: 0, scale: 0.95 }}
                     animate={{
                       opacity: 1,
@@ -690,11 +642,11 @@ export default function Chrome() {
                       <span className="font-semibold">
                         NPR {formatRs(monthlyIncome)}
                       </span>
-                      ) by{' '}
+                      ) by{" "}
                       <span className="font-semibold">
                         NPR {formatRs(overspendAmount)} ({overspendPct.toFixed(1)}%)
                       </span>
-                      . Time to embrace a{' '}
+                      . Time to embrace a{" "}
                       <span className="underline decoration-rose-200/80">
                         frugal lifestyle
                       </span>
@@ -708,7 +660,6 @@ export default function Chrome() {
         </div>
       </SectionShell>
 
-      {/* 2. THE MACHINE YOU FEED */}
       <SectionShell id="machine" accent="amber">
         <div className="space-y-6 sm:space-y-8">
           <div className="text-center">
@@ -726,7 +677,6 @@ export default function Chrome() {
           </div>
 
           <div className="grid items-center gap-6 lg:grid-cols-2 lg:gap-8">
-            {/* rings / bars */}
             <div className="space-y-4">
               <div className="mb-1 text-[11px] text-slate-300/80 sm:text-xs">
                 Annual tax based on your inputs:
@@ -781,9 +731,8 @@ export default function Chrome() {
               </div>
             </div>
 
-            {/* narrative */}
             <div className="space-y-4">
-              <div className="rounded-3xl border border-amber-400/40 bg-amber-400/5 px-4 py-4 sm:px-5 sm:py-5">
+              <div className="rounded-3xl bg-amber-400/5 px-4 py-4 sm:px-5 sm:py-5">
                 <p className="font-serif text-sm leading-relaxed text-amber-50/95 sm:text-base">
                   "Most of your effort does not build new things. It keeps the old
                   machine humming, and pays for mistakes made before you were even
@@ -813,7 +762,6 @@ export default function Chrome() {
         </div>
       </SectionShell>
 
-      {/* 3. THE LEAK OF TRUST */}
       <SectionShell id="leak" accent="red">
         <div className="space-y-6 sm:space-y-8">
           <div className="text-center">
@@ -867,7 +815,7 @@ export default function Chrome() {
             </div>
 
             <div className="space-y-4">
-              <div className="overflow-hidden rounded-3xl border border-rose-400/40 bg-gradient-to-b from-rose-900/70 via-slate-950/90 to-black p-5 sm:p-6">
+              <div className="overflow-hidden rounded-3xl bg-gradient-to-b from-rose-900/70 via-slate-950/90 to-black p-5 sm:p-6">
                 <motion.div
                   className="mb-4 h-2 w-full overflow-hidden rounded-full bg-transparent/20"
                   initial={{ backgroundPositionX: 0 }}
@@ -889,7 +837,7 @@ export default function Chrome() {
                 <div className="text-[11px] text-slate-200/85 sm:text-xs">
                   of your own hard-earned tax feels like it simply disappears.
                 </div>
-                <div className="mt-4 rounded-2xl border border-rose-300/40 bg-rose-500/20 px-4 py-3 text-[11px] text-rose-50/95 sm:text-xs">
+                <div className="mt-4 rounded-2xl bg-rose-500/20 px-4 py-3 text-[11px] text-rose-50/95 sm:text-xs">
                   "You are not just being taxed. You are being trained to accept it
                   without question."
                 </div>
@@ -904,7 +852,6 @@ export default function Chrome() {
         </div>
       </SectionShell>
 
-      {/* 4. THE RECEIPT OF POWER */}
       <SectionShell id="receipt" accent="white">
         <div className="space-y-6 sm:space-y-8">
           <div className="text-center">
@@ -923,7 +870,7 @@ export default function Chrome() {
           <div className="grid items-center gap-6 lg:grid-cols-2 lg:gap-8">
             <div className="space-y-4">
               <motion.div
-                className="relative overflow-hidden rounded-3xl border border-transparent/20 bg-gradient-to-b from-slate-50/5 via-slate-900/30 to-black/50 px-4 py-5 font-mono text-sm sm:px-6 sm:py-6"
+                className="relative overflow-hidden rounded-3xl bg-gradient-to-b from-slate-50/5 via-slate-900/30 to-black/50 px-4 py-5 font-mono text-sm sm:px-6 sm:py-6"
                 initial={{ y: 40, opacity: 0 }}
                 whileInView={{ y: 0, opacity: 1 }}
                 viewport={{ once: true }}
@@ -988,7 +935,7 @@ export default function Chrome() {
                   Share this truth if you dare:
                 </div>
                 <textarea
-                  className="h-28 w-full rounded-2xl border border-transparent/15 bg-black/40 px-3 py-2 text-[11px] text-slate-100 placeholder-slate-500/60 sm:text-xs"
+                  className="h-28 w-full rounded-2xl bg-black/40 px-3 py-2 text-[11px] text-slate-100 placeholder-slate-500/60 sm:text-xs"
                   value={shareMessage}
                   readOnly
                 />
@@ -998,18 +945,15 @@ export default function Chrome() {
                 </p>
               </div>
               <div className="mt-4 grid grid-cols-2 gap-3 text-[11px] sm:text-xs">
-                {/* Post on X */}
                 <a
                   href={`https://twitter.com/intent/tweet?text=${encodeURIComponent(shareMessage)}`}
                   target="_blank"
                   rel="noreferrer"
-                  className="flex items-center justify-center rounded-2xl border border-sky-400/60 bg-sky-500/20 px-3 py-2 
-                             transition hover:bg-sky-500/30 hover:scale-[1.02]"
+                  className="flex items-center justify-center rounded-2xl bg-sky-500/20 px-3 py-2 transition hover:bg-sky-500/30 hover:scale-[1.02]"
                 >
                   🐦 Post on X
                 </a>
 
-                {/* Native mobile share */}
                 <button
                   onClick={async () => {
                     if (navigator.share) {
@@ -1026,9 +970,7 @@ export default function Chrome() {
                       alert("Sharing is not supported on this device.");
                     }
                   }}
-                  className="flex items-center justify-center rounded-2xl border border-emerald-400/60 bg-emerald-500/15 px-3 py-2 
-                             transition hover:bg-emerald-500/25 hover:scale-[1.02] 
-                             shadow-[0_0_10px_rgba(16,185,129,0.3)]"
+                  className="flex items-center justify-center rounded-2xl bg-emerald-500/15 px-3 py-2 transition hover:bg-emerald-500/25 hover:scale-[1.02]"
                 >
                   📎 Share
                 </button>
@@ -1038,7 +980,6 @@ export default function Chrome() {
         </div>
       </SectionShell>
 
-      {/* 5. THE MIRROR OF COURAGE */}
       <SectionShell id="courage" accent="gold">
         <div className="space-y-6 sm:space-y-8">
           <div className="text-center">
@@ -1056,11 +997,10 @@ export default function Chrome() {
 
           <div className="grid items-center gap-6 lg:grid-cols-2 lg:gap-10">
             <div className="relative h-64 sm:h-72 lg:h-80">
-              <div className="absolute inset-0 overflow-hidden rounded-3xl border border-yellow-300/40 bg-gradient-to-b from-slate-900 via-slate-950 to-black">
+              <div className="absolute inset-0 overflow-hidden rounded-3xl bg-gradient-to-b from-slate-900 via-slate-950 to-black">
                 <div className="absolute inset-0 opacity-80 bg-[radial-gradient(circle_at_top,_rgba(250,204,21,0.2),_transparent_60%),radial-gradient(circle_at_bottom,_rgba(96,165,250,0.15),_transparent_60%)]" />
                 <div className="absolute inset-6 sm:inset-8">
                   {Array.from({ length: 32 }).map((_, i) => (
-                    // eslint-disable-next-line react/no-array-index-key
                     <motion.div
                       key={i}
                       className="absolute h-1 w-1 rounded-full bg-yellow-300/90 shadow-[0_0_10px_rgba(250,204,21,0.9)]"
@@ -1090,7 +1030,7 @@ export default function Chrome() {
             </div>
 
             <div className="space-y-4">
-              <div className="rounded-3xl border border-yellow-400/60 bg-yellow-500/10 px-4 py-4 sm:px-5 sm:py-6">
+              <div className="rounded-3xl bg-yellow-500/10 px-4 py-4 sm:px-5 sm:py-6">
                 <p className="font-serif text-sm leading-relaxed text-yellow-50/95 sm:text-base">
                   "The powerless did not build this country by begging. They built it by
                   working, paying, and trusting. The real question now is: will they
@@ -1106,7 +1046,6 @@ export default function Chrome() {
         </div>
       </SectionShell>
 
-      {/* 6. THE AWAKENING */}
       <SectionShell id="awakening" accent="dawn">
         <div className="mx-auto max-w-3xl space-y-6 text-center sm:space-y-8">
           <p className="text-xs uppercase tracking-[0.3em] text-amber-200/80">
@@ -1117,14 +1056,14 @@ export default function Chrome() {
           </h2>
           <p className="mt-3 text-sm text-slate-200/85 sm:text-base">
             This calculator was not built to make you proud of paying more tax. It was
-            built to remind you that{' '}
+            built to remind you that{" "}
             <span className="font-semibold text-amber-100">
               you already pay enough to demand the truth
             </span>
             .
           </p>
 
-          <div className="mt-4 rounded-3xl border border-amber-300/60 bg-amber-500/15 px-4 py-5 sm:px-6 sm:py-6">
+          <div className="mt-4 rounded-3xl bg-amber-500/15 px-4 py-5 sm:px-6 sm:py-6">
             <p className="font-serif text-sm leading-relaxed text-amber-50/95 sm:text-base">
               "Freedom does not begin when a law is repealed. Freedom begins the day you
               stop being proud of blind obedience — and start being proud of awake
