@@ -35,7 +35,7 @@ function SectionShell({
     gold: 'from-yellow-400/40 via-yellow-100/10 to-transparent',
     dawn: 'from-orange-400/40 via-amber-200/10 to-transparent',
   };
-    return (
+  return (
     <section id={id} className="py-8 sm:py-12">
       <div className="relative mx-auto w-full max-w-5xl px-4 sm:px-6 lg:px-10">
         <div
@@ -187,6 +187,7 @@ function directTaxAnnualByCategory(
 
   return total; // annual
 }
+
 function hiddenTaxMonthly(spend: Record<CatKey, number>) {
   let sum = 0;
   const breakdown: Record<CatKey, { amount: number; pctOfIncome: number }> = {} as any;
@@ -205,7 +206,7 @@ function hiddenTaxMonthly(spend: Record<CatKey, number>) {
     other: 0.18,
   };
 
-  const EXCISE: Record<CatKey, number> = {
+  const EXCISE_LOCAL: Record<CatKey, number> = {
     foodHome: 0.02,
     eatingOut: 0.03,
     housing: 0.00,
@@ -229,7 +230,7 @@ function hiddenTaxMonthly(spend: Record<CatKey, number>) {
 
     // Step 1: customs + excise + profit
     const customs = spendAmt * CUSTOMS[key];
-    const excise = spendAmt * EXCISE[key];
+    const excise = spendAmt * EXCISE_LOCAL[key];
     const profit = spendAmt * PROFIT_PASS;
     const local = spendAmt * LOCAL_TAX;
 
@@ -298,6 +299,7 @@ function Stat({
     </div>
   );
 }
+
 function HiddenTaxInfo() {
   const [open, setOpen] = useState(false);
 
@@ -497,7 +499,8 @@ export default function Chrome() {
   /** lifetime view (narrative-level) */
   const yearsLeft = LIFETIME.retireAge - LIFETIME.currentAge;
   const lifetimeTax = Math.max(0, annualTotalTax * yearsLeft);
-const shareMessage = `I already pay NPR ${formatRs(Math.round(annualTotalTax))} in taxes every year. Where does it go? #MeroKarKhoi #ReceiptOfPower`;
+  const shareMessage = `I already pay NPR ${formatRs(Math.round(annualTotalTax))} in taxes every year. Where does it go? #MeroKarKhoi #ReceiptOfPower`;
+
   return (
     <main className="relative min-h-screen bg-black text-white">
       <Starfield />
@@ -510,20 +513,20 @@ const shareMessage = `I already pay NPR ${formatRs(Math.round(annualTotalTax))} 
               Nepal True Tax Mirror
             </p>
             <h1 className="mt-2 bg-gradient-to-r from-cyan-200 via-white to-fuchsia-200 bg-clip-text text-2xl font-extrabold text-transparent sm:text-3xl lg:text-4xl">
-              “I only pay 1% tax.” … Are you SURE?
+              "I only pay 1% tax." … Are you SURE?
             </h1>
-             <p className="mt-3 mx-auto max-w-2xl text-sm text-slate-200/80 sm:text-base">
-    WAKE UP: Most Nepalis lose{" "}
-    <span className="font-semibold text-amber-200 animate-pulse drop-shadow-[0_0_10px_rgba(255,200,80,0.45)]">
-      35%–200%
-    </span>{" "}
-    of every rupee to hidden taxes. What’s{" "}
-    <span className="text-amber-100 animate-pulse drop-shadow-[0_0_12px_rgba(255,230,160,0.5)]">
-      your
-    </span>{" "}
-    real number?
-  </p>
-</div>
+            <p className="mt-3 mx-auto max-w-2xl text-sm text-slate-200/80 sm:text-base">
+              WAKE UP: Most Nepalis lose{" "}
+              <span className="font-semibold text-amber-200 animate-pulse drop-shadow-[0_0_10px_rgba(255,200,80,0.45)]">
+                35%–200%
+              </span>{" "}
+              of every rupee to hidden taxes. What's{" "}
+              <span className="text-amber-100 animate-pulse drop-shadow-[0_0_12px_rgba(255,230,160,0.5)]">
+                your
+              </span>{" "}
+              real number?
+            </p>
+          </div>
 
           <div className="grid gap-6 lg:grid-cols-2 lg:gap-8">
             {/* income inputs */}
@@ -547,7 +550,7 @@ const shareMessage = `I already pay NPR ${formatRs(Math.round(annualTotalTax))} 
 
               <div className="mt-3 rounded-xl bg-white/[0.04] p-3">
                 <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-300/80">
-                  Business Type (for tax on your “Business” income)
+                  Business Type (for tax on your "Business" income)
                 </div>
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                   {BUSINESS_TYPES.map((bt) => (
@@ -637,21 +640,20 @@ const shareMessage = `I already pay NPR ${formatRs(Math.round(annualTotalTax))} 
                       value={`NPR ${formatRs(monthlyDirectTax)}`}
                       subtle
                     />
-                   <Stat
-  title={
-    <div className="flex items-center gap-1">
-      Hidden (price) tax / mo
-      <HiddenTaxInfo />
-    </div>
-  }
-  value={`NPR ${formatRs(monthlyHiddenTax)}`}
-  subtle
-/>
-
+                    <Stat
+                      title={
+                        <div className="flex items-center gap-1">
+                          Hidden (price) tax / mo
+                          <HiddenTaxInfo />
+                        </div>
+                      }
+                      value={`NPR ${formatRs(monthlyHiddenTax)}`}
+                      subtle
+                    />
                   </div>
                 </div>
                 <p className="mt-3 text-[11px] italic text-slate-300/80 sm:text-xs">
-                  “I pay only 1%” was a sweet dream. This is the real alarm clock.
+                  "I pay only 1%" was a sweet dream. This is the real alarm clock.
                 </p>
 
                 {/* Red flag overspend warning */}
@@ -714,10 +716,10 @@ const shareMessage = `I already pay NPR ${formatRs(Math.round(annualTotalTax))} 
               Where your tax actually goes
             </p>
             <h2 className="mt-2 bg-gradient-to-r from-amber-200 via-white to-orange-300 bg-clip-text text-2xl font-extrabold text-transparent sm:text-3xl">
-              You don&apos;t just fund “development”. You fund the whole machine.
+              You don't just fund "development". You fund the whole machine.
             </h2>
             <p className="mt-3 mx-auto max-w-2xl text-sm text-slate-200/85 sm:text-base">
-              Using Nepal&apos;s real budget shares (2081/82), your annual tax is split
+              Using Nepal's real budget shares (2081/82), your annual tax is split
               into three lives: the machine (recurrent), the future (capital), and the
               past (debt).
             </p>
@@ -783,9 +785,9 @@ const shareMessage = `I already pay NPR ${formatRs(Math.round(annualTotalTax))} 
             <div className="space-y-4">
               <div className="rounded-3xl border border-amber-400/40 bg-amber-400/5 px-4 py-4 sm:px-5 sm:py-5">
                 <p className="font-serif text-sm leading-relaxed text-amber-50/95 sm:text-base">
-                  “Most of your effort does not build new things. It keeps the old
+                  "Most of your effort does not build new things. It keeps the old
                   machine humming, and pays for mistakes made before you were even
-                  born.”
+                  born."
                 </p>
               </div>
               <div className="grid grid-cols-3 gap-3">
@@ -802,9 +804,9 @@ const shareMessage = `I already pay NPR ${formatRs(Math.round(annualTotalTax))} 
                 />
               </div>
               <p className="text-[11px] text-slate-300/85 sm:text-xs">
-                You are not just a “taxpayer”. You are the fuel that keeps this entire
-                structure alive. The question is not “do you pay?”, it is “what do you
-                keep alive with your payment?”.
+                You are not just a "taxpayer". You are the fuel that keeps this entire
+                structure alive. The question is not "do you pay?", it is "what do you
+                keep alive with your payment?".
               </p>
             </div>
           </div>
@@ -822,7 +824,7 @@ const shareMessage = `I already pay NPR ${formatRs(Math.round(annualTotalTax))} 
               How much of this do you believe is used honestly?
             </h2>
             <p className="mt-3 mx-auto max-w-2xl text-sm text-slate-200/85 sm:text-base">
-              This slider is not about the government&apos;s official report. It is about
+              This slider is not about the government's official report. It is about
               your gut. Your lived sense of honesty.
             </p>
           </div>
@@ -858,9 +860,9 @@ const shareMessage = `I already pay NPR ${formatRs(Math.round(annualTotalTax))} 
                 />
               </div>
               <p className="mt-3 font-serif text-[11px] leading-relaxed text-rose-50/90 sm:text-xs">
-                “You are not poor because you didn&apos;t work hard. You are poorer
+                "You are not poor because you didn't work hard. You are poorer
                 because the bridge between your effort and your future leaks every year
-                — quietly, politely, without sirens.”
+                — quietly, politely, without sirens."
               </p>
             </div>
 
@@ -888,13 +890,13 @@ const shareMessage = `I already pay NPR ${formatRs(Math.round(annualTotalTax))} 
                   of your own hard-earned tax feels like it simply disappears.
                 </div>
                 <div className="mt-4 rounded-2xl border border-rose-300/40 bg-rose-500/20 px-4 py-3 text-[11px] text-rose-50/95 sm:text-xs">
-                  “You are not just being taxed. You are being trained to accept it
-                  without question.”
+                  "You are not just being taxed. You are being trained to accept it
+                  without question."
                 </div>
               </div>
               <p className="text-[11px] text-slate-300/80 sm:text-xs">
                 When millions of honest people accept this quietly, the system calls it
-                &quot;stability&quot;. When those people begin to question, it is called
+                "stability". When those people begin to question, it is called
                 awakening.
               </p>
             </div>
@@ -910,10 +912,10 @@ const shareMessage = `I already pay NPR ${formatRs(Math.round(annualTotalTax))} 
               Receipt of power
             </p>
             <h2 className="mt-2 bg-gradient-to-r from-slate-100 via-white to-cyan-200 bg-clip-text text-2xl font-extrabold text-transparent sm:text-3xl">
-              You&apos;re not a subject. You&apos;re a shareholder.
+              You're not a subject. You're a shareholder.
             </h2>
             <p className="mt-3 mx-auto max-w-2xl text-sm text-slate-200/85 sm:text-base">
-              Every rupee you&apos;ve paid is a tiny share in this country. This
+              Every rupee you've paid is a tiny share in this country. This
               calculator simply prints your receipt.
             </p>
           </div>
@@ -963,9 +965,9 @@ const shareMessage = `I already pay NPR ${formatRs(Math.round(annualTotalTax))} 
                 </div>
                 <div className="my-2 border-t border-dashed border-slate-500/50" />
                 <p className="font-serif text-[11px] leading-relaxed text-slate-100/90">
-                  “You have already bought a large piece of this nation with your
+                  "You have already bought a large piece of this nation with your
                   honesty. You do not owe it blind obedience. It owes you transparent
-                  truth.”
+                  truth."
                 </p>
                 <div className="mt-3 flex items-center justify-between border-t border-dashed border-slate-500/50 pt-2 text-[10px] text-slate-400">
                   <span>#MeroKarKhoi</span>
@@ -975,8 +977,8 @@ const shareMessage = `I already pay NPR ${formatRs(Math.round(annualTotalTax))} 
 
               <p className="text-[11px] text-slate-300/80 sm:text-xs">
                 A receipt is proof of payment — and proof of the right to ask questions.
-                Keep this mental receipt whenever someone tells you to “just trust the
-                system”.
+                Keep this mental receipt whenever someone tells you to "just trust the
+                system".
               </p>
             </div>
 
@@ -995,61 +997,59 @@ const shareMessage = `I already pay NPR ${formatRs(Math.round(annualTotalTax))} 
                   receipt can embarrass a thousand empty speeches.
                 </p>
               </div>
-              <div className="grid grid-cols-3 gap-3 text-[11px] sm:text-xs">
-               <div className="mt-4 grid grid-cols-2 gap-3 text-[11px] sm:text-xs">
+              <div className="mt-4 grid grid-cols-2 gap-3 text-[11px] sm:text-xs">
+                {/* Post on X */}
+                <a
+                  href={`https://twitter.com/intent/tweet?text=${encodeURIComponent(shareMessage)}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex items-center justify-center rounded-2xl border border-sky-400/60 bg-sky-500/20 px-3 py-2 
+                             transition hover:bg-sky-500/30 hover:scale-[1.02]"
+                >
+                  🐦 Post on X
+                </a>
 
-  {/* Post on X */}
-  <a
-    href={`https://twitter.com/intent/tweet?text=${encodeURIComponent(shareMessage)}`}
-    target="_blank"
-    rel="noreferrer"
-    className="flex items-center justify-center rounded-2xl border border-sky-400/60 bg-sky-500/20 px-3 py-2 
-               transition hover:bg-sky-500/30 hover:scale-[1.02]"
-  >
-    🐦 Post on X
-  </a>
-
-  {/* Native mobile share */}
-  <button
-    onClick={async () => {
-      if (navigator.share) {
-        try {
-          await navigator.share({
-            title: "My Nepal Tax Reflection",
-            text: shareMessage,
-            url: "https://www.gatishilnepal.org/tax",
-          });
-        } catch (err) {
-          console.log("Share cancelled", err);
-        }
-      } else {
-        alert("Sharing is not supported on this device.");
-      }
-    }}
-    className="flex items-center justify-center rounded-2xl border border-emerald-400/60 bg-emerald-500/15 px-3 py-2 
-               transition hover:bg-emerald-500/25 hover:scale-[1.02] 
-               shadow-[0_0_10px_rgba(16,185,129,0.3)]"
-  >
-    📎 Share
-</button>
-</div> {/* closes share row */}
-</div> {/* closes right column */}
-</div> {/* closes grid */}
-</div> {/* closes section content */}
-</SectionShell>
+                {/* Native mobile share */}
+                <button
+                  onClick={async () => {
+                    if (navigator.share) {
+                      try {
+                        await navigator.share({
+                          title: "My Nepal Tax Reflection",
+                          text: shareMessage,
+                          url: "https://www.gatishilnepal.org/tax",
+                        });
+                      } catch (err) {
+                        console.log("Share cancelled", err);
+                      }
+                    } else {
+                      alert("Sharing is not supported on this device.");
+                    }
+                  }}
+                  className="flex items-center justify-center rounded-2xl border border-emerald-400/60 bg-emerald-500/15 px-3 py-2 
+                             transition hover:bg-emerald-500/25 hover:scale-[1.02] 
+                             shadow-[0_0_10px_rgba(16,185,129,0.3)]"
+                >
+                  📎 Share
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </SectionShell>
 
       {/* 5. THE MIRROR OF COURAGE */}
       <SectionShell id="courage" accent="gold">
         <div className="space-y-6 sm:space-y-8">
           <div className="text-center">
             <p className="text-xs uppercase tracking-[0.3em] text-yellow-200/80">
-              From “I” to “We”
+              From "I" to "We"
             </p>
             <h2 className="mt-2 bg-gradient-to-r from-yellow-200 via-white to-emerald-200 bg-clip-text text-2xl font-extrabold text-transparent sm:text-3xl">
               Imagine every honest taxpayer holding their receipt at once.
             </h2>
             <p className="mt-3 mx-auto max-w-2xl text-sm text-slate-200/85 sm:text-base">
-              One person asking “Where is my money?” is a complaint. A million asking it
+              One person asking "Where is my money?" is a complaint. A million asking it
               together is a peaceful revolution.
             </p>
           </div>
@@ -1092,9 +1092,9 @@ const shareMessage = `I already pay NPR ${formatRs(Math.round(annualTotalTax))} 
             <div className="space-y-4">
               <div className="rounded-3xl border border-yellow-400/60 bg-yellow-500/10 px-4 py-4 sm:px-5 sm:py-6">
                 <p className="font-serif text-sm leading-relaxed text-yellow-50/95 sm:text-base">
-                  “The powerless did not build this country by begging. They built it by
+                  "The powerless did not build this country by begging. They built it by
                   working, paying, and trusting. The real question now is: will they
-                  continue to trust blindly, or will they ask to see the ledger?”
+                  continue to trust blindly, or will they ask to see the ledger?"
                 </p>
               </div>
               <p className="text-[11px] text-slate-200/85 sm:text-xs">
@@ -1113,7 +1113,7 @@ const shareMessage = `I already pay NPR ${formatRs(Math.round(annualTotalTax))} 
             The quiet rebellion
           </p>
           <h2 className="mt-2 bg-gradient-to-r from-orange-200 via-white to-emerald-200 bg-clip-text text-2xl font-extrabold text-transparent sm:text-3xl">
-            You&apos;ve paid enough. Now ask enough.
+            You've paid enough. Now ask enough.
           </h2>
           <p className="mt-3 text-sm text-slate-200/85 sm:text-base">
             This calculator was not built to make you proud of paying more tax. It was
@@ -1126,9 +1126,9 @@ const shareMessage = `I already pay NPR ${formatRs(Math.round(annualTotalTax))} 
 
           <div className="mt-4 rounded-3xl border border-amber-300/60 bg-amber-500/15 px-4 py-5 sm:px-6 sm:py-6">
             <p className="font-serif text-sm leading-relaxed text-amber-50/95 sm:text-base">
-              “Freedom does not begin when a law is repealed. Freedom begins the day you
+              "Freedom does not begin when a law is repealed. Freedom begins the day you
               stop being proud of blind obedience — and start being proud of awake
-              responsibility.”
+              responsibility."
             </p>
           </div>
 
@@ -1141,7 +1141,7 @@ const shareMessage = `I already pay NPR ${formatRs(Math.round(annualTotalTax))} 
             </a>
             <p className="max-w-sm text-[11px] text-slate-300/80 sm:text-xs">
               When you step into the Chautari, you are not a follower. You are a
-              co-auditor of Nepal&apos;s future.
+              co-auditor of Nepal's future.
             </p>
           </div>
 
