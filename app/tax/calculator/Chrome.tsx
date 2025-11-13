@@ -709,6 +709,135 @@ export default function Chrome() {
                 Assumptions: age {LIFETIME.currentAge}→{LIFETIME.retireAge}, Rs {formatRs(LIFETIME.luxuryCarPrice)} per car.
               </p>
             </div>
+{/* ──────────────────────────────────────────────── */}
+{/*           STAGE 3 — ACCOUNTABLENESS             */}
+{/*   Inserted after Lifetime Tax Legacy section     */}
+{/* ──────────────────────────────────────────────── */}
+
+{/* 1️⃣ Where My Tax Goes — Public Utilization View */}
+<div className="rounded-2xl bg-white/[0.04] p-6 mt-6">
+  <h3 className="text-lg font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-amber-300 via-white to-yellow-200">
+    Where My Tax Goes
+  </h3>
+  <p className="text-sm text-slate-300/80 mt-1">
+    Estimated allocation if your tax were used effectively.
+  </p>
+
+  <div className="mt-4 space-y-2 text-slate-200 text-sm">
+    {[
+      ['🏥 Health', 18],
+      ['🎓 Education', 17],
+      ['🛣 Infrastructure', 22],
+      ['⚔️ Defense', 10],
+      ['🧑‍💼 Administration', 14],
+      ['💸 Debt / Interest', 12],
+      ['🌿 Environment', 7],
+    ].map(([label, pct]) => (
+      <div key={label} className="flex items-center gap-3">
+        <div className="w-40">{label}</div>
+        <div className="flex-1 h-2 rounded bg-white/10 overflow-hidden">
+          <motion.div
+            initial={{ width: 0 }}
+            whileInView={{ width: `${pct}%` }}
+            transition={{ duration: 0.8 }}
+            className="h-full bg-gradient-to-r from-yellow-300 via-amber-300 to-orange-300"
+          />
+        </div>
+        <div className="w-12 text-right">{pct}%</div>
+      </div>
+    ))}
+  </div>
+</div>
+
+{/* 2️⃣ Demand Accountability — Social Pressure Mechanism */}
+<div className="rounded-2xl bg-white/[0.04] p-6 mt-6">
+  <h3 className="text-lg font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-amber-300 via-white to-yellow-200">
+    Demand Accountability
+  </h3>
+  <p className="mt-1 text-sm text-slate-300/70">
+    Your taxes build Nepal — now ask where they go.
+  </p>
+
+  <button
+    onClick={() => setAccountableOpen(!accountableOpen)}
+    className="mt-3 px-4 py-2 rounded-xl bg-gradient-to-r from-rose-500 to-amber-500 text-white font-semibold"
+  >
+    Where is my money?
+  </button>
+
+  {accountableOpen && (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="mt-4 bg-black/40 p-4 rounded-xl text-sm"
+    >
+      <textarea
+        className="w-full h-28 bg-white/10 p-3 rounded text-white text-sm"
+        defaultValue={`I contribute NPR ${formatRs(
+          Math.round(annualTotalTax)
+        )} in taxes every year. #MeroKarKhoi — I deserve transparency.`}
+      />
+      <div className="mt-2 text-slate-300/80">
+        Share: [Facebook] [X] [Instagram]
+      </div>
+    </motion.div>
+  )}
+</div>
+
+{/* 3️⃣ National Honesty Meter — Trust Slider */}
+<div className="rounded-2xl bg-white/[0.04] p-6 mt-6">
+  <h3 className="text-lg font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-amber-300 via-white to-yellow-200">
+    National Honesty Meter
+  </h3>
+  <p className="text-xs text-slate-300/70 mt-1">
+    Slide to estimate how much of your tax you believe is used effectively.
+  </p>
+
+  <input
+    type="range"
+    min={0}
+    max={100}
+    value={trust}
+    onChange={(e) => setTrust(Number(e.target.value))}
+    className="w-full mt-4"
+  />
+
+  <div className="mt-2 text-sm text-slate-200">
+    You trust: <b>{trust}%</b>
+  </div>
+  <div className="text-xs text-slate-300/80">
+    If only {trust}% is used, NPR {formatRs(Math.round((1 - trust / 100) * annualTotalTax))}
+    {' '}is effectively wasted each year.
+  </div>
+</div>
+
+{/* 4️⃣ Top Tax Stories — Mini Awareness Feed */}
+<div className="rounded-2xl bg-white/[0.04] p-6 mt-6">
+  <h3 className="text-lg font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-amber-300 via-white to-yellow-200">
+    How Your Taxes Shape Nepal
+  </h3>
+
+  <ul className="mt-4 space-y-2 text-sm text-slate-200">
+    <li>• Government announces NPR 3B for rural roads this fiscal year.</li>
+    <li>• Audit reveals procurement leak of 20% across departments.</li>
+    <li>• New community hospital completed using VAT contributions.</li>
+  </ul>
+</div>
+
+{/* 5️⃣ Proud Taxpayer Badge */}
+<div className="rounded-2xl bg-white/[0.04] p-6 mt-6 text-center">
+  <h3 className="text-lg font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-amber-300 via-white to-yellow-200">
+    Proud Taxpayer Badge
+  </h3>
+
+  <div className="mt-4 rounded-xl bg-gradient-to-r from-yellow-400/20 to-amber-400/20 p-6 text-white text-lg font-extrabold">
+    🎖 I Pay Taxes That Build Nepal
+  </div>
+
+  <p className="text-xs text-slate-300/80 mt-2">
+    (Feature: Add “Download Badge” — coming soon)
+  </p>
+</div>
 
             {/* footer */}
             <footer className="py-8 text-sm text-slate-300 text-center">
