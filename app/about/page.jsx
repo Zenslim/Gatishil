@@ -65,7 +65,7 @@ export default function AboutPage() {
           </p>
 
           <p className="text-slate-300/85">
-            But real change does not start in Kathmandu.  
+            But real change does not start in Kathmandu.
             Real change begins <span className="font-medium text-amber-300/90">inside the people</span>.
           </p>
 
@@ -86,7 +86,7 @@ export default function AboutPage() {
         <h2 className="text-2xl sm:text-3xl font-semibold">WHAT We Are</h2>
 
         <p className="mt-4 text-slate-300/85 leading-relaxed">
-          We are not a party of big faces.  
+          We are not a party of big faces.
           We are a <span className="font-medium text-amber-300/90">system of trust</span>,
           built by everyday people who want honesty, fairness, and unity.
         </p>
@@ -95,21 +95,21 @@ export default function AboutPage() {
           <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
             <h3 className="text-lg font-semibold">Guthi</h3>
             <p className="mt-2 text-slate-300/85 text-sm">
-              Our old Nepali way of working together, protecting each other, and solving problems as one.
+              Nepali way of working together, protecting each other, and solving problems as one.
             </p>
           </div>
 
           <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
             <h3 className="text-lg font-semibold">Bhakari</h3>
             <p className="mt-2 text-slate-300/85 text-sm">
-              A shared grain store. Everyone pours, no one starves. A culture of mutual help.
+              Shared grain store. Everyone pours, no one starves.
             </p>
           </div>
 
           <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
             <h3 className="text-lg font-semibold">Chautārī</h3>
             <p className="mt-2 text-slate-300/85 text-sm">
-              Our first parliament. Sitting together, talking openly, deciding fairly.
+              Our first parliament — sitting together, talking openly, deciding fairly.
             </p>
           </div>
 
@@ -210,8 +210,10 @@ export default function AboutPage() {
             >
               Join now
             </a>
+
+            {/* UPDATED LINK */}
             <a
-              href="/how"
+              href="/#manifesto"
               className="rounded-2xl border border-white/15 hover:border-white/25 px-5 py-2.5 text-sm font-medium text-slate-200/90 transition"
             >
               Learn more
