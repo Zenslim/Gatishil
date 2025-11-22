@@ -10,17 +10,8 @@ function Icon({ name }: { name: string }) {
       return (
         <svg className={styles.icon} viewBox="0 0 24 24" aria-hidden>
           <circle cx="12" cy="12" r="10" fill="#FACC15" opacity="0.15" />
-          <path
-            d="M6 12a6 6 0 0 1 12 0v4H6v-4z"
-            fill="#FACC15"
-            opacity="0.8"
-          />
-          <path
-            d="M4 16h16M9 16v2a3 3 0 0 0 6 0v-2"
-            stroke="#FACC15"
-            strokeWidth="1.5"
-            strokeLinecap="round"
-          />
+          <path d="M6 12a6 6 0 0 1 12 0v4H6v-4z" fill="#FACC15" opacity="0.8" />
+          <path d="M4 16h16M9 16v2a3 3 0 0 0 6 0v-2" stroke="#FACC15" strokeWidth="1.5" strokeLinecap="round" />
         </svg>
       );
     case 'about':
@@ -66,7 +57,7 @@ function Icon({ name }: { name: string }) {
     case 'manifesto':
       return (
         <svg className={styles.icon} viewBox="0 0 24 24" aria-hidden>
-          <path d="M6 2h9l5 5v15a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z" fill="#EF4444" opacity="0.12" />
+          <path d="M6 2h9l5 5v15a2 2 0 0 1-2 2H6a2 2 0 0 1 2-2V4a2 2 0 0 1 2-2z" fill="#EF4444" opacity="0.12" />
           <path d="M9 9h6M9 13h4" stroke="#EF4444" strokeWidth="1.8" strokeLinecap="round" />
           <path d="M15 2v6h6" fill="none" stroke="#EF4444" strokeWidth="1.4" />
         </svg>
@@ -151,7 +142,9 @@ export default function Nav() {
   }, [open]);
 
   useEffect(() => {
-    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') setOpen(false); }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') setOpen(false);
+    }
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
   }, []);
@@ -163,7 +156,9 @@ export default function Nav() {
           <div className={styles.brandRow}>
             <img
               src="/logo.svg"
-              onError={(e) => { (e.currentTarget as HTMLImageElement).src = '/logo.png'; }}
+              onError={(e) => {
+                (e.currentTarget as HTMLImageElement).src = '/logo.png';
+              }}
               alt="Gatishil Nepal"
               width={28}
               height={28}
@@ -204,30 +199,60 @@ export default function Nav() {
           </div>
 
           <div className={styles.list}>
-            <details className={styles.group}>
-              <summary><Icon name="about" /> About Us</summary>
-              <div className={styles.groupInner}>
-                <Link href="/why" className={styles.link} onClick={() => setOpen(false)}>Why</Link>
-                <Link href="/how" className={styles.link} onClick={() => setOpen(false)}>How</Link>
-                <Link href="/what" className={styles.link} onClick={() => setOpen(false)}>What</Link>
-              </div>
-            </details>
 
-            <Link href="/alumni" className={styles.link} onClick={() => setOpen(false)}><Icon name="alumni" /> Alumni Engine</Link>
-            <Link href="/blog" className={styles.link} onClick={() => setOpen(false)}><Icon name="blog" /> Blog</Link>
-            <Link href="/polls" className={styles.link} onClick={() => setOpen(false)}><Icon name="polls" /> Polls</Link>
-            <Link href="/proposals" className={styles.link} onClick={() => setOpen(false)}><Icon name="proposals" /> Proposals</Link>
-            <Link href="/members" className={styles.link} onClick={() => setOpen(false)}><Icon name="members" /> Members</Link>
-            <Link href="/tax" className={styles.link} onClick={() => setOpen(false)}><Icon name="tax" /> Tax Mirror</Link>
-            <Link href="https://www.gatishilnepal.org/cooperative" className={styles.link} target="_blank" rel="noopener noreferrer" onClick={() => setOpen(false)}>
+            {/* ABOUT (Single entry, no dropdown) */}
+            <Link href="/about" className={styles.link} onClick={() => setOpen(false)}>
+              <Icon name="about" /> About Us
+            </Link>
+
+            <Link href="/alumni" className={styles.link} onClick={() => setOpen(false)}>
+              <Icon name="alumni" /> Alumni Engine
+            </Link>
+
+            <Link href="/blog" className={styles.link} onClick={() => setOpen(false)}>
+              <Icon name="blog" /> Blog
+            </Link>
+
+            <Link href="/polls" className={styles.link} onClick={() => setOpen(false)}>
+              <Icon name="polls" /> Polls
+            </Link>
+
+            <Link href="/proposals" className={styles.link} onClick={() => setOpen(false)}>
+              <Icon name="proposals" /> Proposals
+            </Link>
+
+            <Link href="/members" className={styles.link} onClick={() => setOpen(false)}>
+              <Icon name="members" /> Members
+            </Link>
+
+            <Link href="/tax" className={styles.link} onClick={() => setOpen(false)}>
+              <Icon name="tax" /> Tax Mirror
+            </Link>
+
+            <Link
+              href="https://www.gatishilnepal.org/cooperative"
+              className={styles.link}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={() => setOpen(false)}
+            >
               <Icon name="cooperative" /> Cooperative
             </Link>
-            <Link href="/#manifesto" className={styles.link} onClick={() => setOpen(false)}><Icon name="manifesto" /> Manifesto</Link>
-            <Link href="/faq#dao" className={styles.link} onClick={() => setOpen(false)}><Icon name="faq" /> FAQ</Link>
+
+            <Link href="/#manifesto" className={styles.link} onClick={() => setOpen(false)}>
+              <Icon name="manifesto" /> Manifesto
+            </Link>
+
+            <Link href="/faq#dao" className={styles.link} onClick={() => setOpen(false)}>
+              <Icon name="faq" /> FAQ
+            </Link>
 
             <div className={styles.divider} />
 
-            <Link href="/login" className={styles.link} onClick={() => setOpen(false)}><Icon name="login" /> Sign in</Link>
+            <Link href="/login" className={styles.link} onClick={() => setOpen(false)}>
+              <Icon name="login" /> Sign in
+            </Link>
+
           </div>
         </div>
       </div>
